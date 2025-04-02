@@ -355,9 +355,9 @@ const Index = () => {
                 highlighted={showResults}
               />
               <VitalSign 
-                label="TRIGLICÉRIDOS"
-                value={vitalSigns.lipids?.triglycerides || "--"}
-                unit="mg/dL"
+                label="HIDRATACIÓN"
+                value={vitalSigns.hydration || "--"}
+                unit="%"
                 highlighted={showResults}
               />
             </div>
