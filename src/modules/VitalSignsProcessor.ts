@@ -142,7 +142,8 @@ export class VitalSignsProcessor {
         lipids: {
           totalCholesterol: 0,
           triglycerides: 0
-        }
+        },
+        hydration: 0
       };
     }
   }
