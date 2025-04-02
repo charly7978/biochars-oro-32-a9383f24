@@ -100,7 +100,7 @@ export const useTensorFlowVitalSigns = (): UseTensorFlowVitalSignsReturn => {
         glucose: 0,
         lipids: {
           totalCholesterol: 0,
-          triglycerides: 0
+          hydration: 0
         }
       };
     }
@@ -139,7 +139,7 @@ export const useTensorFlowVitalSigns = (): UseTensorFlowVitalSignsReturn => {
         glucose: 0,
         lipids: {
           totalCholesterol: 0,
-          triglycerides: 0
+          hydration: 0
         }
       };
     }

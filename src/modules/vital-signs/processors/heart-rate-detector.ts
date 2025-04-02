@@ -14,6 +14,20 @@ export class HeartRateDetector {
   private lastProcessTime: number = 0;
   private lastBpm: number = 0;
   
+  // Improved peak detection
+  private dynamicThreshold: number = 0;
+  private readonly THRESHOLD_ADJUSTMENT_RATE = 0.2;
+  private readonly MIN_PEAK_HEIGHT = 0.1;
+  
+  // Signal quality tracking
+  private signalQualityHistory: number[] = [];
+  private readonly QUALITY_HISTORY_SIZE = 10;
+  private readonly MIN_QUALITY_THRESHOLD = 0.3;
+  
+  // Debug statistics
+  private peakHeights: number[] = [];
+  private peakIntervals: number[] = [];
+  
   /**
    * Calculate heart rate from real PPG values with enhanced peak detection
    */
@@ -37,8 +51,30 @@ export class HeartRateDetector {
       recentData.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / recentData.length
     );
     
+    // Improved adaptive threshold with higher responsiveness
+    if (this.dynamicThreshold === 0) {
+      this.dynamicThreshold = mean + stdDev * 0.8;
+    } else {
+      // Adjust threshold based on signal characteristics
+      const targetThreshold = mean + stdDev * 0.8;
+      this.dynamicThreshold = this.dynamicThreshold * (1 - this.THRESHOLD_ADJUSTMENT_RATE) 
+                            + targetThreshold * this.THRESHOLD_ADJUSTMENT_RATE;
+    }
+    
     // Find peaks in real data with adaptive threshold
     const peaks = this.findPeaksEnhanced(recentData, mean, stdDev);
+    
+    // Log peak detection statistics
+    if (peaks.length > 0) {
+      this.peakHeights = peaks.map(idx => recentData[idx]);
+      console.log("HeartRateDetector: Peaks detected", {
+        count: peaks.length,
+        threshold: this.dynamicThreshold,
+        heights: this.peakHeights.slice(-3),
+        mean: mean,
+        stdDev: stdDev
+      });
+    }
     
     if (peaks.length < 2) {
       return this.lastBpm; // Return last detected BPM if not enough peaks
@@ -61,6 +97,9 @@ export class HeartRateDetector {
       }
     }
     
+    // Save intervals for debugging
+    this.peakIntervals = intervals.slice(-5);
+    
     if (intervals.length < 2) {
       // Fall back to sample-based calculation if not enough timestamp-based intervals
       let totalInterval = 0;
@@ -74,6 +113,11 @@ export class HeartRateDetector {
       // Validate the calculated BPM
       if (calculatedBpm >= 40 && calculatedBpm <= 200) {
         this.lastBpm = calculatedBpm;
+        console.log("HeartRateDetector: Sample-based BPM calculation", {
+          bpm: calculatedBpm,
+          avgInterval: avgInterval,
+          sampleRate: sampleRate
+        });
         return calculatedBpm;
       }
       
@@ -102,6 +146,13 @@ export class HeartRateDetector {
       this.lastBpm = (this.lastBpm > 0) 
         ? Math.round(this.lastBpm * 0.6 + calculatedBpm * 0.4)
         : calculatedBpm;
+      
+      console.log("HeartRateDetector: Time-based BPM calculation", {
+        bpm: this.lastBpm,
+        rawBpm: calculatedBpm,
+        avgInterval: avgInterval,
+        intervals: intervals.slice(-5)
+      });
     }
     
     return this.lastBpm;
@@ -116,7 +167,7 @@ export class HeartRateDetector {
     const minPeakDistance = 5; // More sensitive for natural peak detection
     
     // Dynamic threshold based on real signal statistics - more sensitive threshold
-    const peakThreshold = mean + (stdDev * 0.1); // More sensitive
+    const peakThreshold = this.dynamicThreshold;
     
     // First pass: identify all potential peaks
     const potentialPeaks: number[] = [];
@@ -179,11 +230,29 @@ export class HeartRateDetector {
   }
   
   /**
+   * Get debug information about heart rate detection
+   */
+  public getDebugInfo(): any {
+    return {
+      lastBpm: this.lastBpm,
+      dynamicThreshold: this.dynamicThreshold,
+      peakCount: this.peakTimes.length,
+      recentPeakHeights: this.peakHeights.slice(-3),
+      recentPeakIntervals: this.peakIntervals
+    };
+  }
+  
+  /**
    * Reset the heart rate detector
    */
   public reset(): void {
     this.peakTimes = [];
     this.lastProcessTime = 0;
     this.lastBpm = 0;
+    this.dynamicThreshold = 0;
+    this.signalQualityHistory = [];
+    this.peakHeights = [];
+    this.peakIntervals = [];
+    console.log("HeartRateDetector: Reset complete");
   }
 }

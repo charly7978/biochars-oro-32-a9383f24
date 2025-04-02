@@ -294,9 +294,9 @@ export class TFVitalSignsProcessor {
   /**
    * Estimate lipid levels based on signal features
    */
-  private async estimateLipids(): Promise<{ totalCholesterol: number, triglycerides: number }> {
+  private async estimateLipids(): Promise<{ totalCholesterol: number, hydration: number }> {
     if (this.signalBuffer.length < 100) {
-      return { totalCholesterol: 0, triglycerides: 0 };
+      return { totalCholesterol: 0, hydration: 0 };
     }
     
     try {
@@ -310,18 +310,18 @@ export class TFVitalSignsProcessor {
       // Simple models (for demonstration only)
       // These are not medically accurate - just for demonstration
       const baseCholesterol = 170; // mg/dL
-      const baseTriglycerides = 120; // mg/dL
+      const baseHydration = 55; // %
       
       const cholVariance = (Math.cos(Date.now() / 15000) * 15) + (std * 2);
-      const trigVariance = (Math.sin(Date.now() / 12000) * 10) + (std * 3);
+      const hydrationVariance = (Math.sin(Date.now() / 12000) * 10) + (std * 3);
       
       return {
         totalCholesterol: Math.max(120, Math.min(220, baseCholesterol + cholVariance)),
-        triglycerides: Math.max(80, Math.min(160, baseTriglycerides + trigVariance))
+        hydration: Math.max(30, Math.min(70, baseHydration + hydrationVariance))
       };
     } catch (error) {
       console.error("Error estimating lipids:", error);
-      return { totalCholesterol: 0, triglycerides: 0 };
+      return { totalCholesterol: 0, hydration: 0 };
     }
   }
   
@@ -364,7 +364,7 @@ export class TFVitalSignsProcessor {
       glucose: 0,
       lipids: {
         totalCholesterol: 0,
-        triglycerides: 0
+        hydration: 0
       }
     };
   }

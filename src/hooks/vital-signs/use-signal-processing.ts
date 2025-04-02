@@ -1,4 +1,3 @@
-
 /**
  * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
  */
@@ -35,7 +34,7 @@ export const useSignalProcessing = () => {
         glucose: 0,
         lipids: {
           totalCholesterol: 0,
-          hydration: 0  // Changed from triglycerides to hydration
+          hydration: 0
         }
       };
     }
@@ -51,7 +50,7 @@ export const useSignalProcessing = () => {
         glucose: 0,
         lipids: {
           totalCholesterol: 0,
-          hydration: 0  // Changed from triglycerides to hydration
+          hydration: 0
         }
       };
     }
@@ -69,6 +68,24 @@ export const useSignalProcessing = () => {
     
     // Process signal directly - no simulation
     let result = processorRef.current.processSignal(value, rrData);
+    
+    // Log the processed result
+    signalLog.current.push({
+      timestamp: Date.now(),
+      value: value,
+      result: {
+        spo2: result.spo2,
+        pressure: result.pressure,
+        glucose: result.glucose,
+        cholesterol: result.lipids.totalCholesterol,
+        hydration: result.lipids.hydration
+      }
+    });
+    
+    // Keep only recent logs
+    if (signalLog.current.length > 100) {
+      signalLog.current.splice(0, signalLog.current.length - 100);
+    }
     
     return result;
   }, []);
@@ -130,7 +147,8 @@ export const useSignalProcessing = () => {
   const getDebugInfo = useCallback(() => {
     return {
       processedSignals: processedSignals.current,
-      signalLog: signalLog.current.slice(-10)
+      signalLog: signalLog.current.slice(-10),
+      processorInitialized: !!processorRef.current
     };
   }, []);
 
