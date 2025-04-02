@@ -1,3 +1,4 @@
+
 /**
  * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
  */
@@ -34,7 +35,7 @@ export const useSignalProcessing = () => {
         glucose: 0,
         lipids: {
           totalCholesterol: 0,
-          hydration: 0
+          hydration: 0 // Changed from triglycerides to hydration
         }
       };
     }
@@ -43,6 +44,7 @@ export const useSignalProcessing = () => {
     
     // If too many weak signals, return zeros
     if (isWeakSignal) {
+      console.log("useSignalProcessing: Weak signal detected, returning zeros", { value });
       return {
         spo2: 0,
         pressure: "--/--",
@@ -56,13 +58,14 @@ export const useSignalProcessing = () => {
     }
     
     // Logging for diagnostics
-    if (processedSignals.current % 45 === 0) {
-      console.log("useVitalSignsProcessor: Processing signal DIRECTLY", {
+    if (processedSignals.current % 30 === 0 || processedSignals.current < 10) {
+      console.log("useSignalProcessing: Processing signal DIRECTLY", {
         inputValue: value,
         rrDataPresent: !!rrData,
         rrIntervals: rrData?.intervals.length || 0,
         arrhythmiaCount: processorRef.current.getArrhythmiaCounter(),
-        signalNumber: processedSignals.current
+        signalNumber: processedSignals.current,
+        timestamp: new Date().toISOString()
       });
     }
     
@@ -87,6 +90,18 @@ export const useSignalProcessing = () => {
       signalLog.current.splice(0, signalLog.current.length - 100);
     }
     
+    // Log output when values are present
+    if (result.spo2 > 0 || result.glucose > 0 || result.lipids.totalCholesterol > 0) {
+      console.log("useSignalProcessing: Successful vital sign measurement:", {
+        spo2: result.spo2,
+        pressure: result.pressure,
+        glucose: result.glucose,
+        cholesterol: result.lipids.totalCholesterol,
+        hydration: result.lipids.hydration,
+        timestamp: new Date().toISOString()
+      });
+    }
+    
     return result;
   }, []);
 
@@ -101,6 +116,14 @@ export const useSignalProcessing = () => {
     
     // Create new instances for direct measurement
     processorRef.current = new VitalSignsProcessor();
+    
+    // Reset counters
+    processedSignals.current = 0;
+    signalLog.current = [];
+    
+    console.log("useSignalProcessing: Processor initialized successfully");
+    
+    return processorRef.current;
   }, []);
 
   /**
@@ -148,7 +171,8 @@ export const useSignalProcessing = () => {
     return {
       processedSignals: processedSignals.current,
       signalLog: signalLog.current.slice(-10),
-      processorInitialized: !!processorRef.current
+      processorInitialized: !!processorRef.current,
+      timestamp: new Date().toISOString()
     };
   }, []);
 

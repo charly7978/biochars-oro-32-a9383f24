@@ -1,3 +1,4 @@
+
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { TFVitalSignsProcessor } from '../modules/vital-signs/TFVitalSignsProcessor';
 import { VitalSignsResult } from '../modules/vital-signs/types/vital-signs-result';
@@ -25,6 +26,7 @@ export const useTensorFlowVitalSigns = (): UseTensorFlowVitalSignsReturn => {
   const processorRef = useRef<TFVitalSignsProcessor | null>(null);
   const arrhythmiaWindowsRef = useRef<Array<{ start: number, end: number }>>([]);
   const sessionIdRef = useRef<string>(Math.random().toString(36).substring(2, 9));
+  const processingCountRef = useRef<number>(0);
   
   // Initialize TensorFlow and processor
   useEffect(() => {
@@ -55,10 +57,22 @@ export const useTensorFlowVitalSigns = (): UseTensorFlowVitalSignsReturn => {
         // Create processor instance
         if (!processorRef.current) {
           processorRef.current = new TFVitalSignsProcessor();
-          console.log("useTensorFlowVitalSigns: Processor created");
+          console.log("useTensorFlowVitalSigns: Processor created successfully");
+        }
+        
+        // Perform a test calculation to ensure everything is working
+        if (processorRef.current) {
+          const testResult = await processorRef.current.processSignal(0.5);
+          console.log("TensorFlow test calculation result:", testResult);
         }
         
         setIsInitializing(false);
+        
+        toast({
+          title: "TensorFlow initialized",
+          description: "Advanced vital signs processing ready",
+          variant: "default"
+        });
       } catch (error) {
         console.error("Error initializing TensorFlow:", error);
         toast({
@@ -92,6 +106,8 @@ export const useTensorFlowVitalSigns = (): UseTensorFlowVitalSignsReturn => {
     rrData?: RRIntervalData,
     isWeakSignal: boolean = false
   ): Promise<VitalSignsResult> => {
+    processingCountRef.current++;
+    
     if (!processorRef.current) {
       return {
         spo2: 0,
@@ -103,6 +119,17 @@ export const useTensorFlowVitalSigns = (): UseTensorFlowVitalSignsReturn => {
           hydration: 0
         }
       };
+    }
+    
+    // Log processing count
+    if (processingCountRef.current % 30 === 0 || processingCountRef.current < 5) {
+      console.log("useTensorFlowVitalSigns: Processing signal", {
+        count: processingCountRef.current,
+        value,
+        hasRRData: !!rrData,
+        isWeakSignal,
+        timestamp: new Date().toISOString()
+      });
     }
     
     try {
@@ -125,6 +152,23 @@ export const useTensorFlowVitalSigns = (): UseTensorFlowVitalSignsReturn => {
         arrhythmiaWindowsRef.current = arrhythmiaWindowsRef.current.filter(
           window => now - window.end < 10000
         );
+      }
+      
+      // Log successful results
+      if (
+        result.spo2 > 0 || 
+        result.glucose > 0 || 
+        result.lipids.totalCholesterol > 0 || 
+        result.lipids.hydration > 0
+      ) {
+        console.log("useTensorFlowVitalSigns: Successfully processed vital signs", {
+          spo2: result.spo2,
+          pressure: result.pressure,
+          glucose: result.glucose,
+          cholesterol: result.lipids.totalCholesterol,
+          hydration: result.lipids.hydration,
+          timestamp: new Date().toISOString()
+        });
       }
       
       return result;
@@ -151,6 +195,7 @@ export const useTensorFlowVitalSigns = (): UseTensorFlowVitalSignsReturn => {
   const reset = useCallback(() => {
     if (processorRef.current) {
       processorRef.current.reset();
+      console.log("useTensorFlowVitalSigns: Processor reset");
     }
     
     // Clear arrhythmia windows
@@ -165,10 +210,12 @@ export const useTensorFlowVitalSigns = (): UseTensorFlowVitalSignsReturn => {
   const fullReset = useCallback(() => {
     if (processorRef.current) {
       processorRef.current.fullReset();
+      console.log("useTensorFlowVitalSigns: Processor fully reset");
     }
     
     // Clear arrhythmia windows
     arrhythmiaWindowsRef.current = [];
+    processingCountRef.current = 0;
   }, []);
   
   /**
@@ -179,7 +226,9 @@ export const useTensorFlowVitalSigns = (): UseTensorFlowVitalSignsReturn => {
       tensorflowReady: isTensorFlowReady,
       sessionId: sessionIdRef.current,
       arrhythmiaWindows: arrhythmiaWindowsRef.current.length,
-      processorInitialized: !!processorRef.current
+      processorInitialized: !!processorRef.current,
+      processingCount: processingCountRef.current,
+      timestamp: new Date().toISOString()
     };
   }, [isTensorFlowReady]);
   

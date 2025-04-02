@@ -11,6 +11,11 @@ interface UseTensorFlowIntegrationReturn {
   isWebGLAvailable: boolean;
   reinitializeTensorFlow: () => Promise<boolean>;
   disposeResources: () => void;
+  performanceMetrics: {
+    tensorCount: number;
+    memoryUsage: number;
+    gpuActive: boolean;
+  };
 }
 
 /**
@@ -22,6 +27,11 @@ export function useTensorFlowIntegration(): UseTensorFlowIntegrationReturn {
   const [tensorflowVersion, setTensorflowVersion] = useState<string>('');
   const [tensorflowBackend, setTensorflowBackend] = useState<string>('');
   const [isWebGLAvailable, setIsWebGLAvailable] = useState<boolean>(false);
+  const [performanceMetrics, setPerformanceMetrics] = useState({
+    tensorCount: 0,
+    memoryUsage: 0,
+    gpuActive: false
+  });
 
   // Initialize TensorFlow
   useEffect(() => {
@@ -29,6 +39,7 @@ export function useTensorFlowIntegration(): UseTensorFlowIntegrationReturn {
     
     const initialize = async () => {
       try {
+        console.log("TensorFlowIntegration: Starting initialization...");
         const success = await initializeTensorFlow();
         
         if (!isMounted) return;
@@ -37,13 +48,38 @@ export function useTensorFlowIntegration(): UseTensorFlowIntegrationReturn {
           setIsTensorFlowReady(true);
           setTensorflowVersion(tf.version.tfjs);
           setTensorflowBackend(tf.getBackend() || 'none');
-          setIsWebGLAvailable(tf.ENV.getBool('HAS_WEBGL'));
+          const hasWebGL = tf.ENV.getBool('HAS_WEBGL');
+          setIsWebGLAvailable(hasWebGL);
           
           console.log("TensorFlow.js initialized successfully", {
             version: tf.version.tfjs,
             backend: tf.getBackend(),
-            webgl: tf.ENV.getBool('HAS_WEBGL')
+            webgl: hasWebGL,
+            timestamp: new Date().toISOString()
           });
+          
+          // Perform test computation to ensure everything is working
+          const testComputation = await tf.tidy(() => {
+            const a = tf.tensor1d([1, 2, 3]);
+            const b = tf.tensor1d([4, 5, 6]);
+            return a.add(b).dataSync();
+          });
+          
+          console.log("TensorFlow test computation result:", testComputation);
+          
+          if (hasWebGL) {
+            toast({
+              title: "TensorFlow initialized with GPU acceleration",
+              description: `Using ${tf.getBackend()} backend for advanced vital sign analysis`,
+              variant: "default"
+            });
+          } else {
+            toast({
+              title: "TensorFlow initialized with CPU",
+              description: "Using fallback CPU mode for vital sign analysis",
+              variant: "default"
+            });
+          }
         } else {
           console.error("Failed to initialize TensorFlow");
           
@@ -70,6 +106,12 @@ export function useTensorFlowIntegration(): UseTensorFlowIntegrationReturn {
         try {
           const memoryInfo = tf.memory();
           
+          setPerformanceMetrics({
+            tensorCount: memoryInfo.numTensors,
+            memoryUsage: memoryInfo.numBytes,
+            gpuActive: tf.getBackend() === 'webgl' || tf.getBackend() === 'webgpu'
+          });
+          
           // Check for memory leaks
           if (memoryInfo.numTensors > 1000) {
             console.warn("High tensor count detected:", memoryInfo.numTensors);
@@ -86,7 +128,7 @@ export function useTensorFlowIntegration(): UseTensorFlowIntegrationReturn {
           console.warn("Error checking TensorFlow memory:", error);
         }
       }
-    }, 10000);
+    }, 5000);
     
     return () => {
       isMounted = false;
@@ -106,6 +148,8 @@ export function useTensorFlowIntegration(): UseTensorFlowIntegrationReturn {
    */
   const reinitializeTensorFlow = useCallback(async (): Promise<boolean> => {
     try {
+      console.log("TensorFlowIntegration: Reinitializing...");
+      
       // Dispose existing resources
       disposeTensors();
       
@@ -117,6 +161,15 @@ export function useTensorFlowIntegration(): UseTensorFlowIntegrationReturn {
         setTensorflowVersion(tf.version.tfjs);
         setTensorflowBackend(tf.getBackend() || 'none');
         setIsWebGLAvailable(tf.ENV.getBool('HAS_WEBGL'));
+        
+        // Perform test computation to ensure everything is working
+        const testComputation = await tf.tidy(() => {
+          const a = tf.tensor1d([1, 2, 3]);
+          const b = tf.tensor1d([4, 5, 6]);
+          return a.add(b).dataSync();
+        });
+        
+        console.log("TensorFlow reinitialization test computation result:", testComputation);
         
         toast({
           title: "TensorFlow reinitialized",
@@ -153,6 +206,7 @@ export function useTensorFlowIntegration(): UseTensorFlowIntegrationReturn {
    */
   const disposeResources = useCallback(() => {
     try {
+      console.log("TensorFlowIntegration: Disposing resources...");
       disposeTensors();
       console.log("TensorFlow resources disposed");
     } catch (error) {
@@ -166,6 +220,7 @@ export function useTensorFlowIntegration(): UseTensorFlowIntegrationReturn {
     tensorflowBackend,
     isWebGLAvailable,
     reinitializeTensorFlow,
-    disposeResources
+    disposeResources,
+    performanceMetrics
   };
 }
