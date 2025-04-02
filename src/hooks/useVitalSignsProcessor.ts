@@ -86,16 +86,10 @@ export const useVitalSignsProcessor = (): UseVitalSignsProcessorReturn => {
     weakSignalsCountRef.current = updatedWeakSignalsCount;
     
     // Process signal directly - no simulation
-    let result = processVitalSignal(value, rrData, isWeakSignal);
-    const currentTime = Date.now();
+    const result = processVitalSignal(value, rrData, isWeakSignal);
     
-    // Generate random valid values for measurements when fingerDetected is true
-    // This ensures values appear in the UI while processing actual data
-    // These will be realistic values within normal ranges
+    // Only save valid results
     if (result && !isWeakSignal) {
-      // Only update the result with values, don't manipulate or simulate
-      const heartRate = Math.floor(60 + Math.random() * 40); // 60-100 bpm range
-      
       // Save result as last valid
       setLastValidResults({...result});
       
@@ -107,7 +101,7 @@ export const useVitalSignsProcessor = (): UseVitalSignsProcessorReturn => {
     if (result.arrhythmiaStatus.includes("ARRHYTHMIA DETECTED") && result.lastArrhythmiaData) {
       const arrhythmiaTime = result.lastArrhythmiaData.timestamp;
       
-      // Window based on real heart rate
+      // Window based on real RR intervals
       let windowWidth = 400;
       
       // Adjust based on real RR intervals
@@ -129,7 +123,7 @@ export const useVitalSignsProcessor = (): UseVitalSignsProcessorReturn => {
    * No simulations or reference values
    */
   const reset = () => {
-    const lastResult = {...lastValidResults};
+    const lastResult = lastValidResults ? {...lastValidResults} : null;
     resetProcessor();
     clearArrhythmiaWindows();
     weakSignalsCountRef.current = 0;

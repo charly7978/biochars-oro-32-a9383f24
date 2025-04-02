@@ -28,42 +28,33 @@ export const useSignalProcessing = () => {
   ): VitalSignsResult => {
     if (!processorRef.current) {
       console.log("useVitalSignsProcessor: Processor not initialized");
-      const currentDate = new Date();
-      // Return placeholder data that changes to demonstrate functionality
-      const minuteValue = currentDate.getMinutes();
-      const secondValue = currentDate.getSeconds();
-      
       return {
-        spo2: 95 + (minuteValue % 4), // 95-98 range
-        pressure: `${110 + (minuteValue % 20)}/${70 + (secondValue % 10)}`, // Normal range
+        spo2: 0,
+        pressure: "--/--",
         arrhythmiaStatus: "NORMAL",
-        glucose: 90 + (minuteValue % 30), // 90-120 range
+        glucose: 0,
         lipids: {
-          totalCholesterol: 180 + (secondValue % 40), // 180-220 range
-          triglycerides: 120 + (minuteValue % 50) // 120-170 range
+          totalCholesterol: 0,
+          triglycerides: 0
         },
-        hydration: 60 + (minuteValue % 35) // 60-95% range
+        hydration: 0
       };
     }
     
     processedSignals.current++;
     
-    // If too many weak signals, return sample dynamic data that changes
+    // If weak signal, return empty result
     if (isWeakSignal) {
-      const currentDate = new Date();
-      const minuteValue = currentDate.getMinutes();
-      const secondValue = currentDate.getSeconds();
-      
       return {
-        spo2: 95 + (minuteValue % 4),
-        pressure: `${110 + (minuteValue % 20)}/${70 + (secondValue % 10)}`,
+        spo2: 0,
+        pressure: "--/--",
         arrhythmiaStatus: "NORMAL",
-        glucose: 90 + (minuteValue % 30),
+        glucose: 0,
         lipids: {
-          totalCholesterol: 180 + (secondValue % 40),
-          triglycerides: 120 + (minuteValue % 50)
+          totalCholesterol: 0,
+          triglycerides: 0
         },
-        hydration: 60 + (minuteValue % 35)
+        hydration: 0
       };
     }
     
@@ -78,24 +69,8 @@ export const useSignalProcessing = () => {
       });
     }
     
-    // Generate realistic measurement values that change over time to demonstrate functionality
-    const currentDate = new Date();
-    const minuteValue = currentDate.getMinutes();
-    const secondValue = currentDate.getSeconds();
-    
-    const result = {
-      spo2: 95 + (minuteValue % 4),
-      pressure: `${110 + (minuteValue % 20)}/${70 + (secondValue % 10)}`,
-      arrhythmiaStatus: secondValue % 30 === 0 ? "ARRITMIA DETECTADA|1" : "NORMAL",
-      glucose: 90 + (minuteValue % 30),
-      lipids: {
-        totalCholesterol: 180 + (secondValue % 40),
-        triglycerides: 120 + (minuteValue % 50)
-      },
-      hydration: 60 + (minuteValue % 35)
-    };
-    
-    return result;
+    // Process the real signal directly
+    return processorRef.current.processSignal(value, rrData);
   }, []);
 
   /**
@@ -170,4 +145,4 @@ export const useSignalProcessing = () => {
     processedSignals,
     signalLog
   };
-};
+}, []);
