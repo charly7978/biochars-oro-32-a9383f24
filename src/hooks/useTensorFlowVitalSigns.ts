@@ -1,4 +1,3 @@
-
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { TFVitalSignsProcessor } from '../modules/vital-signs/TFVitalSignsProcessor';
 import { VitalSignsResult } from '../modules/vital-signs/types/vital-signs-result';
@@ -102,8 +101,7 @@ export const useTensorFlowVitalSigns = (): UseTensorFlowVitalSignsReturn => {
         lipids: {
           totalCholesterol: 0,
           triglycerides: 0
-        },
-        hydration: 0
+        }
       };
     }
     
@@ -142,8 +140,7 @@ export const useTensorFlowVitalSigns = (): UseTensorFlowVitalSignsReturn => {
         lipids: {
           totalCholesterol: 0,
           triglycerides: 0
-        },
-        hydration: 0
+        }
       };
     }
   }, []);

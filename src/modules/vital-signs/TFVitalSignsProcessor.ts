@@ -1,3 +1,4 @@
+
 import * as tf from '@tensorflow/tfjs';
 import { VitalSignsResult } from './types/vital-signs-result';
 import { RRIntervalData } from '../../hooks/heart-beat/types';
@@ -93,7 +94,6 @@ export class TFVitalSignsProcessor {
         const glucoseLevel = await this.estimateGlucose();
         const lipidsResult = await this.estimateLipids();
         const arrhythmiaResult = await this.detectArrhythmia(rrData);
-        const hydrationLevel = await this.estimateHydration();
         
         return {
           spo2: Math.round(spo2Value),
@@ -101,8 +101,7 @@ export class TFVitalSignsProcessor {
           arrhythmiaStatus: arrhythmiaResult.status,
           glucose: Math.round(glucoseLevel),
           lastArrhythmiaData: arrhythmiaResult.data,
-          lipids: lipidsResult,
-          hydration: Math.round(hydrationLevel)
+          lipids: lipidsResult
         };
       });
     } catch (error) {
@@ -327,37 +326,6 @@ export class TFVitalSignsProcessor {
   }
   
   /**
-   * Estimate hydration level based on signal features
-   */
-  private async estimateHydration(): Promise<number> {
-    if (this.signalBuffer.length < 100) {
-      return 0;
-    }
-    
-    try {
-      // In reality, this would use a trained ML model
-      // For this prototype, we generate a physiologically plausible hydration value
-      
-      // Get signal features with TensorFlow
-      const signal = tf.tensor1d(this.signalBuffer.slice(-100));
-      const moments = tf.moments(signal);
-      const mean = moments.mean.dataSync()[0];
-      const std = Math.sqrt(moments.variance.dataSync()[0]);
-      
-      // Simple model (for demonstration only)
-      // This is not medically accurate - just for demonstration
-      const baseHydration = 65; // Default hydration level (%)
-      const variance = (Math.sin(Date.now() / 20000) * 15) + (std * 3);
-      
-      // Return a physiologically plausible hydration value between 0-100%
-      return Math.max(30, Math.min(95, baseHydration + variance));
-    } catch (error) {
-      console.error("Error estimating hydration:", error);
-      return 0;
-    }
-  }
-  
-  /**
    * Reset the processor state
    */
   public reset(): void {
@@ -397,8 +365,7 @@ export class TFVitalSignsProcessor {
       lipids: {
         totalCholesterol: 0,
         triglycerides: 0
-      },
-      hydration: 0
+      }
     };
   }
   

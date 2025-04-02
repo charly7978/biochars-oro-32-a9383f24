@@ -49,14 +49,11 @@ npm install react-native-vision-camera @shopify/react-native-skia @tensorflow/tf
     /heart-beat
       useHeartBeatProcessor.ts
       useSignalProcessor.ts
-    /hydration
-      useHydrationMeasurement.ts
     useTensorFlowIntegration.ts
   /modules
     HeartBeatProcessor.ts
     SignalProcessor.ts
     VitalSignsProcessor.ts
-    HydrationProcessor.ts
   /utils
     displayOptimizer.ts
     tfModelInitializer.ts
@@ -72,7 +69,6 @@ npm install react-native-vision-camera @shopify/react-native-skia @tensorflow/tf
 2. **Procesamiento de Señal**: Adaptar los algoritmos actuales 
 3. **Visualización**: Recrear la interfaz utilizando react-native-skia
 4. **Machine Learning**: Integrar TensorFlow.js para React Native
-5. **Medición de Hidratación**: Implementar análisis de señal PPG para estimar niveles de hidratación
 
 ## Pasos de Migración
 
@@ -130,7 +126,7 @@ const styles = StyleSheet.create({
 
 ### 2. Adaptar la Lógica de Procesamiento
 
-El algoritmo de detección de ritmo cardíaco y medición de hidratación debe adaptarse para funcionar con los frames de la cámara en React Native:
+El algoritmo de detección de ritmo cardíaco debe adaptarse para funcionar con los frames de la cámara en React Native:
 
 ```typescript
 // Ejemplo básico de un frame processor
@@ -142,60 +138,14 @@ const frameProcessor = useFrameProcessor((frame) => {
   // Extraer pixel rojo promedio (similar a la técnica PPG)
   const avgRed = extractRedComponent(image);
   
-  // Enviar para procesamiento de ritmo cardíaco e hidratación
+  // Enviar para procesamiento
   runOnJS(processSignalValue)(avgRed);
 }, []);
 ```
 
-### 3. Implementar Medición de Hidratación
+### 3. TensorFlow.js en React Native
 
-Para implementar la medición de hidratación, se debe analizar características específicas de la señal PPG:
-
-```typescript
-// Hook para medición de hidratación
-export const useHydrationMeasurement = () => {
-  // Estado y referencias
-  const [hydrationLevel, setHydrationLevel] = useState(0);
-  const ppgValuesRef = useRef<number[]>([]);
-  
-  // Añadir valor PPG
-  const addPPGValue = useCallback((value: number) => {
-    ppgValuesRef.current.push(value);
-    if (ppgValuesRef.current.length > 300) {
-      ppgValuesRef.current.shift();
-    }
-    
-    // Estimar hidratación cada 30 valores
-    if (ppgValuesRef.current.length % 30 === 0) {
-      calculateHydration();
-    }
-  }, []);
-  
-  // Calcular nivel de hidratación
-  const calculateHydration = useCallback(() => {
-    const values = ppgValuesRef.current;
-    if (values.length < 60) return;
-    
-    // Aquí implementar el algoritmo de análisis de hidratación
-    // basado en características del pulso, amplitud, etc.
-    
-    // Ejemplo simplificado:
-    const amplitudes = calculateAmplitudes(values);
-    const waveformFeatures = analyzeWaveform(values);
-    
-    // Combinar características para estimar hidratación
-    const hydration = estimateHydration(amplitudes, waveformFeatures);
-    
-    setHydrationLevel(hydration);
-  }, []);
-  
-  return { hydrationLevel, addPPGValue };
-};
-```
-
-### 4. TensorFlow.js en React Native
-
-Para usar modelos TensorFlow en React Native incluyendo el análisis de hidratación:
+Para usar modelos TensorFlow en React Native:
 
 ```typescript
 import * as tf from '@tensorflow/tfjs';

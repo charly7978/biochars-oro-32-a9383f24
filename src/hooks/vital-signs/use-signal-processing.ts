@@ -31,30 +31,28 @@ export const useSignalProcessing = () => {
       return {
         spo2: 0,
         pressure: "--/--",
-        arrhythmiaStatus: "NORMAL",
+        arrhythmiaStatus: "--",
         glucose: 0,
         lipids: {
           totalCholesterol: 0,
           triglycerides: 0
-        },
-        hydration: 0
+        }
       };
     }
     
     processedSignals.current++;
     
-    // If weak signal, return empty result
+    // If too many weak signals, return zeros
     if (isWeakSignal) {
       return {
         spo2: 0,
         pressure: "--/--",
-        arrhythmiaStatus: "NORMAL",
+        arrhythmiaStatus: "--",
         glucose: 0,
         lipids: {
           totalCholesterol: 0,
           triglycerides: 0
-        },
-        hydration: 0
+        }
       };
     }
     
@@ -69,8 +67,10 @@ export const useSignalProcessing = () => {
       });
     }
     
-    // Process the real signal directly
-    return processorRef.current.processSignal(value, rrData);
+    // Process signal directly - no simulation
+    let result = processorRef.current.processSignal(value, rrData);
+    
+    return result;
   }, []);
 
   /**

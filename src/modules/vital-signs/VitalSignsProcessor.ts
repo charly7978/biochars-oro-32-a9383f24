@@ -9,7 +9,6 @@ import { ArrhythmiaProcessor } from './arrhythmia-processor';
 import { SignalProcessor } from './signal-processor';
 import { GlucoseProcessor } from './glucose-processor';
 import { LipidProcessor } from './lipid-processor';
-import { HydrationProcessor } from './hydration-processor';
 import { ResultFactory } from './factories/result-factory';
 import { SignalValidator } from './validators/signal-validator';
 import { ConfidenceCalculator } from './calculators/confidence-calculator';
@@ -28,7 +27,6 @@ export class VitalSignsProcessor {
   private signalProcessor: SignalProcessor;
   private glucoseProcessor: GlucoseProcessor;
   private lipidProcessor: LipidProcessor;
-  private hydrationProcessor: HydrationProcessor;
   
   // Validators and calculators
   private signalValidator: SignalValidator;
@@ -48,7 +46,6 @@ export class VitalSignsProcessor {
     this.signalProcessor = new SignalProcessor();
     this.glucoseProcessor = new GlucoseProcessor();
     this.lipidProcessor = new LipidProcessor();
-    this.hydrationProcessor = new HydrationProcessor();
     
     // Initialize validators and calculators
     this.signalValidator = new SignalValidator(0.01, 15);
@@ -120,15 +117,10 @@ export class VitalSignsProcessor {
     const lipids = this.lipidProcessor.calculateLipids(ppgValues);
     const lipidsConfidence = this.lipidProcessor.getConfidence();
     
-    // Calculate hydration with real data only
-    const hydration = this.hydrationProcessor.calculateHydration(ppgValues);
-    const hydrationConfidence = this.hydrationProcessor.getConfidence();
-    
     // Calculate overall confidence
     const overallConfidence = this.confidenceCalculator.calculateOverallConfidence(
       glucoseConfidence,
-      lipidsConfidence,
-      hydrationConfidence
+      lipidsConfidence
     );
 
     // Only show values if confidence exceeds threshold
@@ -137,17 +129,14 @@ export class VitalSignsProcessor {
       totalCholesterol: 0,
       triglycerides: 0
     };
-    const finalHydration = this.confidenceCalculator.meetsThreshold(hydrationConfidence) ? hydration : 0;
 
     console.log("VitalSignsProcessor: Results with confidence", {
       spo2,
       pressure,
       arrhythmiaStatus: arrhythmiaResult.arrhythmiaStatus,
       glucose: finalGlucose,
-      hydration: finalHydration,
       glucoseConfidence,
       lipidsConfidence,
-      hydrationConfidence,
       signalAmplitude: amplitude,
       confidenceThreshold: this.confidenceCalculator.getConfidenceThreshold()
     });
@@ -159,11 +148,9 @@ export class VitalSignsProcessor {
       arrhythmiaResult.arrhythmiaStatus,
       finalGlucose,
       finalLipids,
-      finalHydration,
       {
         glucose: glucoseConfidence,
         lipids: lipidsConfidence,
-        hydration: hydrationConfidence,
         overall: overallConfidence
       },
       arrhythmiaResult.lastArrhythmiaData
@@ -181,7 +168,6 @@ export class VitalSignsProcessor {
     this.signalProcessor.reset();
     this.glucoseProcessor.reset();
     this.lipidProcessor.reset();
-    this.hydrationProcessor.reset();
     console.log("VitalSignsProcessor: Reset complete - all processors at zero");
     return null; // Always return null to ensure measurements start from zero
   }

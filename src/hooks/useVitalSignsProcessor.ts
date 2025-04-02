@@ -86,22 +86,14 @@ export const useVitalSignsProcessor = (): UseVitalSignsProcessorReturn => {
     weakSignalsCountRef.current = updatedWeakSignalsCount;
     
     // Process signal directly - no simulation
-    const result = processVitalSignal(value, rrData, isWeakSignal);
-    
-    // Only save valid results
-    if (result && !isWeakSignal) {
-      // Save result as last valid
-      setLastValidResults({...result});
-      
-      // Log processed signals
-      logSignalData(value, result, processedSignals.current);
-    }
+    let result = processVitalSignal(value, rrData, isWeakSignal);
+    const currentTime = Date.now();
     
     // If arrhythmia is detected in real data, register visualization window
     if (result.arrhythmiaStatus.includes("ARRHYTHMIA DETECTED") && result.lastArrhythmiaData) {
       const arrhythmiaTime = result.lastArrhythmiaData.timestamp;
       
-      // Window based on real RR intervals
+      // Window based on real heart rate
       let windowWidth = 400;
       
       // Adjust based on real RR intervals
@@ -114,6 +106,9 @@ export const useVitalSignsProcessor = (): UseVitalSignsProcessorReturn => {
       addArrhythmiaWindow(arrhythmiaTime - windowWidth/2, arrhythmiaTime + windowWidth/2);
     }
     
+    // Log processed signals
+    logSignalData(value, result, processedSignals.current);
+    
     // Always return real result
     return result;
   };
@@ -123,13 +118,12 @@ export const useVitalSignsProcessor = (): UseVitalSignsProcessorReturn => {
    * No simulations or reference values
    */
   const reset = () => {
-    const lastResult = lastValidResults ? {...lastValidResults} : null;
     resetProcessor();
     clearArrhythmiaWindows();
+    setLastValidResults(null);
     weakSignalsCountRef.current = 0;
     
-    // Return the last valid result before reset
-    return lastResult;
+    return null;
   };
   
   /**
@@ -149,7 +143,7 @@ export const useVitalSignsProcessor = (): UseVitalSignsProcessorReturn => {
     reset,
     fullReset,
     arrhythmiaCounter: getArrhythmiaCounter(),
-    lastValidResults,
+    lastValidResults: null, // Always return null to ensure measurements start from zero
     arrhythmiaWindows,
     debugInfo: getDebugInfo()
   };
