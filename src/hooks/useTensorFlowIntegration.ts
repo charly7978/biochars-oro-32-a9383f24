@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import * as tf from '@tensorflow/tfjs';
 
-// Avoid checking properties that don't exist in all browser environments
+// Interface for browser capabilities
 interface BrowserCapabilities {
   hasWebGL: boolean;
   hasWasm: boolean;
@@ -15,6 +15,7 @@ interface BrowserCapabilities {
   online: boolean;
 }
 
+// Interface for TensorFlow performance metrics
 export interface TensorFlowPerformanceMetrics {
   tensorCount: number;
   memoryUsage: number;
@@ -23,6 +24,7 @@ export interface TensorFlowPerformanceMetrics {
   maxTextureSize?: number;
 }
 
+// Interface for the hook return value
 export interface TensorFlowIntegrationHook {
   isTensorFlowReady: boolean;
   tensorflowBackend: string;
@@ -31,6 +33,9 @@ export interface TensorFlowIntegrationHook {
   reinitializeTensorFlow: () => Promise<boolean>;
 }
 
+/**
+ * Hook for TensorFlow integration
+ */
 export const useTensorFlowIntegration = (): TensorFlowIntegrationHook => {
   const [isTensorFlowReady, setIsTensorFlowReady] = useState<boolean>(false);
   const [tensorflowBackend, setTensorflowBackend] = useState<string>('');
@@ -91,7 +96,7 @@ export const useTensorFlowIntegration = (): TensorFlowIntegrationHook => {
       
       let maxTextureSize: number | undefined;
       if (tf.getBackend() === 'webgl') {
-        const gl = (tf.backend() as any).gpgpu.gl;
+        const gl = (tf.backend() as any).gpgpu?.gl;
         if (gl) {
           maxTextureSize = gl.getParameter(gl.MAX_TEXTURE_SIZE);
         }

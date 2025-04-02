@@ -10,7 +10,6 @@ import { useVitalSignsLogging } from './vital-signs/use-vital-signs-logging';
 import { UseVitalSignsProcessorReturn } from './vital-signs/types';
 import { checkSignalQuality } from '../modules/heart-beat/signal-quality';
 import { useTensorFlowIntegration } from './useTensorFlowIntegration';
-import { toast } from './use-toast';
 
 /**
  * Hook for processing vital signs with direct algorithms only
@@ -52,8 +51,7 @@ export const useVitalSignsProcessor = (): UseVitalSignsProcessorReturn => {
     fullReset: fullResetProcessor,
     getArrhythmiaCounter,
     getDebugInfo,
-    processedSignals,
-    isTensorFlowReady: isSignalProcessingTfReady
+    processedSignals
   } = useSignalProcessing();
   
   const { 
@@ -80,12 +78,6 @@ export const useVitalSignsProcessor = (): UseVitalSignsProcessorReturn => {
         backend: tensorflowBackend,
         memoryUsage: performanceMetrics.memoryUsage,
         tensorCount: performanceMetrics.tensorCount
-      });
-      
-      toast({
-        title: "Sistema avanzado activado",
-        description: `Utilizando ${tensorflowBackend} para procesamiento de señales vitales`,
-        variant: "default"
       });
     }
     
@@ -114,14 +106,13 @@ export const useVitalSignsProcessor = (): UseVitalSignsProcessorReturn => {
           averageQuality: Math.round(avgQuality),
           currentSamples: signalQualityHistory.current.length,
           weakSignals: weakSignalsCountRef.current,
-          processingStatus,
-          tensorflowActive: isSignalProcessingTfReady
+          processingStatus
         });
       }
     }, 3000);
     
     return () => clearInterval(qualityInterval);
-  }, [processingStatus, isSignalProcessingTfReady]);
+  }, [processingStatus]);
   
   /**
    * Process PPG signal directly

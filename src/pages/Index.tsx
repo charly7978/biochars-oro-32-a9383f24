@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import VitalSign from "@/components/VitalSign";
 import CameraView from "@/components/CameraView";
@@ -9,7 +10,6 @@ import MonitorButton from "@/components/MonitorButton";
 import AppTitle from "@/components/AppTitle";
 import ShareButton from "@/components/ShareButton";
 import { VitalSignsResult } from "@/modules/vital-signs/VitalSignsProcessor";
-import { toast } from "@/hooks/use-toast";
 import { useTensorFlowIntegration } from "@/hooks/useTensorFlowIntegration";
 
 const Index = () => {
@@ -46,7 +46,7 @@ const Index = () => {
     stopProcessing, 
     lastSignal, 
     processFrame,
-    signalQuality: rawSignalQuality
+    framesProcessed
   } = useSignalProcessor();
   
   const { 
@@ -194,11 +194,7 @@ const Index = () => {
         });
       }, 1000);
       
-      toast({
-        title: "Medición iniciada",
-        description: "Coloque su dedo sobre la cámara trasera",
-        variant: "default"
-      });
+      console.log("Medición iniciada - Coloque su dedo sobre la cámara trasera");
     }
   };
 
@@ -220,11 +216,7 @@ const Index = () => {
       setVitalSigns(savedResults);
       setShowResults(true);
       
-      toast({
-        title: "Medición completa",
-        description: "Resultados actualizados",
-        variant: "default"
-      });
+      console.log("Medición completa - Resultados actualizados");
     }
     
     setElapsedTime(0);
@@ -260,11 +252,7 @@ const Index = () => {
     });
     setSignalQuality(0);
     
-    toast({
-      title: "Sistema reiniciado",
-      description: "Todos los datos han sido borrados",
-      variant: "destructive"
-    });
+    console.log("Sistema reiniciado - Todos los datos han sido borrados");
   };
 
   const handleStreamReady = (stream: MediaStream) => {
