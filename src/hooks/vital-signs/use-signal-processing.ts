@@ -145,4 +145,4 @@ export const useSignalProcessing = () => {
     processedSignals,
     signalLog
   };
-}, []);
+};
