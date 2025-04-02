@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect } from "react";
 import VitalSign from "@/components/VitalSign";
 import CameraView from "@/components/CameraView";
@@ -9,6 +8,7 @@ import PPGSignalMeter from "@/components/PPGSignalMeter";
 import MonitorButton from "@/components/MonitorButton";
 import AppTitle from "@/components/AppTitle";
 import ShareButton from "@/components/ShareButton";
+import { HydrationIndicator } from "@/components/HydrationIndicator";
 import { VitalSignsResult } from "@/modules/vital-signs/VitalSignsProcessor";
 
 const Index = () => {
@@ -317,6 +317,7 @@ const Index = () => {
               arrhythmiaStatus={vitalSigns.arrhythmiaStatus}
               preserveResults={showResults}
               isArrhythmia={isArrhythmia}
+              hydrationLevel={vitalSigns.hydration || 0}
             />
           </div>
 
@@ -355,9 +356,9 @@ const Index = () => {
                 highlighted={showResults}
               />
               <VitalSign 
-                label="TRIGLICÉRIDOS"
-                value={vitalSigns.lipids?.triglycerides || "--"}
-                unit="mg/dL"
+                label="HIDRATACIÓN"
+                value={vitalSigns.hydration || "--"}
+                unit="%"
                 highlighted={showResults}
               />
             </div>
