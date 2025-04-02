@@ -22,7 +22,7 @@ export class ResultFactory {
       glucose: 0,
       lipids: {
         totalCholesterol: 0,
-        triglycerides: 0
+        hydration: 0  // Changed from triglycerides to hydration
       },
       confidence: {
         glucose: 0,
@@ -41,7 +41,7 @@ export class ResultFactory {
     pressure: string,
     arrhythmiaStatus: string,
     glucose: number,
-    lipids: { totalCholesterol: number; triglycerides: number },
+    lipids: { totalCholesterol: number; hydration: number },  // Changed to hydration
     confidence: { glucose: number; lipids: number; overall: number },
     lastArrhythmiaData?: { timestamp: number; rmssd: number; rrVariation: number } | null
   ): VitalSignsResult {
@@ -56,4 +56,3 @@ export class ResultFactory {
     };
   }
 }
-
