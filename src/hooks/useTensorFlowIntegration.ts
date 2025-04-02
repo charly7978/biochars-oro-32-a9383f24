@@ -27,6 +27,7 @@ export function useTensorFlowIntegration(): UseTensorFlowIntegrationReturn {
   const [tensorflowVersion, setTensorflowVersion] = useState<string>('');
   const [tensorflowBackend, setTensorflowBackend] = useState<string>('');
   const [isWebGLAvailable, setIsWebGLAvailable] = useState<boolean>(false);
+  const [initializationAttempts, setInitializationAttempts] = useState<number>(0);
   const [performanceMetrics, setPerformanceMetrics] = useState({
     tensorCount: 0,
     memoryUsage: 0,
@@ -39,7 +40,7 @@ export function useTensorFlowIntegration(): UseTensorFlowIntegrationReturn {
     
     const initialize = async () => {
       try {
-        console.log("TensorFlowIntegration: Starting initialization...");
+        console.log("TensorFlowIntegration: Starting initialization... (attempt #" + (initializationAttempts + 1) + ")");
         const success = await initializeTensorFlow();
         
         if (!isMounted) return;
@@ -51,25 +52,37 @@ export function useTensorFlowIntegration(): UseTensorFlowIntegrationReturn {
           const hasWebGL = tf.ENV.getBool('HAS_WEBGL');
           setIsWebGLAvailable(hasWebGL);
           
+          // Log detailed information about the environment
           console.log("TensorFlow.js initialized successfully", {
             version: tf.version.tfjs,
             backend: tf.getBackend(),
             webgl: hasWebGL,
+            device: {
+              platform: navigator.platform,
+              userAgent: navigator.userAgent,
+              memory: navigator.deviceMemory,
+              cores: navigator.hardwareConcurrency,
+              connection: navigator.connection ? {
+                type: navigator.connection.type,
+                effectiveType: navigator.connection.effectiveType,
+                downlink: navigator.connection.downlink,
+                rtt: navigator.connection.rtt,
+              } : 'unknown'
+            },
             timestamp: new Date().toISOString()
           });
           
           // Perform test computation to ensure everything is working
-          const testComputation = await tf.tidy(() => {
-            const a = tf.tensor1d([1, 2, 3]);
-            const b = tf.tensor1d([4, 5, 6]);
-            return a.add(b).dataSync();
-          });
+          const testTensor = tf.zeros([1, 5, 5, 3]);
+          const testResult = testTensor.mean().dataSync()[0];
+          testTensor.dispose();
           
-          console.log("TensorFlow test computation result:", testComputation);
+          console.log("TensorFlow test computation result:", testResult);
           
+          // Show success toast
           if (hasWebGL) {
             toast({
-              title: "TensorFlow initialized with GPU acceleration",
+              title: "TensorFlow initialized with GPU",
               description: `Using ${tf.getBackend()} backend for advanced vital sign analysis`,
               variant: "default"
             });
@@ -83,18 +96,54 @@ export function useTensorFlowIntegration(): UseTensorFlowIntegrationReturn {
         } else {
           console.error("Failed to initialize TensorFlow");
           
-          // Show toast only on initial failure
-          toast({
-            title: "TensorFlow initialization failed",
-            description: "Using fallback algorithms for signal processing",
-            variant: "destructive"
-          });
+          setInitializationAttempts(prev => prev + 1);
+          
+          // If we already tried multiple times, show message indicating using fallback mode
+          if (initializationAttempts >= 1) {
+            toast({
+              title: "TensorFlow initialization failed",
+              description: "Using fallback algorithms for signal processing",
+              variant: "destructive"
+            });
+          }
+          
+          // Try again with a timeout if we haven't exceeded maximum attempts
+          if (initializationAttempts < 2 && isMounted) {
+            setTimeout(() => {
+              initialize();
+            }, 3000);
+          }
         }
       } catch (error) {
         if (!isMounted) return;
         
         console.error("Error initializing TensorFlow:", error);
         setIsTensorFlowReady(false);
+        setInitializationAttempts(prev => prev + 1);
+        
+        // Try again with CPU backend if WebGL failed
+        if (initializationAttempts === 0) {
+          try {
+            console.log("Forcing CPU backend after WebGL initialization failure");
+            await tf.setBackend('cpu');
+            if (await tf.ready()) {
+              setIsTensorFlowReady(true);
+              setTensorflowVersion(tf.version.tfjs);
+              setTensorflowBackend('cpu');
+              setIsWebGLAvailable(false);
+              
+              console.log("TensorFlow.js initialized with CPU fallback");
+              
+              toast({
+                title: "TensorFlow initialized with CPU",
+                description: "Using CPU mode for vital sign analysis",
+                variant: "default"
+              });
+            }
+          } catch (cpuError) {
+            console.error("CPU fallback also failed:", cpuError);
+          }
+        }
       }
     };
     
@@ -115,11 +164,15 @@ export function useTensorFlowIntegration(): UseTensorFlowIntegrationReturn {
           // Check for memory leaks
           if (memoryInfo.numTensors > 1000) {
             console.warn("High tensor count detected:", memoryInfo.numTensors);
-            toast({
-              title: "Memory warning",
-              description: "High tensor count detected. Performance may degrade.",
-              variant: "destructive"
-            });
+            
+            // Only show warning toast for very high counts
+            if (memoryInfo.numTensors > 5000) {
+              toast({
+                title: "Memory warning",
+                description: "High tensor count detected. Performance may degrade.",
+                variant: "destructive"
+              });
+            }
             
             // Clean up unused tensors
             tf.tidy(() => {});
@@ -141,7 +194,7 @@ export function useTensorFlowIntegration(): UseTensorFlowIntegrationReturn {
         console.warn("Error disposing TensorFlow resources:", error);
       }
     };
-  }, []);
+  }, [initializationAttempts]);
   
   /**
    * Re-initialize TensorFlow

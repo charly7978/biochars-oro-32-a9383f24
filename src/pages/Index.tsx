@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useCallback } from "react";
 import VitalSign from "@/components/VitalSign";
 import CameraView from "@/components/CameraView";
 import { useSignalProcessor } from "@/hooks/useSignalProcessor";
@@ -9,6 +9,8 @@ import MonitorButton from "@/components/MonitorButton";
 import AppTitle from "@/components/AppTitle";
 import ShareButton from "@/components/ShareButton";
 import { VitalSignsResult } from "@/modules/vital-signs/VitalSignsProcessor";
+import { toast } from "@/hooks/use-toast";
+import { useTensorFlowIntegration } from "@/hooks/useTensorFlowIntegration";
 
 const Index = () => {
   const [isMonitoring, setIsMonitoring] = useState(false);
@@ -27,9 +29,26 @@ const Index = () => {
   const [heartRate, setHeartRate] = useState(0);
   const [elapsedTime, setElapsedTime] = useState(0);
   const [showResults, setShowResults] = useState(false);
+  const [isTfActive, setIsTfActive] = useState(false);
+  const [frameRate, setFrameRate] = useState(0);
   const measurementTimerRef = useRef<number | null>(null);
+  const frameCountRef = useRef<number>(0);
+  const lastFrameTimeRef = useRef<number>(Date.now());
   
-  const { startProcessing, stopProcessing, lastSignal, processFrame } = useSignalProcessor();
+  const { 
+    isTensorFlowReady, 
+    tensorflowBackend,
+    isWebGLAvailable
+  } = useTensorFlowIntegration();
+  
+  const { 
+    startProcessing, 
+    stopProcessing, 
+    lastSignal, 
+    processFrame,
+    signalQuality: rawSignalQuality
+  } = useSignalProcessor();
+  
   const { 
     processSignal: processHeartBeat, 
     isArrhythmia,
@@ -42,14 +61,44 @@ const Index = () => {
     processSignal: processVitalSigns, 
     reset: resetVitalSigns,
     fullReset: fullResetVitalSigns,
-    lastValidResults
+    lastValidResults,
+    debugInfo
   } = useVitalSignsProcessor();
+
+  useEffect(() => {
+    setIsTfActive(isTensorFlowReady);
+    if (isTensorFlowReady) {
+      console.log("Index: TensorFlow is ready", {
+        backend: tensorflowBackend,
+        webgl: isWebGLAvailable
+      });
+    }
+  }, [isTensorFlowReady, tensorflowBackend, isWebGLAvailable]);
+  
+  useEffect(() => {
+    const frameRateInterval = setInterval(() => {
+      const now = Date.now();
+      const elapsed = now - lastFrameTimeRef.current;
+      
+      if (elapsed > 0) {
+        const currentFps = Math.round((frameCountRef.current * 1000) / elapsed);
+        setFrameRate(currentFps);
+        
+        frameCountRef.current = 0;
+        lastFrameTimeRef.current = now;
+      }
+    }, 1000);
+    
+    return () => clearInterval(frameRateInterval);
+  }, []);
 
   const enterFullScreen = async () => {
     try {
-      await document.documentElement.requestFullscreen();
+      if (document.documentElement.requestFullscreen) {
+        await document.documentElement.requestFullscreen();
+      }
     } catch (err) {
-      console.log('Error al entrar en pantalla completa:', err);
+      console.warn('Error al entrar en pantalla completa:', err);
     }
   };
 
@@ -65,40 +114,53 @@ const Index = () => {
   }, []);
 
   useEffect(() => {
-    if (lastValidResults && !isMonitoring) {
+    if (lastValidResults && !isMonitoring && showResults) {
+      console.log("Index: Displaying saved measurement results", lastValidResults);
       setVitalSigns(lastValidResults);
-      setShowResults(true);
     }
-  }, [lastValidResults, isMonitoring]);
+  }, [lastValidResults, isMonitoring, showResults]);
 
   useEffect(() => {
     if (lastSignal && isMonitoring) {
-      const minQualityThreshold = 40;
+      frameCountRef.current++;
       
-      if (lastSignal.fingerDetected && lastSignal.quality >= minQualityThreshold) {
+      const signalThreshold = isTfActive ? 30 : 40;
+      const hasValidSignal = lastSignal.fingerDetected && lastSignal.quality >= signalThreshold;
+      
+      if (hasValidSignal) {
         const heartBeatResult = processHeartBeat(lastSignal.filteredValue);
         
-        if (heartBeatResult.confidence > 0.4) {
+        if (heartBeatResult.confidence > 0.4 && heartBeatResult.bpm > 0) {
           setHeartRate(heartBeatResult.bpm);
-          
-          const vitals = processVitalSigns(lastSignal.filteredValue, heartBeatResult.rrData);
-          if (vitals) {
-            setVitalSigns(vitals);
-          }
         }
         
-        setSignalQuality(lastSignal.quality);
-      } else {
-        setSignalQuality(lastSignal.quality);
+        const vitals = processVitalSigns(lastSignal.filteredValue, heartBeatResult.rrData);
         
-        if (!lastSignal.fingerDetected && heartRate > 0) {
-          setHeartRate(0);
+        if (vitals) {
+          if (vitals.spo2 > 0 || vitals.glucose > 0 || 
+              vitals.lipids.totalCholesterol > 0 || vitals.lipids.hydration > 0) {
+            console.log("Index: Real-time vital signs update", {
+              heartRate: heartBeatResult.bpm,
+              confidence: heartBeatResult.confidence,
+              spo2: vitals.spo2,
+              pressure: vitals.pressure,
+              glucose: vitals.glucose,
+              cholesterol: vitals.lipids.totalCholesterol,
+              hydration: vitals.lipids.hydration,
+              quality: lastSignal.quality,
+              tensorFlow: isTfActive
+            });
+          }
+          
+          setVitalSigns(vitals);
         }
       }
-    } else if (!isMonitoring) {
-      setSignalQuality(0);
+      
+      setSignalQuality(lastSignal.quality);
+    } else if (!isMonitoring && heartRate > 0) {
+      console.log("Index: Preserving latest measurements for display");
     }
-  }, [lastSignal, isMonitoring, processHeartBeat, processVitalSigns, heartRate]);
+  }, [lastSignal, isMonitoring, processHeartBeat, processVitalSigns, isTfActive]);
 
   const startMonitoring = () => {
     if (isMonitoring) {
@@ -108,6 +170,7 @@ const Index = () => {
       setIsMonitoring(true);
       setIsCameraOn(true);
       setShowResults(false);
+      
       setHeartRate(0);
       
       startProcessing();
@@ -122,7 +185,6 @@ const Index = () => {
       measurementTimerRef.current = window.setInterval(() => {
         setElapsedTime(prev => {
           const newTime = prev + 1;
-          console.log(`Tiempo transcurrido: ${newTime}s`);
           
           if (newTime >= 30) {
             finalizeMeasurement();
@@ -131,11 +193,17 @@ const Index = () => {
           return newTime;
         });
       }, 1000);
+      
+      toast({
+        title: "Medición iniciada",
+        description: "Coloque su dedo sobre la cámara trasera",
+        variant: "default"
+      });
     }
   };
 
   const finalizeMeasurement = () => {
-    console.log("Finalizando medición");
+    console.log("Index: Finalizando medición con resultados", vitalSigns);
     
     setIsMonitoring(false);
     setIsCameraOn(false);
@@ -151,15 +219,20 @@ const Index = () => {
     if (savedResults) {
       setVitalSigns(savedResults);
       setShowResults(true);
+      
+      toast({
+        title: "Medición completa",
+        description: "Resultados actualizados",
+        variant: "default"
+      });
     }
     
     setElapsedTime(0);
     setSignalQuality(0);
-    setHeartRate(0);
   };
 
   const handleReset = () => {
-    console.log("Reseteando completamente la aplicación");
+    console.log("Index: Reseteando completamente la aplicación");
     setIsMonitoring(false);
     setIsCameraOn(false);
     setShowResults(false);
@@ -186,6 +259,12 @@ const Index = () => {
       }
     });
     setSignalQuality(0);
+    
+    toast({
+      title: "Sistema reiniciado",
+      description: "Todos los datos han sido borrados",
+      variant: "destructive"
+    });
   };
 
   const handleStreamReady = (stream: MediaStream) => {
@@ -195,12 +274,10 @@ const Index = () => {
     const imageCapture = new ImageCapture(videoTrack);
     
     if (videoTrack.getCapabilities()?.torch) {
-      console.log("Activando linterna para mejorar la señal PPG");
+      console.log("Index: Activando linterna para mejorar la señal PPG");
       videoTrack.applyConstraints({
         advanced: [{ torch: true }]
       }).catch(err => console.error("Error activando linterna:", err));
-    } else {
-      console.warn("Esta cámara no tiene linterna disponible, la medición puede ser menos precisa");
     }
     
     const tempCanvas = document.createElement('canvas');
@@ -212,9 +289,6 @@ const Index = () => {
     
     let lastProcessTime = 0;
     const targetFrameInterval = 1000/30;
-    let frameCount = 0;
-    let lastFpsUpdateTime = Date.now();
-    let processingFps = 0;
     
     const processImage = async () => {
       if (!isMonitoring) return;
@@ -241,15 +315,7 @@ const Index = () => {
           const imageData = tempCtx.getImageData(0, 0, targetWidth, targetHeight);
           processFrame(imageData);
           
-          frameCount++;
           lastProcessTime = now;
-          
-          if (now - lastFpsUpdateTime > 1000) {
-            processingFps = frameCount;
-            frameCount = 0;
-            lastFpsUpdateTime = now;
-            console.log(`Rendimiento de procesamiento: ${processingFps} FPS`);
-          }
         } catch (error) {
           console.error("Error capturando frame:", error);
         }
@@ -293,13 +359,19 @@ const Index = () => {
 
         <div className="relative z-10 h-full flex flex-col">
           <div className="px-4 py-2 flex justify-between items-center bg-black/20">
-            <div className="text-white text-lg">
-              Calidad: {signalQuality}
+            <div className="text-white text-lg flex items-center gap-2">
+              <span>Calidad: {signalQuality}</span>
+              {isTfActive && (
+                <span className="text-green-400 text-sm bg-green-900/50 px-2 py-0.5 rounded">
+                  TF: {tensorflowBackend}
+                </span>
+              )}
             </div>
             <div className="flex items-center gap-2">
               <ShareButton />
-              <div className="text-white text-lg">
-                {lastSignal?.fingerDetected ? "Huella Detectada" : "Huella No Detectada"}
+              <div className="text-white text-lg flex flex-col items-end">
+                <span>{lastSignal?.fingerDetected ? "Huella Detectada" : "Huella No Detectada"}</span>
+                <span className="text-xs text-gray-400">{frameRate} FPS</span>
               </div>
             </div>
           </div>

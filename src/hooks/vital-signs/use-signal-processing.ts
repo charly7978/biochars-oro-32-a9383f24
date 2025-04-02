@@ -3,9 +3,10 @@
  * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
  */
 
-import { useRef, useCallback } from 'react';
+import { useRef, useCallback, useState, useEffect } from 'react';
 import { VitalSignsResult } from '../../modules/vital-signs/types/vital-signs-result';
 import { VitalSignsProcessor } from '../../modules/vital-signs/VitalSignsProcessor';
+import { useTensorFlowIntegration } from '../useTensorFlowIntegration';
 
 /**
  * Hook for processing signal using the VitalSignsProcessor
@@ -16,6 +17,29 @@ export const useSignalProcessing = () => {
   const processorRef = useRef<VitalSignsProcessor | null>(null);
   const processedSignals = useRef<number>(0);
   const signalLog = useRef<{timestamp: number, value: number, result: any}[]>([]);
+  const [isTfReady, setIsTfReady] = useState(false);
+  
+  // Use TensorFlow if available
+  const {
+    isTensorFlowReady,
+    tensorflowVersion,
+    tensorflowBackend,
+    isWebGLAvailable,
+    performanceMetrics
+  } = useTensorFlowIntegration();
+  
+  // Update TensorFlow status
+  useEffect(() => {
+    if (isTensorFlowReady) {
+      console.log("useSignalProcessing: TensorFlow is ready", {
+        version: tensorflowVersion,
+        backend: tensorflowBackend,
+        webgl: isWebGLAvailable,
+        timestamp: new Date().toISOString()
+      });
+      setIsTfReady(true);
+    }
+  }, [isTensorFlowReady, tensorflowVersion, tensorflowBackend, isWebGLAvailable]);
   
   /**
    * Process PPG signal directly
@@ -57,15 +81,23 @@ export const useSignalProcessing = () => {
       };
     }
     
-    // Logging for diagnostics
-    if (processedSignals.current % 30 === 0 || processedSignals.current < 10) {
+    // Enhanced logging for diagnostics
+    const logFrequency = performanceMetrics?.tensorCount > 100 ? 50 : 30;
+    
+    if (processedSignals.current % logFrequency === 0 || processedSignals.current < 10) {
       console.log("useSignalProcessing: Processing signal DIRECTLY", {
         inputValue: value,
         rrDataPresent: !!rrData,
         rrIntervals: rrData?.intervals.length || 0,
         arrhythmiaCount: processorRef.current.getArrhythmiaCounter(),
         signalNumber: processedSignals.current,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
+        tensorflowActive: isTfReady,
+        tensorStats: isTfReady ? {
+          tensorCount: performanceMetrics?.tensorCount || 0,
+          memoryUsage: performanceMetrics?.memoryUsage || 0,
+          gpuActive: performanceMetrics?.gpuActive || false
+        } : null
       });
     }
     
@@ -90,20 +122,22 @@ export const useSignalProcessing = () => {
       signalLog.current.splice(0, signalLog.current.length - 100);
     }
     
-    // Log output when values are present
-    if (result.spo2 > 0 || result.glucose > 0 || result.lipids.totalCholesterol > 0) {
+    // Enhanced logging for successful measurements
+    if (result.spo2 > 0 || result.glucose > 0 || result.lipids.totalCholesterol > 0 || result.lipids.hydration > 0) {
       console.log("useSignalProcessing: Successful vital sign measurement:", {
         spo2: result.spo2,
         pressure: result.pressure,
         glucose: result.glucose,
         cholesterol: result.lipids.totalCholesterol,
         hydration: result.lipids.hydration,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
+        signalStrength: value,
+        processingTime: Date.now() - signalLog.current[signalLog.current.length - 1].timestamp
       });
     }
     
     return result;
-  }, []);
+  }, [isTfReady, performanceMetrics]);
 
   /**
    * Initialize the processor
@@ -111,7 +145,9 @@ export const useSignalProcessing = () => {
    */
   const initializeProcessor = useCallback(() => {
     console.log("useVitalSignsProcessor: Initializing processor for DIRECT MEASUREMENT ONLY", {
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
+      tensorflowActive: isTensorFlowReady,
+      tensorflowBackend: tensorflowBackend
     });
     
     // Create new instances for direct measurement
@@ -124,7 +160,7 @@ export const useSignalProcessing = () => {
     console.log("useSignalProcessing: Processor initialized successfully");
     
     return processorRef.current;
-  }, []);
+  }, [isTensorFlowReady, tensorflowBackend]);
 
   /**
    * Reset the processor
@@ -172,9 +208,14 @@ export const useSignalProcessing = () => {
       processedSignals: processedSignals.current,
       signalLog: signalLog.current.slice(-10),
       processorInitialized: !!processorRef.current,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
+      tensorflowActive: isTfReady,
+      tensorflowBackend: tensorflowBackend || 'none',
+      webglAvailable: isWebGLAvailable,
+      tensorMemory: performanceMetrics?.memoryUsage || 0,
+      tensorCount: performanceMetrics?.tensorCount || 0
     };
-  }, []);
+  }, [isTfReady, tensorflowBackend, isWebGLAvailable, performanceMetrics]);
 
   return {
     processSignal,
@@ -185,6 +226,7 @@ export const useSignalProcessing = () => {
     getDebugInfo,
     processorRef,
     processedSignals,
-    signalLog
+    signalLog,
+    isTensorFlowReady: isTfReady
   };
 };
