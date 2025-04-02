@@ -247,4 +247,4 @@ export const useVitalSignsProcessor = (): UseVitalSignsProcessorReturn => {
       tensorflowReady: isSignalProcessingTfReady
     }
   };
-}, []);
+};
