@@ -240,11 +240,6 @@ export const useVitalSignsProcessor = (): UseVitalSignsProcessorReturn => {
     arrhythmiaCounter: getArrhythmiaCounter(),
     lastValidResults,
     arrhythmiaWindows,
-    debugInfo: {
-      ...getDebugInfo(),
-      measurementQuality,
-      processingStatus,
-      tensorflowReady: isSignalProcessingTfReady
-    }
+    debugInfo: getDebugInfo()
   };
 };
