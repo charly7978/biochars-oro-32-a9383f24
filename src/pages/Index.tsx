@@ -85,6 +85,7 @@ const Index = () => {
           
           const vitals = processVitalSigns(lastSignal.filteredValue, heartBeatResult.rrData);
           if (vitals) {
+            console.log("Vital signs processed:", vitals);
             setVitalSigns(vitals);
           }
         }
