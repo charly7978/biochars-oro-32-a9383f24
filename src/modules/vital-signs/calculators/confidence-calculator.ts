@@ -4,38 +4,47 @@
  */
 
 /**
- * Calculator for confidence levels of measurements
- * Works with real data only, no simulation
+ * Calculator for confidence levels in vital signs measurements
+ * Using only direct measurement methods
  */
 export class ConfidenceCalculator {
-  private readonly MIN_CONFIDENCE_THRESHOLD: number;
+  private confidenceThreshold: number;
   
   /**
-   * Create a new confidence calculator
+   * Create new instance with specified threshold
    */
-  constructor(minConfidenceThreshold: number = 0.15) {
-    this.MIN_CONFIDENCE_THRESHOLD = minConfidenceThreshold;
+  constructor(confidenceThreshold: number = 0.6) {
+    this.confidenceThreshold = confidenceThreshold;
   }
   
   /**
-   * Calculate overall confidence from individual metrics
+   * Calculate overall confidence level based on individual measurements
    */
-  public calculateOverallConfidence(glucoseConfidence: number, lipidsConfidence: number): number {
-    return (glucoseConfidence * 0.5) + (lipidsConfidence * 0.5);
+  public calculateOverallConfidence(
+    glucoseConfidence: number, 
+    lipidsConfidence: number,
+    hydrationConfidence: number
+  ): number {
+    // Weights for different confidence measures
+    const w1 = 0.33; // Glucose
+    const w2 = 0.33; // Lipids
+    const w3 = 0.34; // Hydration
+    
+    // Weighted average
+    return (glucoseConfidence * w1) + (lipidsConfidence * w2) + (hydrationConfidence * w3);
   }
   
   /**
-   * Check if confidence meets the threshold
+   * Check if confidence level meets threshold
    */
   public meetsThreshold(confidence: number): boolean {
-    return confidence > this.MIN_CONFIDENCE_THRESHOLD;
+    return confidence >= this.confidenceThreshold * 100;
   }
   
   /**
-   * Get current confidence threshold
+   * Get the configured confidence threshold
    */
   public getConfidenceThreshold(): number {
-    return this.MIN_CONFIDENCE_THRESHOLD;
+    return this.confidenceThreshold;
   }
 }
-

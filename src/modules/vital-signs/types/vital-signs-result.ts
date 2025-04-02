@@ -16,9 +16,11 @@ export interface VitalSignsResult {
     totalCholesterol: number;
     triglycerides: number;
   };
+  hydration: number; // Nivel de hidratación en porcentaje (0-100%)
   confidence?: {
     glucose: number;
     lipids: number;
+    hydration: number; // Confianza en la medición de hidratación
     overall: number;
   };
   lastArrhythmiaData?: {
