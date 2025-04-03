@@ -13,6 +13,8 @@ import {
   SignalProcessingOptions,
   resetFingerDetector
 } from '../modules/signal-processing';
+import { SignalAmplifier } from '../modules/SignalAmplifier';
+import { logError, ErrorLevel } from '@/utils/debugUtils';
 
 // Resultado combinado del procesamiento
 export interface ProcessedSignalResult {
@@ -45,6 +47,8 @@ export function useSignalProcessing() {
   // Instancias de procesadores
   const ppgProcessorRef = useRef<PPGSignalProcessor | null>(null);
   const heartbeatProcessorRef = useRef<HeartbeatProcessor | null>(null);
+  // Nuevo amplificador de señal dedicado
+  const signalAmplifierRef = useRef<SignalAmplifier | null>(null);
   
   // Estado de procesamiento
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
@@ -71,10 +75,16 @@ export function useSignalProcessing() {
       heartbeatProcessorRef.current = new HeartbeatProcessor();
     }
     
+    if (!signalAmplifierRef.current) {
+      console.log("useSignalProcessing: Creando amplificador de señal");
+      signalAmplifierRef.current = new SignalAmplifier();
+    }
+    
     return () => {
       console.log("useSignalProcessing: Limpiando procesadores");
       ppgProcessorRef.current = null;
       heartbeatProcessorRef.current = null;
+      signalAmplifierRef.current = null;
     };
   }, []);
   
@@ -82,7 +92,7 @@ export function useSignalProcessing() {
    * Procesa un valor PPG usando ambos procesadores
    */
   const processValue = useCallback((value: number): ProcessedSignalResult | null => {
-    if (!isProcessing || !ppgProcessorRef.current || !heartbeatProcessorRef.current) {
+    if (!isProcessing || !ppgProcessorRef.current || !heartbeatProcessorRef.current || !signalAmplifierRef.current) {
       return null;
     }
     
@@ -93,18 +103,31 @@ export function useSignalProcessing() {
       // Procesar con el procesador PPG
       const ppgResult: ProcessedPPGSignal = ppgProcessorRef.current.processSignal(value);
       
+      // Amplificar la señal con el amplificador dedicado para mejorar la detección de latidos
+      const amplifierResult = signalAmplifierRef.current.processValue(ppgResult.filteredValue);
+      
       // Usar el valor amplificado para procesamiento cardíaco
       const heartbeatResult: ProcessedHeartbeatSignal = 
-        heartbeatProcessorRef.current.processSignal(ppgResult.amplifiedValue);
+        heartbeatProcessorRef.current.processSignal(amplifierResult.amplifiedValue);
       
-      // Actualizar estado de calidad y detección de dedo con mayor sensibilidad
-      // Enhanced quality calculation that puts more emphasis on heartbeat detection success
+      // NUEVO: Transferencia directa de la calidad de señal del amplificador a la salida
+      // La calidad del amplificador ya tiene en cuenta factores importantes como periodicity
+      const rawQuality = Math.max(ppgResult.quality, amplifierResult.quality * 100);
+      
+      // Calcular calidad mejorada que incorpora detección de latidos, exactamente como se solicitó
       const enhancedQuality = heartbeatResult.peakConfidence > 0.6 
-        ? Math.min(100, ppgResult.quality + 15) // Boost quality when we detect strong peaks
-        : ppgResult.quality;
+        ? Math.min(100, rawQuality + 15) // Boost quality when we detect strong peaks
+        : rawQuality;
         
+      // Actualizar estado con calidad directa del procesador
       setSignalQuality(enhancedQuality);
-      setFingerDetected(ppgResult.fingerDetected);
+      
+      // Detección de dedo mejorada - usar AMBOS criterios para mayor precisión
+      const improvedFingerDetection = 
+        ppgResult.fingerDetected || // Criterio original
+        (amplifierResult.quality > 0.5 && heartbeatResult.peakConfidence > 0.4); // Criterio del amplificador
+      
+      setFingerDetected(improvedFingerDetection);
       
       // Calcular BPM promedio con mayor peso a valores recientes
       if (heartbeatResult.instantaneousBPM !== null && heartbeatResult.peakConfidence > 0.4) { // Lowered threshold
@@ -151,7 +174,7 @@ export function useSignalProcessing() {
           averageBPM = Math.round(weightedSum / totalWeight);
           
           // Actualizar estado de BPM si tenemos valor y buena calidad
-          if (averageBPM > 0 && enhancedQuality > 35) { // Lowered threshold from 40
+          if (averageBPM > 0 && enhancedQuality > 30) { // Lowered threshold from 35
             setHeartRate(averageBPM);
           }
         }
@@ -165,11 +188,11 @@ export function useSignalProcessing() {
         rawValue: ppgResult.rawValue,
         filteredValue: ppgResult.filteredValue,
         normalizedValue: ppgResult.normalizedValue,
-        amplifiedValue: ppgResult.amplifiedValue,
+        amplifiedValue: amplifierResult.amplifiedValue, // Usar valor del amplificador dedicado
         
-        // Información de calidad mejorada
+        // Información de calidad mejorada - TRANSFERENCIA DIRECTA
         quality: enhancedQuality,
-        fingerDetected: ppgResult.fingerDetected,
+        fingerDetected: improvedFingerDetection,
         signalStrength: ppgResult.signalStrength,
         
         // Información cardíaca
@@ -185,7 +208,7 @@ export function useSignalProcessing() {
       if (processedFramesRef.current % 50 === 0) {
         console.log("Signal Processing Diagnostics:", {
           quality: enhancedQuality,
-          amplifierGain: ppgProcessorRef.current.getAmplifierGain?.() || "N/A",
+          amplifierGain: signalAmplifierRef.current.getCurrentGain(), // FIX: Usar método del amplificador dedicado
           peakConfidence: heartbeatResult.peakConfidence,
           recentBpmCount: recentBpmValues.current.length,
           averageBPM: averageBPM,
@@ -208,7 +231,7 @@ export function useSignalProcessing() {
    * Inicia el procesamiento de señal
    */
   const startProcessing = useCallback(() => {
-    if (!ppgProcessorRef.current || !heartbeatProcessorRef.current) {
+    if (!ppgProcessorRef.current || !heartbeatProcessorRef.current || !signalAmplifierRef.current) {
       console.error("No se pueden iniciar los procesadores");
       return;
     }
@@ -218,6 +241,7 @@ export function useSignalProcessing() {
     // Resetear procesadores
     ppgProcessorRef.current.reset();
     heartbeatProcessorRef.current.reset();
+    signalAmplifierRef.current.reset();
     resetFingerDetector();
     
     // Limpiar estados
@@ -269,6 +293,7 @@ export function useSignalProcessing() {
     
     // Procesadores
     ppgProcessor: ppgProcessorRef.current,
-    heartbeatProcessor: heartbeatProcessorRef.current
+    heartbeatProcessor: heartbeatProcessorRef.current,
+    signalAmplifier: signalAmplifierRef.current  // Exposición del amplificador para diagnóstico
   };
 }
