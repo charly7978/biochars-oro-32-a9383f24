@@ -1,3 +1,4 @@
+
 import React, { useRef, useEffect, useState } from 'react';
 import { Fingerprint } from 'lucide-react';
 import { logError, ErrorLevel } from '@/utils/debugUtils';
@@ -26,20 +27,33 @@ const CameraView: React.FC<CameraViewProps> = ({
 
   const stopCamera = async (): Promise<void> => {
     if (stream) {
-      stream.getTracks().forEach(track => {
-        track.stop();
+      try {
+        stream.getTracks().forEach(track => {
+          if (track.readyState === 'live') {
+            track.stop();
+          }
+        });
+        
         if (videoRef.current) {
           videoRef.current.srcObject = null;
         }
-      });
-      setStream(null);
-      setCameraState(CameraState.INACTIVE);
-      logError("Cámara detenida", ErrorLevel.INFO, "CameraView");
+        
+        setStream(null);
+        setCameraState(CameraState.INACTIVE);
+        logError("Cámara detenida", ErrorLevel.INFO, "CameraView");
+      } catch (err) {
+        logError(`Error al detener la cámara: ${err instanceof Error ? err.message : String(err)}`, 
+                ErrorLevel.ERROR, 
+                "CameraView");
+      }
     }
   };
 
   const startCamera = async (): Promise<void> => {
     try {
+      // First make sure any previous stream is properly stopped
+      await stopCamera();
+      
       setCameraState(CameraState.REQUESTING);
       
       if (!navigator.mediaDevices?.getUserMedia) {
@@ -87,6 +101,18 @@ const CameraView: React.FC<CameraViewProps> = ({
             await videoTrack.applyConstraints({
               advanced: advancedConstraints
             });
+          }
+
+          // Try to enable flash if available
+          if (capabilities.torch) {
+            try {
+              await videoTrack.applyConstraints({
+                advanced: [{ torch: true }]
+              });
+              console.log("Linterna activada para mejorar detección");
+            } catch (torchErr) {
+              console.warn("No se pudo activar la linterna:", torchErr);
+            }
           }
 
           if (videoRef.current) {
@@ -197,16 +223,18 @@ const CameraView: React.FC<CameraViewProps> = ({
     } else if (!isMonitoring && stream) {
       stopCamera();
     }
+    
+    // Clean up on unmount
     return () => {
       logError("CameraView component unmounting, stopping camera", ErrorLevel.INFO, "CameraView");
       stopCamera();
     };
-  }, [isMonitoring]);
+  }, [isMonitoring, stream]);
 
   // Determine actual finger status using both provided detection and brightness
   const actualFingerStatus = isFingerDetected && (
-    avgBrightness < 60 || // Dark means finger is likely present
-    signalQuality > 50    // Good quality signal confirms finger
+    avgBrightness < 90 || // Dark means finger is likely present - increased threshold from 60 to 90
+    signalQuality > 30    // Good quality signal confirms finger - decreased threshold from 50 to 30
   );
 
   return (
@@ -223,14 +251,14 @@ const CameraView: React.FC<CameraViewProps> = ({
           backfaceVisibility: 'hidden'
         }}
       />
-      {isMonitoring && buttonPosition && (
+      {isMonitoring && (
         <div className="absolute bottom-24 left-1/2 transform -translate-x-1/2 z-20 flex flex-col items-center">
           <Fingerprint
             size={48}
             className={`transition-colors duration-300 ${
               !actualFingerStatus ? 'text-gray-400' :
-              signalQuality > 75 ? 'text-green-500' :
-              signalQuality > 50 ? 'text-yellow-500' :
+              signalQuality > 60 ? 'text-green-500' :
+              signalQuality > 30 ? 'text-yellow-500' :
               'text-red-500'
             }`}
           />

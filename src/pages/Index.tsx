@@ -31,6 +31,8 @@ const Index = () => {
   const [elapsedTime, setElapsedTime] = useState(0);
   const [showResults, setShowResults] = useState(false);
   const measurementTimerRef = useRef<number | null>(null);
+  const cameraStreamRef = useRef<MediaStream | null>(null);
+  const imageProcessingActiveRef = useRef(false);
   
   // Usar el nuevo hook integrado
   const vitalSignsWithProcessing = useVitalSignsWithProcessing();
@@ -122,6 +124,22 @@ const Index = () => {
       measurementTimerRef.current = null;
     }
     
+    imageProcessingActiveRef.current = false;
+    
+    // Detener y liberar stream
+    if (cameraStreamRef.current) {
+      cameraStreamRef.current.getTracks().forEach(track => {
+        try {
+          if (track.readyState === 'live') {
+            track.stop();
+          }
+        } catch (err) {
+          console.error("Error al detener track:", err);
+        }
+      });
+      cameraStreamRef.current = null;
+    }
+    
     setElapsedTime(0);
     setSignalQuality(0);
   };
@@ -138,6 +156,22 @@ const Index = () => {
     if (measurementTimerRef.current) {
       clearInterval(measurementTimerRef.current);
       measurementTimerRef.current = null;
+    }
+    
+    imageProcessingActiveRef.current = false;
+    
+    // Detener y liberar stream
+    if (cameraStreamRef.current) {
+      cameraStreamRef.current.getTracks().forEach(track => {
+        try {
+          if (track.readyState === 'live') {
+            track.stop();
+          }
+        } catch (err) {
+          console.error("Error al detener track:", err);
+        }
+      });
+      cameraStreamRef.current = null;
     }
     
     setElapsedTime(0);
@@ -158,11 +192,20 @@ const Index = () => {
   const handleStreamReady = (stream: MediaStream) => {
     if (!isMonitoring) return;
     
+    // Store stream reference
+    cameraStreamRef.current = stream;
+    
+    // Get video track for image capture
     const videoTrack = stream.getVideoTracks()[0];
+    if (!videoTrack) {
+      logError("No se pudo obtener pista de vídeo", ErrorLevel.ERROR, "Index");
+      return;
+    }
     
     if (typeof window !== 'undefined' && 'ImageCapture' in window) {
       const imageCapture = new (window as any).ImageCapture(videoTrack);
       
+      // Try enabling torch for better signal
       if (videoTrack.getCapabilities()?.torch) {
         console.log("Activando linterna para mejorar la señal PPG");
         videoTrack.applyConstraints({
@@ -185,8 +228,21 @@ const Index = () => {
       let lastFpsUpdateTime = Date.now();
       let processingFps = 0;
       
+      // Mark image processing as active
+      imageProcessingActiveRef.current = true;
+      
       const processImage = async () => {
-        if (!isMonitoring) return;
+        // Check if monitoring is still active
+        if (!isMonitoring || !imageProcessingActiveRef.current) {
+          console.log("Procesamiento de imágenes detenido");
+          return;
+        }
+        
+        // Verify track is still valid
+        if (!videoTrack || videoTrack.readyState !== 'live') {
+          console.error("La pista de vídeo no está activa", videoTrack?.readyState);
+          return;
+        }
         
         const now = Date.now();
         const timeSinceLastProcess = now - lastProcessTime;
@@ -241,14 +297,15 @@ const Index = () => {
               processingFps = frameCount;
               frameCount = 0;
               lastFpsUpdateTime = now;
-              console.log(`Rendimiento de procesamiento: ${processingFps} FPS`);
+              console.log(`Rendimiento de procesamiento: ${processingFps} FPS, Finger: ${vitalSignsWithProcessing.fingerDetected}, Quality: ${vitalSignsWithProcessing.signalQuality}`);
             }
           } catch (error) {
             console.error("Error capturando frame:", error);
           }
         }
         
-        if (isMonitoring) {
+        // Continue processing as long as monitoring is active
+        if (isMonitoring && imageProcessingActiveRef.current) {
           requestAnimationFrame(processImage);
         }
       };

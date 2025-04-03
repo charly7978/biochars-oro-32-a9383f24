@@ -104,6 +104,13 @@ export function useVitalSignsWithProcessing() {
   const lastProcessTimeRef = useRef<number>(Date.now());
   const algorithmFeedbackRef = useRef<AlgorithmFeedback[]>([]);
   
+  // Para detección de dedo más confiable
+  const fingerDetectionBufferRef = useRef<boolean[]>([]);
+  const fingerSignalQualityHistoryRef = useRef<number[]>([]);
+  const consecutiveFingerDetectionsRef = useRef<number>(0);
+  const consecutiveNoFingerDetectionsRef = useRef<number>(0);
+  const stableFingerDetectionRef = useRef<boolean>(false);
+  
   /**
    * Procesa un frame completo de la cámara
    */
@@ -152,17 +159,113 @@ export function useVitalSignsWithProcessing() {
   }, []);
   
   /**
+   * Actualiza la detección de dedo basada en múltiples factores
+   * Utiliza un enfoque de consenso para determinar si hay un dedo realmente
+   */
+  const updateFingerDetection = useCallback((rawFingerDetected: boolean, currentQuality: number) => {
+    // Guardar la detección actual en el buffer
+    fingerDetectionBufferRef.current.push(rawFingerDetected);
+    if (fingerDetectionBufferRef.current.length > 10) {
+      fingerDetectionBufferRef.current.shift();
+    }
+    
+    // Guardar calidad actual en historial
+    fingerSignalQualityHistoryRef.current.push(currentQuality);
+    if (fingerSignalQualityHistoryRef.current.length > 20) {
+      fingerSignalQualityHistoryRef.current.shift();
+    }
+    
+    // Calcular calidad promedio reciente
+    const recentQualityAvg = fingerSignalQualityHistoryRef.current.length > 0 
+      ? fingerSignalQualityHistoryRef.current.reduce((sum, val) => sum + val, 0) / 
+        fingerSignalQualityHistoryRef.current.length
+      : 0;
+    
+    // Contar detecciones positivas recientes
+    const recentDetections = fingerDetectionBufferRef.current.filter(Boolean).length;
+    const detectionRatio = recentDetections / Math.max(1, fingerDetectionBufferRef.current.length);
+    
+    // Actualizar contadores de detecciones consecutivas
+    if (rawFingerDetected) {
+      consecutiveFingerDetectionsRef.current++;
+      consecutiveNoFingerDetectionsRef.current = 0;
+    } else {
+      consecutiveNoFingerDetectionsRef.current++;
+      consecutiveFingerDetectionsRef.current = 0;
+    }
+    
+    // Lógica mejorada para determinar si hay un dedo:
+    // 1. Si hay detecciones positivas en >60% del buffer reciente, Y
+    // 2. La calidad promedio es mayor a 20, O
+    // 3. Ya estábamos en estado estable y no ha habido suficientes detecciones negativas
+    let isFingerPresent = false;
+    
+    // Primera condición: consenso de detecciones recientes
+    if (detectionRatio > 0.6 && recentQualityAvg > 20) {
+      isFingerPresent = true;
+      
+      // Si tenemos muchas detecciones consecutivas, marcar como estable
+      if (consecutiveFingerDetectionsRef.current > 15 && !stableFingerDetectionRef.current) {
+        stableFingerDetectionRef.current = true;
+        console.log("Detección de dedo estable confirmada", {
+          detectionRatio,
+          recentQualityAvg,
+          consecutive: consecutiveFingerDetectionsRef.current
+        });
+      }
+    } 
+    // Segunda condición: mantener detección estable a menos que haya suficientes negativas
+    else if (stableFingerDetectionRef.current && consecutiveNoFingerDetectionsRef.current < 10) {
+      isFingerPresent = true;
+    } 
+    // Caso contrario: no hay dedo
+    else {
+      isFingerPresent = false;
+      
+      // Si había detección estable y ya no, resetear estado
+      if (stableFingerDetectionRef.current) {
+        stableFingerDetectionRef.current = false;
+        console.log("Detección de dedo estable perdida", {
+          detectionRatio,
+          recentQualityAvg,
+          consecutiveNegatives: consecutiveNoFingerDetectionsRef.current
+        });
+      }
+    }
+    
+    // Log detallado solo en cambios de estado
+    if (isFingerPresent !== fingerDetected) {
+      console.log(`Cambio en detección de dedo: ${isFingerPresent ? "DETECTADO" : "PERDIDO"}`, {
+        detectionRatio,
+        recentQualityAvg,
+        bufferSize: fingerDetectionBufferRef.current.length,
+        consecutiveDetections: consecutiveFingerDetectionsRef.current,
+        consecutiveNoDetections: consecutiveNoFingerDetectionsRef.current,
+        stable: stableFingerDetectionRef.current
+      });
+    }
+    
+    // Actualizar estado
+    setFingerDetected(isFingerPresent);
+    
+    return isFingerPresent;
+  }, [fingerDetected]);
+  
+  /**
    * Actualiza las métricas de calidad de señal para estadísticas globales
    */
   const updateQualityMetrics = useCallback(() => {
     if (processing.lastSignal) {
-      setSignalQuality(processing.lastSignal.quality);
-      setFingerDetected(processing.lastSignal.fingerDetected);
+      const quality = processing.lastSignal.quality;
+      setSignalQuality(quality);
+      
+      // Calcular detección de dedo más robusta
+      const isFingerPresent = updateFingerDetection(
+        processing.lastSignal.fingerDetected,
+        quality
+      );
       
       // Actualizar métricas avanzadas con datos de calidad real
-      const quality = processing.lastSignal.quality;
-      
-      // Crear métricas de calidad basadas en la señal actual y el feedback de algoritmos
       if (quality > 0) {
         // Recopilamos feedback de los algoritmos
         const spo2Feedback = algorithmFeedbackRef.current.find(f => f.algorithm.includes('SpO2'));
@@ -172,6 +275,10 @@ export function useVitalSignsWithProcessing() {
         const diagnosticDetails: string[] = [];
         if (quality < 40) {
           diagnosticDetails.push("Señal de baja calidad");
+        }
+        
+        if (!isFingerPresent) {
+          diagnosticDetails.push("No se detecta dedo");
         }
         
         // Añadir feedback de algoritmos a los detalles
@@ -227,7 +334,7 @@ export function useVitalSignsWithProcessing() {
       // Activar diagnósticos detallados si hay muchos problemas
       setShowDetailedDiagnostics(problemAlgos.length > 2);
     }
-  }, [processing.lastSignal]);
+  }, [processing.lastSignal, updateFingerDetection]);
   
   /**
    * Realiza el procesamiento cuando hay un nuevo resultado de extracción
@@ -393,6 +500,13 @@ export function useVitalSignsWithProcessing() {
     lastProcessTimeRef.current = Date.now();
     algorithmFeedbackRef.current = [];
     
+    // Resetear buffers de detección de dedo
+    fingerDetectionBufferRef.current = [];
+    fingerSignalQualityHistoryRef.current = [];
+    consecutiveFingerDetectionsRef.current = 0;
+    consecutiveNoFingerDetectionsRef.current = 0;
+    stableFingerDetectionRef.current = false;
+    
     setSignalQuality(0);
     setFingerDetected(false);
     setHeartRate(0);
@@ -433,6 +547,13 @@ export function useVitalSignsWithProcessing() {
     processedFramesRef.current = 0;
     lastProcessTimeRef.current = Date.now();
     algorithmFeedbackRef.current = [];
+    
+    // Resetear buffers de detección de dedo
+    fingerDetectionBufferRef.current = [];
+    fingerSignalQualityHistoryRef.current = [];
+    consecutiveFingerDetectionsRef.current = 0;
+    consecutiveNoFingerDetectionsRef.current = 0;
+    stableFingerDetectionRef.current = false;
     
     setSignalQuality(0);
     setFingerDetected(false);
