@@ -125,6 +125,21 @@ export function clearErrorBuffer(): void {
 }
 
 /**
+ * Map error level to toast variant
+ */
+function mapErrorLevelToToastVariant(level: ErrorLevel): "default" | "destructive" {
+  switch (level) {
+    case ErrorLevel.WARNING:
+      return "default"; // Changed from "warning" to "default"
+    case ErrorLevel.ERROR:
+    case ErrorLevel.CRITICAL:
+      return "destructive";
+    default:
+      return "default";
+  }
+}
+
+/**
  * Hook for using error tracking with toast notifications
  */
 export function useErrorTracking() {
@@ -145,7 +160,7 @@ export function useErrorTracking() {
         toast({
           title: level.toUpperCase(),
           description: `${source}: ${message}`,
-          variant: level === ErrorLevel.WARNING ? "warning" : "destructive",
+          variant: mapErrorLevelToToastVariant(level),
           duration: level === ErrorLevel.CRITICAL ? 5000 : 3000,
         });
       }
