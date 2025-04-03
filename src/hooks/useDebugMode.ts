@@ -1,5 +1,15 @@
+
 import { useState, useCallback, useEffect } from 'react';
-import { logError, setVerboseLogging, ErrorLevel } from '@/utils/debugUtils';
+import { 
+  logError, 
+  setVerboseLogging, 
+  ErrorLevel,
+  initializeErrorTracking 
+} from '@/utils/debugUtils';
+import { 
+  initializeErrorPreventionSystem,
+  acknowledgeIssues
+} from '@/utils/errorPrevention';
 
 export const useDebugMode = () => {
   // Check for debug mode in localStorage
@@ -17,6 +27,14 @@ export const useDebugMode = () => {
       setVerboseLogging(true);
       logError("Modo de depuración activado", ErrorLevel.INFO, "DebugMode");
       
+      // Initialize error tracking and prevention systems
+      initializeErrorTracking({
+        verbose: true,
+        setupGlobalHandlers: true
+      });
+      
+      const cleanupErrorPrevention = initializeErrorPreventionSystem();
+      
       // Set up keyboard shortcut (Ctrl+Shift+D)
       const handleKeyDown = (e: KeyboardEvent) => {
         if (e.ctrlKey && e.shiftKey && e.key === 'D') {
@@ -25,9 +43,25 @@ export const useDebugMode = () => {
       };
       
       window.addEventListener('keydown', handleKeyDown);
-      return () => window.removeEventListener('keydown', handleKeyDown);
+      
+      return () => {
+        window.removeEventListener('keydown', handleKeyDown);
+        cleanupErrorPrevention();
+      };
     } else {
       setVerboseLogging(false);
+      
+      // Initialize with basic error tracking
+      initializeErrorTracking({
+        verbose: false,
+        setupGlobalHandlers: true
+      });
+      
+      const cleanupErrorPrevention = initializeErrorPreventionSystem();
+      
+      return () => {
+        cleanupErrorPrevention();
+      };
     }
   }, [isDebugMode]);
   
@@ -93,6 +127,12 @@ export const useDebugMode = () => {
     }));
   }, []);
   
+  // Acknowledge and reset issues
+  const resetIssues = useCallback(() => {
+    acknowledgeIssues();
+    logError("Issues acknowledged and reset", ErrorLevel.INFO, "DebugMode");
+  }, []);
+  
   return {
     isDebugMode,
     toggleDebugMode,
@@ -107,6 +147,7 @@ export const useDebugMode = () => {
     filteredValues,
     addFilteredValue,
     metrics,
-    updateMetrics
+    updateMetrics,
+    resetIssues
   };
 };

@@ -3,8 +3,9 @@ import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { getErrorBuffer, ErrorLevel, clearErrorBuffer } from '@/utils/debugUtils';
-import { getErrorPreventionState, resetErrorPreventionSystem } from '@/utils/errorPrevention';
-import { AlertTriangle, Info, AlertCircle, AlertOctagon, RotateCcw } from 'lucide-react';
+import { getErrorPreventionState, resetErrorPreventionSystem, acknowledgeIssues, getErrorAnalytics } from '@/utils/errorPrevention';
+import { getCameraState, getDeviceErrorHistory, clearDeviceErrorHistory, CameraState } from '@/utils/deviceErrorTracker';
+import { AlertTriangle, Info, AlertCircle, AlertOctagon, RotateCcw, Camera, RefreshCw } from 'lucide-react';
 
 interface ErrorMetrics {
   total: number;
@@ -21,12 +22,15 @@ const ErrorMonitor: React.FC = () => {
     total: 0,
     info: 0,
     warning: 0,
-    error: 0,
+    error: number: 0,
     critical: 0,
     lastHour: 0,
     lastErrorTime: null
   });
   const [preventionState, setPreventionState] = useState(getErrorPreventionState());
+  const [errorAnalytics, setErrorAnalytics] = useState(getErrorAnalytics());
+  const [cameraState, setCameraState] = useState(getCameraState());
+  const [deviceErrors, setDeviceErrors] = useState(getDeviceErrorHistory());
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   
   // Calculate error metrics
@@ -78,6 +82,9 @@ const ErrorMonitor: React.FC = () => {
     metrics.lastErrorTime = lastErrorTime;
     setMetrics(metrics);
     setPreventionState(getErrorPreventionState());
+    setErrorAnalytics(getErrorAnalytics());
+    setCameraState(getCameraState());
+    setDeviceErrors(getDeviceErrorHistory());
   }, [refreshTrigger]);
   
   // Refresh data every 5 seconds
@@ -92,43 +99,63 @@ const ErrorMonitor: React.FC = () => {
   const handleReset = () => {
     clearErrorBuffer();
     resetErrorPreventionSystem();
+    clearDeviceErrorHistory();
+    setRefreshTrigger(prev => prev + 1);
+  };
+  
+  const handleAcknowledgeIssues = () => {
+    acknowledgeIssues();
     setRefreshTrigger(prev => prev + 1);
   };
   
   // Determine system health status
   const getHealthStatus = (): { status: string; color: string; icon: React.ReactNode } => {
-    if (metrics.critical > 0 || preventionState.hasUnresolvedIssues) {
-      return { 
-        status: 'Crítico', 
-        color: 'text-red-600', 
-        icon: <AlertOctagon className="h-5 w-5 text-red-600" /> 
-      };
-    }
+    const healthStatus = preventionState.healthStatus;
     
-    if (metrics.error > 3 || preventionState.errorCount >= 5) {
-      return { 
-        status: 'Degradado', 
-        color: 'text-orange-500', 
-        icon: <AlertCircle className="h-5 w-5 text-orange-500" /> 
-      };
+    switch (healthStatus) {
+      case 'critical':
+        return { 
+          status: 'Crítico', 
+          color: 'text-red-600', 
+          icon: <AlertOctagon className="h-5 w-5 text-red-600" /> 
+        };
+      case 'degraded':
+        return { 
+          status: 'Degradado', 
+          color: 'text-orange-500', 
+          icon: <AlertCircle className="h-5 w-5 text-orange-500" /> 
+        };
+      case 'warning':
+        return { 
+          status: 'Advertencia', 
+          color: 'text-amber-500', 
+          icon: <AlertTriangle className="h-5 w-5 text-amber-500" /> 
+        };
+      default:
+        return { 
+          status: 'Saludable', 
+          color: 'text-green-500', 
+          icon: <Info className="h-5 w-5 text-green-500" /> 
+        };
     }
-    
-    if (metrics.warning > 5) {
-      return { 
-        status: 'Advertencia', 
-        color: 'text-amber-500', 
-        icon: <AlertTriangle className="h-5 w-5 text-amber-500" /> 
-      };
+  };
+  
+  // Get camera status display
+  const getCameraStatusDisplay = (): { text: string; color: string; } => {
+    switch (cameraState) {
+      case CameraState.ACTIVE:
+        return { text: 'Activa', color: 'text-green-500' };
+      case CameraState.REQUESTING:
+        return { text: 'Solicitando', color: 'text-amber-500' };
+      case CameraState.ERROR:
+        return { text: 'Error', color: 'text-red-500' };
+      default:
+        return { text: 'Inactiva', color: 'text-gray-500' };
     }
-    
-    return { 
-      status: 'Saludable', 
-      color: 'text-green-500', 
-      icon: <Info className="h-5 w-5 text-green-500" /> 
-    };
   };
   
   const healthStatus = getHealthStatus();
+  const cameraStatus = getCameraStatusDisplay();
   
   return (
     <Card className="shadow-md">
@@ -181,7 +208,7 @@ const ErrorMonitor: React.FC = () => {
           Estado del sistema de prevención:
         </div>
         
-        <div className="grid grid-cols-2 gap-1 text-xs">
+        <div className="grid grid-cols-2 gap-1 text-xs mb-3">
           <div className="flex justify-between p-1.5 bg-gray-50 dark:bg-gray-800 rounded">
             <span>Errores recientes:</span>
             <span className="font-medium">{preventionState.errorCount}</span>
@@ -203,17 +230,52 @@ const ErrorMonitor: React.FC = () => {
             </span>
           </div>
         </div>
+        
+        <div className="mb-2 text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1">
+          <Camera className="h-3 w-3" />
+          <span>Estado de la cámara:</span>
+        </div>
+        
+        <div className="flex justify-between p-2 bg-gray-50 dark:bg-gray-800 rounded mb-3">
+          <span className="text-sm">Estado:</span>
+          <span className={`font-medium ${cameraStatus.color}`}>{cameraStatus.text}</span>
+        </div>
+        
+        {deviceErrors.length > 0 && (
+          <div className="mb-2 p-2 border border-amber-200 bg-amber-50 dark:bg-amber-900/10 dark:border-amber-900/20 rounded text-xs">
+            <div className="font-medium text-amber-800 dark:text-amber-300 flex items-center gap-1 mb-1">
+              <AlertTriangle className="h-3 w-3" />
+              <span>Errores de dispositivo recientes ({deviceErrors.length})</span>
+            </div>
+            <div className="text-amber-700 dark:text-amber-400">
+              {deviceErrors[0].message}
+              {deviceErrors.length > 1 && ` (y ${deviceErrors.length - 1} más)`}
+            </div>
+          </div>
+        )}
       </CardContent>
-      <CardFooter className="pt-2">
+      <CardFooter className="pt-2 flex gap-2 flex-wrap">
         <Button 
           variant="outline" 
           size="sm" 
-          className="w-full flex items-center gap-1.5"
+          className="flex items-center gap-1.5"
           onClick={handleReset}
         >
           <RotateCcw className="h-3.5 w-3.5" />
           <span>Reiniciar Sistema</span>
         </Button>
+        
+        {preventionState.hasUnresolvedIssues && (
+          <Button 
+            variant="outline" 
+            size="sm" 
+            className="flex items-center gap-1.5"
+            onClick={handleAcknowledgeIssues}
+          >
+            <RefreshCw className="h-3.5 w-3.5" />
+            <span>Reconocer Problemas</span>
+          </Button>
+        )}
       </CardFooter>
     </Card>
   );
