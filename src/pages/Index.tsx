@@ -5,7 +5,7 @@ import CameraView from "@/components/CameraView";
 import { useSignalProcessor } from "@/hooks/useSignalProcessor";
 import { useHeartBeatProcessor } from "@/hooks/useHeartBeatProcessor";
 import { useVitalSignsProcessor } from "@/hooks/useVitalSignsProcessor";
-import { useFingerDetection } from "@/hooks/useFingerDetection"; // Usar el hook centralizado
+import { useFingerDetection } from "@/hooks/useFingerDetection"; 
 import PPGSignalMeter from "@/components/PPGSignalMeter";
 import MonitorButton from "@/components/MonitorButton";
 import AppTitle from "@/components/AppTitle";
@@ -291,9 +291,9 @@ const Index = () => {
             const imageData = tempCtx.getImageData(0, 0, targetWidth, targetHeight);
             
             // Procesar frame en el procesador de señales
-            const signalResult = signalProcessor.processFrame(imageData);
+            signalProcessor.processFrame(imageData);
             
-            if (signalResult && signalProcessor.lastSignal) {
+            if (signalProcessor.lastSignal) {
               // Actualizar detector de dedos centralizado con la señal
               const fingerDetected = fingerDetector.processSignal(
                 signalProcessor.lastSignal.filteredValue,
@@ -351,14 +351,7 @@ const Index = () => {
     }
   };
 
-  const handleToggleMonitoring = () => {
-    if (isMonitoring) {
-      finalizeMeasurement();
-    } else {
-      startMonitoring();
-    }
-  };
-
+  // Aseguramos que los botones usen el componente MonitorButton correctamente
   return (
     <div className="fixed inset-0 flex flex-col bg-black" style={{ 
       height: '100vh',
@@ -455,20 +448,18 @@ const Index = () => {
 
           <div className="absolute inset-x-0 bottom-4 flex gap-4 px-4">
             <div className="w-1/2">
-              <button 
-                className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-lg text-lg font-bold"
-                onClick={handleToggleMonitoring}
-              >
-                {isMonitoring ? "DETENER" : "INICIAR"}
-              </button>
+              <MonitorButton 
+                isMonitoring={isMonitoring}
+                onToggle={startMonitoring}
+                variant="monitor"
+              />
             </div>
             <div className="w-1/2">
-              <button 
-                className="w-full bg-gray-700 hover:bg-gray-800 text-white py-3 rounded-lg text-lg font-bold"
-                onClick={handleReset}
-              >
-                RESET
-              </button>
+              <MonitorButton 
+                isMonitoring={false}
+                onToggle={handleReset}
+                variant="reset"
+              />
             </div>
           </div>
         </div>

@@ -11,8 +11,12 @@ interface MonitorButtonProps {
 const MonitorButton: React.FC<MonitorButtonProps> = ({ isMonitoring, onToggle, variant }) => {
   const isMonitorButton = variant === 'monitor';
   
+  // Se cambia el color del botón de monitoreo para mejor concordancia semántica:
+  // - Verde para iniciar (acción positiva)
+  // - Rojo para detener (acción de parada)
+  // - Gris para reset (acción neutral)
   const bgColor = isMonitorButton 
-    ? isMonitoring ? 'bg-red-600 hover:bg-red-700' : 'bg-blue-600 hover:bg-blue-700'
+    ? isMonitoring ? 'bg-red-600 hover:bg-red-700' : 'bg-green-600 hover:bg-green-700'
     : 'bg-gray-700 hover:bg-gray-800';
   
   const buttonText = isMonitorButton

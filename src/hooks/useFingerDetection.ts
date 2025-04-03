@@ -1,200 +1,208 @@
 
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { resetFingerDetector, detectFingerPresence } from '@/modules/signal-processing/utils/finger-detector';
-import { logError, ErrorLevel } from '@/utils/debugUtils';
+import { detectFingerPresence, resetFingerDetector } from '@/modules/signal-processing/utils/finger-detector';
 
 /**
  * Hook centralizado para la detección de dedos
- * Unifica toda la lógica de detección para evitar duplicaciones
+ * Proporciona una interfaz única para la detección usando algoritmos subyacentes
  */
 export function useFingerDetection() {
-  // Estado principal
-  const [isFingerDetected, setIsFingerDetected] = useState<boolean>(false);
-  const [signalQuality, setSignalQuality] = useState<number>(0);
-  const [isMonitoring, setIsMonitoring] = useState<boolean>(false);
+  // Estado para tracking de dedo y calidad
+  const [isFingerDetected, setIsFingerDetected] = useState(false);
+  const [signalQuality, setSignalQuality] = useState(0);
+  const [isMonitoring, setIsMonitoring] = useState(false);
   
-  // Historial y buffers para detección robusta
-  const fingerDetectionBufferRef = useRef<boolean[]>([]);
+  // Historial de calidad de señal
   const qualityHistoryRef = useRef<number[]>([]);
-  const consecutiveDetectionsRef = useRef<number>(0);
-  const consecutiveNoDetectionsRef = useRef<number>(0);
-  const stableDetectionRef = useRef<boolean>(false);
+  const fingerDetectionBufferRef = useRef<boolean[]>([]);
+  const consecutiveDetectionsRef = useRef(0);
+  const consecutiveNoDetectionsRef = useRef(0);
+  const stableDetectionRef = useRef(false);
   
-  // Configuración
-  const detectionConfig = useRef({
-    minQualityThreshold: 20,
-    detectionRatioThreshold: 0.6,
-    stableDetectionThreshold: 15,
-    lossDetectionThreshold: 10,
-    maxBufferSize: 10,
-    maxQualityHistorySize: 20,
-    sensitivity: 0.75, // Mayor sensibilidad por defecto
-  });
+  // Para métricas de rendimiento y debug
+  const framesProcessedRef = useRef(0);
+  const lastProcessTimeRef = useRef(0);
+  const processingActiveRef = useRef(false);
   
   /**
-   * Reinicia el detector de dedos completamente
+   * Iniciar monitorización de dedo
    */
-  const reset = useCallback(() => {
+  const startMonitoring = useCallback(() => {
+    console.log("Iniciando monitorización de dedo");
+    resetFingerDetector();
+    setIsMonitoring(true);
     setIsFingerDetected(false);
     setSignalQuality(0);
-    setIsMonitoring(false);
-    
-    fingerDetectionBufferRef.current = [];
     qualityHistoryRef.current = [];
+    fingerDetectionBufferRef.current = [];
     consecutiveDetectionsRef.current = 0;
     consecutiveNoDetectionsRef.current = 0;
     stableDetectionRef.current = false;
-    
-    // Resetear el detector subyacente
-    resetFingerDetector();
-    
-    logError("Detector de dedos reiniciado completamente", ErrorLevel.INFO, "FingerDetector");
+    framesProcessedRef.current = 0;
+    processingActiveRef.current = true;
   }, []);
   
   /**
-   * Inicia el monitoreo
-   */
-  const startMonitoring = useCallback(() => {
-    reset();
-    setIsMonitoring(true);
-    logError("Detector de dedos iniciado", ErrorLevel.INFO, "FingerDetector");
-  }, [reset]);
-  
-  /**
-   * Detiene el monitoreo
+   * Detener monitorización de dedo
    */
   const stopMonitoring = useCallback(() => {
+    console.log("Deteniendo monitorización de dedo");
     setIsMonitoring(false);
-    logError("Detector de dedos detenido", ErrorLevel.INFO, "FingerDetector");
+    processingActiveRef.current = false;
   }, []);
   
   /**
-   * Procesa una señal para detección de dedos
-   * @param signalValue Valor de la señal a procesar
-   * @param quality Calidad de la señal (0-100)
-   * @param rawDetection Detección básica inicial (opcional)
+   * Reiniciar el detector de dedo completamente
+   */
+  const reset = useCallback(() => {
+    console.log("Reiniciando detector de dedo");
+    resetFingerDetector();
+    setIsMonitoring(false);
+    processingActiveRef.current = false;
+    setIsFingerDetected(false);
+    setSignalQuality(0);
+    qualityHistoryRef.current = [];
+    fingerDetectionBufferRef.current = [];
+    consecutiveDetectionsRef.current = 0;
+    consecutiveNoDetectionsRef.current = 0;
+    stableDetectionRef.current = false;
+    framesProcessedRef.current = 0;
+  }, []);
+  
+  /**
+   * Procesa una señal para detectar la presencia de un dedo
+   * @param value - Valor de la señal procesada
+   * @param rawQuality - Calidad de señal proporcionada por el procesador (opcional)
+   * @param sourceFingerDetected - Detección previa del extractor de señal (opcional)
+   * @returns boolean - Si se detecta un dedo
    */
   const processSignal = useCallback((
-    signalValue: number,
-    quality: number,
-    rawDetection?: boolean
+    value: number,
+    rawQuality?: number,
+    sourceFingerDetected?: boolean
   ): boolean => {
-    if (!isMonitoring) return false;
-    
-    // Usar detector subyacente para evaluación inicial
-    const initialDetection = rawDetection !== undefined ? 
-      rawDetection : 
-      detectFingerPresence([signalValue], detectionConfig.current.sensitivity);
-    
-    // Actualizar buffers
-    fingerDetectionBufferRef.current.push(initialDetection);
-    if (fingerDetectionBufferRef.current.length > detectionConfig.current.maxBufferSize) {
-      fingerDetectionBufferRef.current.shift();
+    if (!isMonitoring || !processingActiveRef.current) {
+      return false;
     }
     
-    qualityHistoryRef.current.push(quality);
-    if (qualityHistoryRef.current.length > detectionConfig.current.maxQualityHistorySize) {
-      qualityHistoryRef.current.shift();
-    }
-    
-    // Calcular calidad promedio reciente
-    const recentQualityAvg = qualityHistoryRef.current.length > 0 
-      ? qualityHistoryRef.current.reduce((sum, val) => sum + val, 0) / 
-        qualityHistoryRef.current.length
-      : 0;
-    
-    // Actualizar señal de calidad
-    setSignalQuality(quality);
-    
-    // Contar detecciones positivas recientes
-    const recentDetections = fingerDetectionBufferRef.current.filter(Boolean).length;
-    const detectionRatio = recentDetections / Math.max(1, fingerDetectionBufferRef.current.length);
-    
-    // Actualizar contadores consecutivos
-    if (initialDetection) {
-      consecutiveDetectionsRef.current++;
-      consecutiveNoDetectionsRef.current = 0;
-    } else {
-      consecutiveNoDetectionsRef.current++;
-      consecutiveDetectionsRef.current = 0;
-    }
-    
-    // Lógica unificada para determinar presencia de dedo
-    let finalDetection = false;
-    
-    // Primera condición: consenso de detecciones recientes
-    if (detectionRatio > detectionConfig.current.detectionRatioThreshold && 
-        recentQualityAvg > detectionConfig.current.minQualityThreshold) {
-      finalDetection = true;
+    try {
+      framesProcessedRef.current++;
       
-      // Si tenemos suficientes detecciones consecutivas, marcar como estable
-      if (consecutiveDetectionsRef.current > detectionConfig.current.stableDetectionThreshold && 
-          !stableDetectionRef.current) {
-        stableDetectionRef.current = true;
-        console.log("Detector central: Detección de dedo estable confirmada", {
-          detectionRatio,
-          recentQualityAvg,
-          consecutive: consecutiveDetectionsRef.current
+      // Crear buffer de valores recientes
+      const signalBuffer = [value];
+      
+      // Usar el detector optimizado para máxima sensibilidad
+      const detectedByAlgorithm = detectFingerPresence(signalBuffer, 0.95);
+      
+      // Si tenemos una fuente externa de detección, combinar los resultados
+      const combinedDetection = detectedByAlgorithm || !!sourceFingerDetected;
+      
+      // Mejorar la robustez con buffer de detecciones recientes
+      fingerDetectionBufferRef.current.push(combinedDetection);
+      if (fingerDetectionBufferRef.current.length > 10) {
+        fingerDetectionBufferRef.current.shift();
+      }
+      
+      // Contabilizar detecciones consecutivas
+      if (combinedDetection) {
+        consecutiveDetectionsRef.current++;
+        consecutiveNoDetectionsRef.current = 0;
+      } else {
+        consecutiveNoDetectionsRef.current++;
+        consecutiveDetectionsRef.current = 0;
+      }
+      
+      // Determinar si hay dedo presente basado en consenso
+      const positiveDetections = fingerDetectionBufferRef.current.filter(Boolean).length;
+      const detectionConsensus = positiveDetections / Math.max(1, fingerDetectionBufferRef.current.length);
+      
+      // Estrategia de histéresis: más difícil perder la detección que adquirirla
+      let fingerDetected = false;
+      
+      if (isFingerDetected) {
+        // Ya teníamos dedo detectado, mantener a menos que haya muchas detecciones negativas
+        fingerDetected = detectionConsensus >= 0.3 || consecutiveNoDetectionsRef.current < 15;
+        
+        if (!fingerDetected && stableDetectionRef.current) {
+          console.log("Detección estable perdida", {
+            consensus: detectionConsensus,
+            consecutiveNegatives: consecutiveNoDetectionsRef.current
+          });
+          stableDetectionRef.current = false;
+        }
+      } else {
+        // No teníamos dedo detectado, requiere más evidencia para confirmar
+        fingerDetected = detectionConsensus >= 0.6 || consecutiveDetectionsRef.current > 10;
+        
+        if (fingerDetected && consecutiveDetectionsRef.current > 15 && !stableDetectionRef.current) {
+          console.log("Detección estable adquirida", {
+            consensus: detectionConsensus,
+            consecutivePositives: consecutiveDetectionsRef.current
+          });
+          stableDetectionRef.current = true;
+        }
+      }
+      
+      // Actualizar calidad de señal basada en detección e historial
+      let quality = rawQuality || 0;
+      
+      // Si hay un dedo presente, establecer calidad mínima de 20
+      if (fingerDetected && quality < 20) {
+        quality = 20;
+      }
+      
+      // Agregar calidad al historial
+      qualityHistoryRef.current.push(quality);
+      if (qualityHistoryRef.current.length > 10) {
+        qualityHistoryRef.current.shift();
+      }
+      
+      // Calcular calidad promedio para estabilidad
+      const avgQuality = qualityHistoryRef.current.reduce((sum, q) => sum + q, 0) 
+        / Math.max(1, qualityHistoryRef.current.length);
+      
+      // Actualizar estado solo si hay cambios significativos para evitar renderizados innecesarios
+      if (fingerDetected !== isFingerDetected) {
+        setIsFingerDetected(fingerDetected);
+        // Log cuando cambia el estado
+        console.log(`Cambio en detección de dedo: ${fingerDetected ? "DETECTADO" : "PERDIDO"}`, {
+          detectionConsensus,
+          avgQuality,
+          consecutive: fingerDetected ? 
+            consecutiveDetectionsRef.current : 
+            consecutiveNoDetectionsRef.current,
+          stable: stableDetectionRef.current
         });
       }
-    } 
-    // Segunda condición: mantener detección estable a menos que haya suficientes negativas
-    else if (stableDetectionRef.current && 
-             consecutiveNoDetectionsRef.current < detectionConfig.current.lossDetectionThreshold) {
-      finalDetection = true;
-    } 
-    // Caso contrario: no hay dedo
-    else {
-      finalDetection = false;
       
-      // Si había detección estable y ya no, resetear estado
-      if (stableDetectionRef.current) {
-        stableDetectionRef.current = false;
-        console.log("Detector central: Detección de dedo estable perdida", {
-          detectionRatio,
-          recentQualityAvg,
-          consecutiveNegatives: consecutiveNoDetectionsRef.current
-        });
+      // Solo actualizar calidad si cambia significativamente
+      if (Math.abs(avgQuality - signalQuality) > 2) {
+        setSignalQuality(Math.round(avgQuality));
       }
-    }
-    
-    // Actualizar estado solo si hay cambio (reduce re-renders)
-    if (finalDetection !== isFingerDetected) {
-      console.log(`Detector central: Cambio en detección de dedo: ${finalDetection ? "DETECTADO" : "PERDIDO"}`, {
-        detectionRatio,
-        recentQualityAvg,
-        initialDetection,
-        bufferSize: fingerDetectionBufferRef.current.length,
-        consecutiveDetections: consecutiveDetectionsRef.current,
-        consecutiveNoDetections: consecutiveNoDetectionsRef.current,
-        stable: stableDetectionRef.current
-      });
       
-      setIsFingerDetected(finalDetection);
+      return fingerDetected;
+    } catch (error) {
+      console.error("Error en detección de dedo:", error);
+      return false;
     }
-    
-    return finalDetection;
-  }, [isMonitoring, isFingerDetected]);
+  }, [isMonitoring, isFingerDetected, signalQuality]);
   
-  /**
-   * Configura el detector
-   */
-  const configure = useCallback((config: Partial<typeof detectionConfig.current>) => {
-    detectionConfig.current = {
-      ...detectionConfig.current,
-      ...config
-    };
-    
-    console.log("Detector central: Configuración actualizada", detectionConfig.current);
-  }, []);
-  
-  // Limpiar al desmontar
+  // Efectos para registro periódico si está en modo monitorización
   useEffect(() => {
-    return () => {
-      console.log("Detector central: Limpieza por desmontaje");
-      resetFingerDetector();
-    };
-  }, []);
+    if (!isMonitoring) return;
+    
+    const intervalId = setInterval(() => {
+      if (processingActiveRef.current) {
+        const now = Date.now();
+        const elapsed = now - lastProcessTimeRef.current;
+        if (elapsed > 3000) {
+          console.log("Advertencia: Detección de dedo inactiva por más de 3 segundos");
+        }
+      }
+    }, 3000);
+    
+    return () => clearInterval(intervalId);
+  }, [isMonitoring]);
   
   return {
     isFingerDetected,
@@ -203,7 +211,6 @@ export function useFingerDetection() {
     processSignal,
     startMonitoring,
     stopMonitoring,
-    reset,
-    configure
+    reset
   };
 }
