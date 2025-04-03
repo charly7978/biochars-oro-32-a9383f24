@@ -1,13 +1,17 @@
+
 import React, { useState, useRef, useEffect } from "react";
 import VitalSign from "@/components/VitalSign";
 import CameraView from "@/components/CameraView";
 import { useSignalProcessor } from "@/hooks/useSignalProcessor";
 import { useHeartBeatProcessor } from "@/hooks/useHeartBeatProcessor";
 import { useVitalSignsProcessor } from "@/hooks/useVitalSignsProcessor";
+import { useVitalSignsWithProcessing } from "@/hooks/useVitalSignsWithProcessing";
 import PPGSignalMeter from "@/components/PPGSignalMeter";
 import MonitorButton from "@/components/MonitorButton";
 import AppTitle from "@/components/AppTitle";
+import SignalQualityIndicator from "@/components/SignalQualityIndicator";
 import { VitalSignsResult } from "@/modules/vital-signs";
+import { logError, ErrorLevel } from "@/utils/debugUtils";
 
 const Index = () => {
   const [isMonitoring, setIsMonitoring] = useState(false);
@@ -28,22 +32,9 @@ const Index = () => {
   const [showResults, setShowResults] = useState(false);
   const measurementTimerRef = useRef<number | null>(null);
   
-  const { startProcessing, stopProcessing, lastSignal, processFrame } = useSignalProcessor();
-  const { 
-    processSignal: processHeartBeat, 
-    isArrhythmia,
-    startMonitoring: startHeartBeatMonitoring,
-    stopMonitoring: stopHeartBeatMonitoring,
-    reset: resetHeartBeatProcessor
-  } = useHeartBeatProcessor();
+  // Usar el nuevo hook integrado
+  const vitalSignsWithProcessing = useVitalSignsWithProcessing();
   
-  const { 
-    processSignal: processVitalSigns, 
-    reset: resetVitalSigns,
-    fullReset: fullResetVitalSigns,
-    lastValidResults
-  } = useVitalSignsProcessor();
-
   const enterFullScreen = async () => {
     try {
       await document.documentElement.requestFullscreen();
@@ -64,40 +55,24 @@ const Index = () => {
   }, []);
 
   useEffect(() => {
-    if (lastValidResults && !isMonitoring) {
-      setVitalSigns(lastValidResults);
+    if (vitalSignsWithProcessing.lastResult && !isMonitoring) {
+      // Convertir el formato integrado al formato esperado por VitalSign
+      const convertedVitalSigns: VitalSignsResult = {
+        spo2: vitalSignsWithProcessing.lastResult.spo2,
+        pressure: vitalSignsWithProcessing.lastResult.pressure,
+        arrhythmiaStatus: vitalSignsWithProcessing.lastResult.arrhythmiaStatus,
+        glucose: 0, // No disponible en el resultado integrado
+        lipids: {
+          totalCholesterol: 0, // No disponible en el resultado integrado
+          triglycerides: 0 // No disponible en el resultado integrado
+        }
+      };
+      
+      setVitalSigns(convertedVitalSigns);
+      setHeartRate(vitalSignsWithProcessing.lastResult.heartRate);
       setShowResults(true);
     }
-  }, [lastValidResults, isMonitoring]);
-
-  useEffect(() => {
-    if (lastSignal && isMonitoring) {
-      const minQualityThreshold = 40;
-      
-      if (lastSignal.fingerDetected && lastSignal.quality >= minQualityThreshold) {
-        const heartBeatResult = processHeartBeat(lastSignal.filteredValue);
-        
-        if (heartBeatResult.confidence > 0.4) {
-          setHeartRate(heartBeatResult.bpm);
-          
-          const vitals = processVitalSigns(lastSignal.filteredValue, heartBeatResult.rrData);
-          if (vitals) {
-            setVitalSigns(vitals);
-          }
-        }
-        
-        setSignalQuality(lastSignal.quality);
-      } else {
-        setSignalQuality(lastSignal.quality);
-        
-        if (!lastSignal.fingerDetected && heartRate > 0) {
-          setHeartRate(0);
-        }
-      }
-    } else if (!isMonitoring) {
-      setSignalQuality(0);
-    }
-  }, [lastSignal, isMonitoring, processHeartBeat, processVitalSigns, heartRate]);
+  }, [vitalSignsWithProcessing.lastResult, isMonitoring]);
 
   const startMonitoring = () => {
     if (isMonitoring) {
@@ -109,8 +84,8 @@ const Index = () => {
       setShowResults(false);
       setHeartRate(0);
       
-      startProcessing();
-      startHeartBeatMonitoring();
+      // Iniciar procesamiento integrado
+      vitalSignsWithProcessing.startMonitoring();
       
       setElapsedTime(0);
       
@@ -138,23 +113,17 @@ const Index = () => {
     
     setIsMonitoring(false);
     setIsCameraOn(false);
-    stopProcessing();
-    stopHeartBeatMonitoring();
+    
+    // Detener procesamiento integrado
+    vitalSignsWithProcessing.stopMonitoring();
     
     if (measurementTimerRef.current) {
       clearInterval(measurementTimerRef.current);
       measurementTimerRef.current = null;
     }
     
-    const savedResults = resetVitalSigns();
-    if (savedResults) {
-      setVitalSigns(savedResults);
-      setShowResults(true);
-    }
-    
     setElapsedTime(0);
     setSignalQuality(0);
-    setHeartRate(0);
   };
 
   const handleReset = () => {
@@ -162,16 +131,15 @@ const Index = () => {
     setIsMonitoring(false);
     setIsCameraOn(false);
     setShowResults(false);
-    stopProcessing();
-    stopHeartBeatMonitoring();
-    resetHeartBeatProcessor();
+    
+    // Reiniciar completamente
+    vitalSignsWithProcessing.reset();
     
     if (measurementTimerRef.current) {
       clearInterval(measurementTimerRef.current);
       measurementTimerRef.current = null;
     }
     
-    fullResetVitalSigns();
     setElapsedTime(0);
     setHeartRate(0);
     setVitalSigns({ 
@@ -240,7 +208,31 @@ const Index = () => {
             );
             
             const imageData = tempCtx.getImageData(0, 0, targetWidth, targetHeight);
-            processFrame(imageData);
+            
+            // Usar el procesador integrado
+            vitalSignsWithProcessing.processFrame(imageData);
+            
+            // Actualizar señal de calidad desde el procesamiento integrado
+            setSignalQuality(vitalSignsWithProcessing.signalQuality);
+            
+            // Actualizar frecuencia cardíaca desde el procesamiento integrado
+            if (vitalSignsWithProcessing.heartRate > 0) {
+              setHeartRate(vitalSignsWithProcessing.heartRate);
+            }
+            
+            // Si hay un resultado reciente, actualizar signos vitales
+            if (vitalSignsWithProcessing.lastResult) {
+              setVitalSigns({
+                spo2: vitalSignsWithProcessing.lastResult.spo2,
+                pressure: vitalSignsWithProcessing.lastResult.pressure,
+                arrhythmiaStatus: vitalSignsWithProcessing.lastResult.arrhythmiaStatus,
+                glucose: 0,
+                lipids: {
+                  totalCholesterol: 0,
+                  triglycerides: 0
+                }
+              });
+            }
             
             frameCount++;
             lastProcessTime = now;
@@ -290,31 +282,41 @@ const Index = () => {
           <CameraView 
             onStreamReady={handleStreamReady}
             isMonitoring={isCameraOn}
-            isFingerDetected={lastSignal?.fingerDetected}
+            isFingerDetected={vitalSignsWithProcessing.fingerDetected}
             signalQuality={signalQuality}
           />
         </div>
 
         <div className="relative z-10 h-full flex flex-col">
-          <div className="px-4 py-2 flex justify-around items-center bg-black/20">
+          <div className="px-4 py-2 flex justify-between items-center bg-black/20">
+            {/* NUEVO: Monitor de calidad avanzado */}
+            {vitalSignsWithProcessing.isQualityAlertActive || vitalSignsWithProcessing.showDetailedDiagnostics ? (
+              <SignalQualityIndicator 
+                metrics={vitalSignsWithProcessing.qualityMetrics}
+                isAlertActive={vitalSignsWithProcessing.isQualityAlertActive}
+                problemAlgorithms={vitalSignsWithProcessing.problemAlgorithms}
+                showDetailedDiagnostics={vitalSignsWithProcessing.showDetailedDiagnostics}
+              />
+            ) : (
+              <div className="text-white text-lg">
+                Calidad: {signalQuality}
+              </div>
+            )}
             <div className="text-white text-lg">
-              Calidad: {signalQuality}
-            </div>
-            <div className="text-white text-lg">
-              {lastSignal?.fingerDetected ? "Huella Detectada" : "Huella No Detectada"}
+              {vitalSignsWithProcessing.fingerDetected ? "Huella Detectada" : "Huella No Detectada"}
             </div>
           </div>
 
           <div className="flex-1">
             <PPGSignalMeter 
-              value={lastSignal?.filteredValue || 0}
-              quality={lastSignal?.quality || 0}
-              isFingerDetected={lastSignal?.fingerDetected || false}
+              value={vitalSignsWithProcessing.lastResult?.filteredValue || 0}
+              quality={signalQuality}
+              isFingerDetected={vitalSignsWithProcessing.fingerDetected}
               onStartMeasurement={startMonitoring}
               onReset={handleReset}
               arrhythmiaStatus={vitalSigns.arrhythmiaStatus}
               preserveResults={showResults}
-              isArrhythmia={isArrhythmia}
+              isArrhythmia={vitalSigns.arrhythmiaStatus.toLowerCase().includes('arr')}
             />
           </div>
 
