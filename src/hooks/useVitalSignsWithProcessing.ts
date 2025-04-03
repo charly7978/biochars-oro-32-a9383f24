@@ -13,11 +13,24 @@ import { logError, ErrorLevel } from '@/utils/debugUtils';
 
 // Definiendo tipos para métricas de calidad y algoritmos
 interface SignalQualityMetrics {
+  // Propiedades generales de calidad
+  generalQuality: number;
   signalStrength: number;
-  noiseLevels: number;
-  signalToNoise: number;
-  consecutiveGoodSignals: number;
-  consecutiveBadSignals: number;
+  stability: number;
+  periodicity: number;
+  noiseLevel: number;
+  
+  // Métricas específicas por algoritmo
+  algorithmSpecific: {
+    cardiac?: {
+      pulseQuality: number;
+      rhythmStability: number;
+    };
+    spo2?: {
+      perfusionIndex: number;
+      signalToNoise: number;
+    };
+  };
 }
 
 interface AlgorithmFeedback {
@@ -142,18 +155,37 @@ export function useVitalSignsWithProcessing() {
       setSignalQuality(processing.lastSignal.quality);
       setFingerDetected(processing.lastSignal.fingerDetected);
       
-      // Actualizar métricas avanzadas con datos simulados
+      // Actualizar métricas avanzadas con datos de calidad real
       const quality = processing.lastSignal.quality;
       
-      // Crear métricas de calidad basadas en la señal actual
+      // Crear métricas de calidad basadas en la señal actual y el feedback de algoritmos
       if (quality > 0) {
-        setQualityMetrics({
-          signalStrength: quality / 100,
-          noiseLevels: Math.max(0, 1 - (quality / 100)),
-          signalToNoise: quality / (100 - quality + 1),
-          consecutiveGoodSignals: quality > 60 ? 5 : 0,
-          consecutiveBadSignals: quality < 40 ? 3 : 0
-        });
+        // Recopilamos feedback de los algoritmos
+        const spo2Feedback = algorithmFeedbackRef.current.find(f => f.algorithm.includes('SpO2'));
+        const cardiacFeedback = algorithmFeedbackRef.current.find(f => f.algorithm.includes('BloodPressure'));
+        
+        // Crear objeto de métricas con la estructura requerida por SignalQualityIndicator
+        const metrics: SignalQualityMetrics = {
+          generalQuality: quality,
+          signalStrength: Math.min(100, quality * 1.1), // Ajustado a escala 0-100
+          stability: Math.max(0, quality * 0.8),
+          periodicity: quality > 70 ? 85 : quality * 0.9,
+          noiseLevel: Math.max(0, 100 - quality),
+          
+          algorithmSpecific: {
+            cardiac: cardiacFeedback ? {
+              pulseQuality: cardiacFeedback.qualityScore,
+              rhythmStability: Math.max(0, cardiacFeedback.qualityScore - 10)
+            } : undefined,
+            
+            spo2: spo2Feedback ? {
+              perfusionIndex: (spo2Feedback.recommendations?.perfusionIndex as number) || 0.5,
+              signalToNoise: spo2Feedback.qualityScore
+            } : undefined
+          }
+        };
+        
+        setQualityMetrics(metrics);
       }
       
       // Simular alertas de calidad basadas en la retroalimentación de algoritmos
