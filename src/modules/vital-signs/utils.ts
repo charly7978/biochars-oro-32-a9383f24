@@ -15,24 +15,24 @@ export {
   calculateStandardDeviation,
   calculateEMA,
   normalizeValue
-} from './utils/signal-processing-utils';
+} from './signal-processing-utils';
 
 // Re-export peak detection utilities
 export {
   findPeaksAndValleys,
   calculateAmplitude
-} from './utils/peak-detection-utils';
+} from './peak-detection-utils';
 
 // Re-export filter utilities
 export {
   applySMAFilter,
   amplifySignal
-} from './utils/filter-utils';
+} from './filter-utils';
 
 // Re-export perfusion utilities
 export {
   calculatePerfusionIndex as calculatePerfusionRatio
-} from './utils/perfusion-utils';
+} from './perfusion-utils';
 
 // Re-export from core utils
 export {
