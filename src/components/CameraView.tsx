@@ -233,8 +233,8 @@ const CameraView: React.FC<CameraViewProps> = ({
 
   // Determine actual finger status using both provided detection and brightness
   const actualFingerStatus = isFingerDetected && (
-    avgBrightness < 90 || // Dark means finger is likely present - increased threshold from 60 to 90
-    signalQuality > 30    // Good quality signal confirms finger - decreased threshold from 50 to 30
+    avgBrightness < 110 || // Dark means finger is likely present - increased threshold even more
+    signalQuality > 25    // Decreased quality threshold for finger confirmation
   );
 
   return (
@@ -258,7 +258,7 @@ const CameraView: React.FC<CameraViewProps> = ({
             className={`transition-colors duration-300 ${
               !actualFingerStatus ? 'text-gray-400' :
               signalQuality > 60 ? 'text-green-500' :
-              signalQuality > 30 ? 'text-yellow-500' :
+              signalQuality > 25 ? 'text-yellow-500' :
               'text-red-500'
             }`}
           />

@@ -3,9 +3,8 @@ import React, { useState, useRef, useEffect } from "react";
 import VitalSign from "@/components/VitalSign";
 import CameraView from "@/components/CameraView";
 import { useSignalProcessor } from "@/hooks/useSignalProcessor";
-import { useHeartBeatProcessor } from "@/hooks/useHeartBeatProcessor";
 import { useVitalSignsProcessor } from "@/hooks/useVitalSignsProcessor";
-import { useVitalSignsWithProcessing } from "@/hooks/useVitalSignsWithProcessing";
+import { useFingerDetection } from "@/hooks/useFingerDetection"; // Nuevo hook centralizado
 import PPGSignalMeter from "@/components/PPGSignalMeter";
 import MonitorButton from "@/components/MonitorButton";
 import AppTitle from "@/components/AppTitle";
@@ -14,9 +13,9 @@ import { VitalSignsResult } from "@/modules/vital-signs";
 import { logError, ErrorLevel } from "@/utils/debugUtils";
 
 const Index = () => {
+  // Estado general
   const [isMonitoring, setIsMonitoring] = useState(false);
   const [isCameraOn, setIsCameraOn] = useState(false);
-  const [signalQuality, setSignalQuality] = useState(0);
   const [vitalSigns, setVitalSigns] = useState<VitalSignsResult>({
     spo2: 0,
     pressure: "--/--",
@@ -30,12 +29,24 @@ const Index = () => {
   const [heartRate, setHeartRate] = useState(0);
   const [elapsedTime, setElapsedTime] = useState(0);
   const [showResults, setShowResults] = useState(false);
+  
+  // Referencias
   const measurementTimerRef = useRef<number | null>(null);
   const cameraStreamRef = useRef<MediaStream | null>(null);
   const imageProcessingActiveRef = useRef(false);
   
-  // Usar el nuevo hook integrado
-  const vitalSignsWithProcessing = useVitalSignsWithProcessing();
+  // Utilizamos el hook centralizado para detección de dedo
+  const fingerDetector = useFingerDetection();
+  
+  // Hooks de procesamiento
+  const signalProcessor = useSignalProcessor();
+  const vitalSignsProcessor = useVitalSignsProcessor();
+  
+  // Estado para la calidad y diagnósticos
+  const [qualityMetrics, setQualityMetrics] = useState<any>(null);
+  const [isQualityAlertActive, setIsQualityAlertActive] = useState(false);
+  const [problemAlgorithms, setProblemAlgorithms] = useState<{algorithm: string, issues: string[], quality: number}[]>([]);
+  const [showDetailedDiagnostics, setShowDetailedDiagnostics] = useState(false);
   
   const enterFullScreen = async () => {
     try {
@@ -56,25 +67,21 @@ const Index = () => {
     };
   }, []);
 
+  // Obtener resultados cuando termina la monitorización
   useEffect(() => {
-    if (vitalSignsWithProcessing.lastResult && !isMonitoring) {
-      // Convertir el formato integrado al formato esperado por VitalSign
-      const convertedVitalSigns: VitalSignsResult = {
-        spo2: vitalSignsWithProcessing.lastResult.spo2,
-        pressure: vitalSignsWithProcessing.lastResult.pressure,
-        arrhythmiaStatus: vitalSignsWithProcessing.lastResult.arrhythmiaStatus,
-        glucose: 0, // No disponible en el resultado integrado
-        lipids: {
-          totalCholesterol: 0, // No disponible en el resultado integrado
-          triglycerides: 0 // No disponible en el resultado integrado
-        }
-      };
+    if (signalProcessor.lastResult && !isMonitoring) {
+      // Si hay un último resultado válido, actualizar signos vitales
+      if (vitalSignsProcessor.lastResult) {
+        setVitalSigns(vitalSignsProcessor.lastResult);
+      }
       
-      setVitalSigns(convertedVitalSigns);
-      setHeartRate(vitalSignsWithProcessing.lastResult.heartRate);
+      if (signalProcessor.heartRate > 0) {
+        setHeartRate(signalProcessor.heartRate);
+      }
+      
       setShowResults(true);
     }
-  }, [vitalSignsWithProcessing.lastResult, isMonitoring]);
+  }, [signalProcessor.lastResult, vitalSignsProcessor.lastResult, isMonitoring, signalProcessor.heartRate]);
 
   const startMonitoring = () => {
     if (isMonitoring) {
@@ -86,8 +93,12 @@ const Index = () => {
       setShowResults(false);
       setHeartRate(0);
       
-      // Iniciar procesamiento integrado
-      vitalSignsWithProcessing.startMonitoring();
+      // Iniciar detector de dedos centralizado
+      fingerDetector.startMonitoring();
+      
+      // Iniciar procesadores
+      signalProcessor.startProcessing();
+      vitalSignsProcessor.initializeProcessor();
       
       setElapsedTime(0);
       
@@ -116,8 +127,11 @@ const Index = () => {
     setIsMonitoring(false);
     setIsCameraOn(false);
     
-    // Detener procesamiento integrado
-    vitalSignsWithProcessing.stopMonitoring();
+    // Detener detector centralizado
+    fingerDetector.stopMonitoring();
+    
+    // Detener procesadores
+    signalProcessor.stopProcessing();
     
     if (measurementTimerRef.current) {
       clearInterval(measurementTimerRef.current);
@@ -141,7 +155,6 @@ const Index = () => {
     }
     
     setElapsedTime(0);
-    setSignalQuality(0);
   };
 
   const handleReset = () => {
@@ -150,8 +163,12 @@ const Index = () => {
     setIsCameraOn(false);
     setShowResults(false);
     
-    // Reiniciar completamente
-    vitalSignsWithProcessing.reset();
+    // Reiniciar detector centralizado
+    fingerDetector.reset();
+    
+    // Reiniciar procesadores
+    signalProcessor.reset();
+    vitalSignsProcessor.fullReset();
     
     if (measurementTimerRef.current) {
       clearInterval(measurementTimerRef.current);
@@ -186,7 +203,12 @@ const Index = () => {
         triglycerides: 0
       }
     });
-    setSignalQuality(0);
+    
+    // Resetear métricas de calidad
+    setQualityMetrics(null);
+    setIsQualityAlertActive(false);
+    setProblemAlgorithms([]);
+    setShowDetailedDiagnostics(false);
   };
 
   const handleStreamReady = (stream: MediaStream) => {
@@ -265,29 +287,38 @@ const Index = () => {
             
             const imageData = tempCtx.getImageData(0, 0, targetWidth, targetHeight);
             
-            // Usar el procesador integrado
-            vitalSignsWithProcessing.processFrame(imageData);
+            // Procesar frame para extracción
+            const extractionResult = signalProcessor.processFrame(imageData);
             
-            // Actualizar señal de calidad desde el procesamiento integrado
-            setSignalQuality(vitalSignsWithProcessing.signalQuality);
-            
-            // Actualizar frecuencia cardíaca desde el procesamiento integrado
-            if (vitalSignsWithProcessing.heartRate > 0) {
-              setHeartRate(vitalSignsWithProcessing.heartRate);
-            }
-            
-            // Si hay un resultado reciente, actualizar signos vitales
-            if (vitalSignsWithProcessing.lastResult) {
-              setVitalSigns({
-                spo2: vitalSignsWithProcessing.lastResult.spo2,
-                pressure: vitalSignsWithProcessing.lastResult.pressure,
-                arrhythmiaStatus: vitalSignsWithProcessing.lastResult.arrhythmiaStatus,
-                glucose: 0,
-                lipids: {
-                  totalCholesterol: 0,
-                  triglycerides: 0
+            if (extractionResult && extractionResult.filteredValue !== undefined) {
+              // Actualizar detector de dedos centralizado con la señal
+              const fingerDetected = fingerDetector.processSignal(
+                extractionResult.filteredValue,
+                extractionResult.quality,
+                extractionResult.fingerDetected
+              );
+              
+              // Si hay detección de dedo, procesar para signos vitales
+              if (fingerDetected) {
+                // Procesar para obtener frecuencia cardíaca y otros signos
+                vitalSignsProcessor.processSignal(
+                  extractionResult.filteredValue,
+                  { 
+                    intervals: heartRate > 0 ? [60000 / heartRate] : [],
+                    lastPeakTime: Date.now()
+                  }
+                );
+                
+                // Actualizar frecuencia cardíaca
+                if (signalProcessor.heartRate > 0) {
+                  setHeartRate(signalProcessor.heartRate);
                 }
-              });
+                
+                // Si hay un resultado de signos vitales, actualizar
+                if (vitalSignsProcessor.lastResult) {
+                  setVitalSigns(vitalSignsProcessor.lastResult);
+                }
+              }
             }
             
             frameCount++;
@@ -297,7 +328,7 @@ const Index = () => {
               processingFps = frameCount;
               frameCount = 0;
               lastFpsUpdateTime = now;
-              console.log(`Rendimiento de procesamiento: ${processingFps} FPS, Finger: ${vitalSignsWithProcessing.fingerDetected}, Quality: ${vitalSignsWithProcessing.signalQuality}`);
+              console.log(`Rendimiento de procesamiento: ${processingFps} FPS, Finger: ${fingerDetector.isFingerDetected}, Quality: ${fingerDetector.signalQuality}`);
             }
           } catch (error) {
             console.error("Error capturando frame:", error);
@@ -339,36 +370,36 @@ const Index = () => {
           <CameraView 
             onStreamReady={handleStreamReady}
             isMonitoring={isCameraOn}
-            isFingerDetected={vitalSignsWithProcessing.fingerDetected}
-            signalQuality={signalQuality}
+            isFingerDetected={fingerDetector.isFingerDetected}
+            signalQuality={fingerDetector.signalQuality}
           />
         </div>
 
         <div className="relative z-10 h-full flex flex-col">
           <div className="px-4 py-2 flex justify-between items-center bg-black/20">
-            {/* NUEVO: Monitor de calidad avanzado */}
-            {vitalSignsWithProcessing.isQualityAlertActive || vitalSignsWithProcessing.showDetailedDiagnostics ? (
+            {/* Monitor de calidad */}
+            {isQualityAlertActive || showDetailedDiagnostics ? (
               <SignalQualityIndicator 
-                metrics={vitalSignsWithProcessing.qualityMetrics}
-                isAlertActive={vitalSignsWithProcessing.isQualityAlertActive}
-                problemAlgorithms={vitalSignsWithProcessing.problemAlgorithms}
-                showDetailedDiagnostics={vitalSignsWithProcessing.showDetailedDiagnostics}
+                metrics={qualityMetrics}
+                isAlertActive={isQualityAlertActive}
+                problemAlgorithms={problemAlgorithms}
+                showDetailedDiagnostics={showDetailedDiagnostics}
               />
             ) : (
               <div className="text-white text-lg">
-                Calidad: {signalQuality}
+                Calidad: {fingerDetector.signalQuality}
               </div>
             )}
             <div className="text-white text-lg">
-              {vitalSignsWithProcessing.fingerDetected ? "Huella Detectada" : "Huella No Detectada"}
+              {fingerDetector.isFingerDetected ? "Huella Detectada" : "Huella No Detectada"}
             </div>
           </div>
 
           <div className="flex-1">
             <PPGSignalMeter 
-              value={vitalSignsWithProcessing.lastResult?.filteredValue || 0}
-              quality={signalQuality}
-              isFingerDetected={vitalSignsWithProcessing.fingerDetected}
+              value={signalProcessor.lastResult?.filteredValue || 0}
+              quality={fingerDetector.signalQuality}
+              isFingerDetected={fingerDetector.isFingerDetected}
               onStartMeasurement={startMonitoring}
               onReset={handleReset}
               arrhythmiaStatus={vitalSigns.arrhythmiaStatus}

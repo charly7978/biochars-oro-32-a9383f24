@@ -2,8 +2,8 @@
 /**
  * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
  * 
- * Utilidades para detección de presencia de dedo
- * VERSIÓN MEJORADA CON MAYOR SENSIBILIDAD
+ * Detector de presencia de dedo centralizado y mejorado
+ * VERSIÓN OPTIMIZADA con mayor sensibilidad y tolerancia
  */
 
 // Almacenamiento para detección de patrones rítmicos
@@ -14,9 +14,9 @@ let consistentPatternsCount: number = 0;
 
 // Constantes para detección de patrones - AJUSTADO PARA MAYOR SENSIBILIDAD
 const PATTERN_WINDOW_MS = 3000; // Ventana de 3 segundos
-const MIN_PEAKS_FOR_PATTERN = 2; // Mínimo 2 picos para confirmar patrón (reducido de 3)
-const PEAK_DETECTION_THRESHOLD = 0.15; // Umbral para detección de picos (reducido de 0.2)
-const REQUIRED_CONSISTENT_PATTERNS = 2; // Patrones requeridos para confirmación (reducido de 3)
+const MIN_PEAKS_FOR_PATTERN = 2; // Mínimo 2 picos para confirmar patrón
+const PEAK_DETECTION_THRESHOLD = 0.10; // Umbral más bajo para detección de picos
+const REQUIRED_CONSISTENT_PATTERNS = 2; // Patrones requeridos para confirmación (reducido)
 const MAX_CONSISTENT_PATTERNS = 10; // Máximo contador de patrones para evitar overflow
 
 // Nueva configuración para detección sostenida
@@ -24,17 +24,37 @@ const SUSTAINED_DETECTION_COUNT = 5; // Número de detecciones para confirmar pr
 let sustainedDetectionCount = 0;
 let isSustainedDetection = false;
 
+// Nuevas métricas para aumentar sensibilidad
+let lastSignalTimestamp = 0;
+let continuityPenalty = 0;
+const MAX_SIGNAL_GAP_MS = 200; // Máxima brecha permitida (200ms)
+
 /**
  * Detecta la presencia de un dedo basado en análisis de patrones de la señal PPG
- * VERSIÓN MEJORADA con mayor sensibilidad y tolerancia a señales débiles
+ * VERSIÓN OPTIMIZADA con mayor sensibilidad y tolerancia a señales débiles
  * @param signalBuffer Buffer de señal filtrada
  * @param sensitivity Factor de sensibilidad (0-1)
  * @returns true si se detecta presencia de dedo
  */
 export function detectFingerPresence(
   signalBuffer: number[],
-  sensitivity: number = 0.6
+  sensitivity: number = 0.75 // Aumentado de 0.6 a 0.75 por defecto
 ): boolean {
+  // Verificar continuidad de la señal
+  const now = Date.now();
+  if (lastSignalTimestamp > 0) {
+    const timeDiff = now - lastSignalTimestamp;
+    if (timeDiff > MAX_SIGNAL_GAP_MS) {
+      // Penalizar interrupciones
+      continuityPenalty = Math.min(1, continuityPenalty + 0.1);
+      console.log(`Detector de dedo: Brecha en la señal (${timeDiff}ms)`);
+    } else {
+      // Reducir penalización gradualmente
+      continuityPenalty = Math.max(0, continuityPenalty - 0.02);
+    }
+  }
+  lastSignalTimestamp = now;
+  
   // Si ya confirmamos la presencia, mantenerla a menos que se pierda el patrón completamente
   if (confirmedFingerPresence) {
     // Verificar si aún tenemos un patrón válido con criterios más permisivos
@@ -42,7 +62,7 @@ export function detectFingerPresence(
     
     if (!stillValid) {
       // Si se pierde el patrón, reducir contador de consistencia más lentamente
-      consistentPatternsCount = Math.max(0, consistentPatternsCount - 0.5);
+      consistentPatternsCount = Math.max(0, consistentPatternsCount - 0.3); // Reducción más lenta
       
       // Si perdimos demasiados patrones, quitar la confirmación pero con más tolerancia
       if (consistentPatternsCount < 1) {
@@ -73,7 +93,6 @@ export function detectFingerPresence(
   
   // Agregar nuevo valor al historial
   if (signalBuffer.length > 0) {
-    const now = Date.now();
     rhythmDetectionHistory.push({
       time: now,
       value: signalBuffer[signalBuffer.length - 1]
@@ -85,7 +104,8 @@ export function detectFingerPresence(
   }
   
   // Aplicar factor de sensibilidad ajustado (más alto = mayor sensibilidad)
-  const effectiveSensitivity = sensitivity * 1.4; // Aumentar factor para mayor sensibilidad
+  // Penalizar si hay interrupciones en la señal
+  const effectiveSensitivity = sensitivity * (1.5 - continuityPenalty);
   
   // Detectar patrones rítmicos con sensibilidad ajustada
   const hasRhythmicPattern = detectRhythmicPattern(effectiveSensitivity);
@@ -94,7 +114,7 @@ export function detectFingerPresence(
   if (hasRhythmicPattern) {
     consistentPatternsCount = Math.min(
       MAX_CONSISTENT_PATTERNS, 
-      consistentPatternsCount + 1.2 // Incremento más rápido
+      consistentPatternsCount + 1.5 // Incremento más rápido
     );
     
     // Si tenemos suficientes patrones consecutivos, confirmar presencia
@@ -105,11 +125,11 @@ export function detectFingerPresence(
       sustainedDetectionCount = SUSTAINED_DETECTION_COUNT;
       isSustainedDetection = true;
       
-      console.log("Dedo detectado por patrón rítmico consistente (sensibilidad mejorada)");
+      console.log("Dedo detectado por patrón rítmico consistente (optimizado)");
     }
   } else {
     // Reducir contador si no hay patrón, pero más lentamente
-    consistentPatternsCount = Math.max(0, consistentPatternsCount - 0.4);
+    consistentPatternsCount = Math.max(0, consistentPatternsCount - 0.2); // Reducción mucho más lenta
   }
   
   return confirmedFingerPresence;
@@ -121,32 +141,32 @@ export function detectFingerPresence(
 function detectRhythmicPattern(sensitivity: number): boolean {
   const now = Date.now();
   
-  if (rhythmDetectionHistory.length < 12) { // Reducido de 15 para mayor sensibilidad
+  if (rhythmDetectionHistory.length < 8) { // Reducido aún más para mayor sensibilidad
     return false;
   }
   
   // Ajustar umbral según sensibilidad - umbral más bajo = más sensible
-  const adjustedThreshold = PEAK_DETECTION_THRESHOLD * (1.1 - sensitivity);
+  const adjustedThreshold = PEAK_DETECTION_THRESHOLD * (1.0 - sensitivity);
   
   // Buscar picos en la señal reciente
   const recentSignals = rhythmDetectionHistory
     .filter(point => now - point.time < PATTERN_WINDOW_MS);
   
-  if (recentSignals.length < 8) { // Reducido de 10 para mayor sensibilidad
+  if (recentSignals.length < 5) { // Reducido a solo 5 puntos para evaluación
     return false;
   }
   
   // Detectar picos con criterios menos estrictos
   const peaks: number[] = [];
   
-  for (let i = 1; i < recentSignals.length - 1; i++) { // Reducido de 2 a 1 para mayor sensibilidad
+  for (let i = 1; i < recentSignals.length - 1; i++) {
     const current = recentSignals[i];
     const prev1 = recentSignals[i - 1];
     const next1 = recentSignals[i + 1];
     
-    // Verificar si este punto es un pico - criterios menos estrictos
-    if (current.value > prev1.value * 1.1 && // Reducido factor de 1.2 a 1.1
-        current.value > next1.value * 1.1 &&
+    // Verificar si este punto es un pico - criterios aún menos estrictos
+    if (current.value > prev1.value * 1.05 && // Reducido factor a 1.05
+        current.value > next1.value * 1.05 &&
         current.value > adjustedThreshold) {
       peaks.push(current.time);
     }
@@ -163,20 +183,20 @@ function detectRhythmicPattern(sensitivity: number): boolean {
     intervals.push(peaks[i] - peaks[i - 1]);
   }
   
-  // Filtrar intervalos fisiológicamente plausibles (30-200 BPM, ampliado)
+  // Filtrar intervalos fisiológicamente plausibles (25-220 BPM, ampliado)
   const validIntervals = intervals.filter(interval => 
-    interval >= 300 && interval <= 2000 // Ampliado rango (30-200 BPM)
+    interval >= 270 && interval <= 2400 // Ampliado rango (25-220 BPM)
   );
   
   // Umbral de validez reducido para mayor sensibilidad
-  if (validIntervals.length < Math.floor(intervals.length * 0.6)) { // Reducido de 0.7 a 0.6
-    // Menos del 60% de intervalos son plausibles
+  if (validIntervals.length < Math.floor(intervals.length * 0.5)) { // Reducido a 50%
+    // Menos del 50% de intervalos son plausibles
     return false;
   }
   
   // Verificar consistencia en intervalos con mayor tolerancia
   let consistentIntervals = 0;
-  const maxDeviation = 250; // ms, aumentado para mayor tolerancia
+  const maxDeviation = 300; // ms, aumentado para mayor tolerancia
   
   for (let i = 1; i < validIntervals.length; i++) {
     if (Math.abs(validIntervals[i] - validIntervals[i - 1]) < maxDeviation) {
@@ -189,10 +209,11 @@ function detectRhythmicPattern(sensitivity: number): boolean {
   
   if (hasPattern) {
     lastPeakTimes = peaks;
-    console.log("Patrón rítmico detectado (sensibilidad mejorada)", {
+    console.log("Patrón rítmico detectado (optimizado)", {
       peakCount: peaks.length,
       consistentIntervals,
-      validIntervals: validIntervals.length
+      validIntervals: validIntervals.length,
+      sensitivity
     });
   }
   
@@ -204,7 +225,7 @@ function detectRhythmicPattern(sensitivity: number): boolean {
  */
 function validateOngoingPattern(signalBuffer: number[], sensitivity: number): boolean {
   // Si el buffer es muy pequeño, no podemos validar
-  if (signalBuffer.length < 8) { // Reducido de 10 para mayor sensibilidad
+  if (signalBuffer.length < 5) { // Reducido para mayor sensibilidad
     return true; // Asumir que sigue siendo válido por falta de datos
   }
   
@@ -215,8 +236,7 @@ function validateOngoingPattern(signalBuffer: number[], sensitivity: number): bo
   const amplitude = max - min;
   
   // Si la amplitud es muy baja, podría no haber dedo 
-  // Umbral reducido para mayor sensibilidad
-  if (amplitude < 0.03) { // Reducido de 0.05 para mayor sensibilidad
+  if (amplitude < 0.02) { // Reducido para mayor sensibilidad
     return false;
   }
   
@@ -226,7 +246,7 @@ function validateOngoingPattern(signalBuffer: number[], sensitivity: number): bo
     lastPeakTimes[lastPeakTimes.length - 1] : 0;
   
   // Plazo más largo para mantener detección
-  const timeoutLimit = 6000 + sensitivity * 2000; // 6-8s según sensibilidad
+  const timeoutLimit = 8000 + sensitivity * 3000; // 8-11s según sensibilidad (aumentado)
   
   // Si ha pasado mucho tiempo desde el último patrón detectado
   if (now - lastPatternTime > timeoutLimit) {
@@ -247,5 +267,7 @@ export function resetFingerDetector(): void {
   consistentPatternsCount = 0;
   isSustainedDetection = false;
   sustainedDetectionCount = 0;
+  continuityPenalty = 0;
+  lastSignalTimestamp = 0;
   console.log("Detector de dedo reseteado completamente");
 }
