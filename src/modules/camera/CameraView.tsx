@@ -1,5 +1,7 @@
+
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { configureCameraForDevice, processFramesControlled } from './CameraFrameCapture';
+import { logError, ErrorLevel } from '@/utils/debugUtils';
 
 interface CameraViewProps {
   onStreamReady?: (stream: MediaStream) => void;
@@ -8,6 +10,19 @@ interface CameraViewProps {
   isFingerDetected?: boolean;
   signalQuality?: number;
   frameRate?: number;
+}
+
+interface ImageCapture {
+  grabFrame(): Promise<ImageBitmap>;
+}
+
+// Extending global Window interface to include ImageCapture constructor
+declare global {
+  interface Window {
+    ImageCapture: {
+      new(track: MediaStreamTrack): ImageCapture;
+    };
+  }
 }
 
 const CameraView: React.FC<CameraViewProps> = ({ 
@@ -23,11 +38,11 @@ const CameraView: React.FC<CameraViewProps> = ({
   const [torchEnabled, setTorchEnabled] = useState(false);
   const [isFocusing, setIsFocusing] = useState(false);
   const [isAndroid, setIsAndroid] = useState(false);
-  const [isIOS, setIsWindows] = useState(false);
+  const [isIOS, setIsIOS] = useState(false);
   const retryAttemptsRef = useRef<number>(0);
   const maxRetryAttempts = 3;
   const processingCallbackRef = useRef<((imageData: ImageData) => void) | null>(null);
-  const frameProcessorRef = useRef<() => void | null>(null);
+  const frameProcessorRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     processingCallbackRef.current = onFrameProcessed || null;
@@ -46,28 +61,28 @@ const CameraView: React.FC<CameraViewProps> = ({
     });
     
     setIsAndroid(androidDetected);
-    setIsWindows(iosDetected);
+    setIsIOS(iosDetected);
   }, []);
 
-  const stopCamera = async () => {
+  const stopCamera = async (): Promise<void> => {
     if (frameProcessorRef.current) {
       frameProcessorRef.current();
       frameProcessorRef.current = null;
     }
     
     if (stream) {
-      console.log("Stopping camera stream and turning off torch");
+      logError("Stopping camera stream and turning off torch", ErrorLevel.INFO, "CameraView");
       stream.getTracks().forEach(track => {
         try {
           if (track.kind === 'video' && track.getCapabilities()?.torch) {
             track.applyConstraints({
               advanced: [{ torch: false }]
-            }).catch(err => console.error("Error desactivando linterna:", err));
+            }).catch(err => logError("Error desactivando linterna: " + err, ErrorLevel.WARNING, "CameraView"));
           }
           
           track.stop();
         } catch (err) {
-          console.error("Error al detener track:", err);
+          logError("Error al detener track: " + err, ErrorLevel.ERROR, "CameraView");
         }
       });
       
@@ -81,7 +96,7 @@ const CameraView: React.FC<CameraViewProps> = ({
     }
   };
 
-  const startCamera = async () => {
+  const startCamera = async (): Promise<void> => {
     try {
       if (!navigator.mediaDevices?.getUserMedia) {
         throw new Error("getUserMedia no está soportado");
@@ -97,21 +112,21 @@ const CameraView: React.FC<CameraViewProps> = ({
       };
 
       if (isAndroid) {
-        console.log("Configurando para Android");
+        logError("Configurando para Android", ErrorLevel.INFO, "CameraView");
         Object.assign(baseVideoConstraints, {
           frameRate: { ideal: 30, max: 60 },
           width: { ideal: 1280 },
           height: { ideal: 720 }
         });
       } else if (isIOS) {
-        console.log("Configurando para iOS");
+        logError("Configurando para iOS", ErrorLevel.INFO, "CameraView");
         Object.assign(baseVideoConstraints, {
           frameRate: { ideal: 60, max: 60 },
           width: { ideal: 1920 },
           height: { ideal: 1080 }
         });
       } else {
-        console.log("Configurando para escritorio con máxima resolución");
+        logError("Configurando para escritorio con máxima resolución", ErrorLevel.INFO, "CameraView");
         Object.assign(baseVideoConstraints, {
           frameRate: { ideal: 60, max: 60 },
           width: { ideal: 1920 },
@@ -124,9 +139,9 @@ const CameraView: React.FC<CameraViewProps> = ({
         audio: false
       };
 
-      console.log("Intentando acceder a la cámara con configuración:", JSON.stringify(constraints));
+      logError("Intentando acceder a la cámara con configuración: " + JSON.stringify(constraints), ErrorLevel.INFO, "CameraView");
       const newStream = await navigator.mediaDevices.getUserMedia(constraints);
-      console.log("Cámara inicializada correctamente");
+      logError("Cámara inicializada correctamente", ErrorLevel.INFO, "CameraView");
       
       const videoTrack = newStream.getVideoTracks()[0];
 
@@ -144,8 +159,8 @@ const CameraView: React.FC<CameraViewProps> = ({
 
         setStream(newStream);
         
-        if (processingCallbackRef.current) {
-          const imageCapture = new (window as any).ImageCapture(videoTrack);
+        if (processingCallbackRef.current && typeof window.ImageCapture !== 'undefined') {
+          const imageCapture = new window.ImageCapture(videoTrack);
           
           if (frameProcessorRef.current) {
             frameProcessorRef.current();
@@ -166,19 +181,19 @@ const CameraView: React.FC<CameraViewProps> = ({
         retryAttemptsRef.current = 0;
       }
     } catch (err) {
-      console.error("Error al iniciar la cámara:", err);
+      logError("Error al iniciar la cámara: " + err, ErrorLevel.ERROR, "CameraView");
       
       retryAttemptsRef.current++;
       if (retryAttemptsRef.current <= maxRetryAttempts) {
-        console.log(`Reintentando iniciar cámara (intento ${retryAttemptsRef.current} de ${maxRetryAttempts})...`);
+        logError(`Reintentando iniciar cámara (intento ${retryAttemptsRef.current} de ${maxRetryAttempts})...`, ErrorLevel.WARNING, "CameraView");
         setTimeout(startCamera, 1000);
       } else {
-        console.error(`Se alcanzó el máximo de ${maxRetryAttempts} intentos sin éxito`);
+        logError(`Se alcanzó el máximo de ${maxRetryAttempts} intentos sin éxito`, ErrorLevel.ERROR, "CameraView");
       }
     }
   };
 
-  const refreshAutoFocus = useCallback(async () => {
+  const refreshAutoFocus = useCallback(async (): Promise<void> => {
     if (stream && !isFocusing && !isAndroid) {
       const videoTrack = stream.getVideoTracks()[0];
       if (videoTrack && videoTrack.getCapabilities()?.focusMode) {
@@ -191,9 +206,9 @@ const CameraView: React.FC<CameraViewProps> = ({
           await videoTrack.applyConstraints({
             advanced: [{ focusMode: 'continuous' }]
           });
-          console.log("Auto-enfoque refrescado con éxito");
+          logError("Auto-enfoque refrescado con éxito", ErrorLevel.INFO, "CameraView");
         } catch (err) {
-          console.error("Error al refrescar auto-enfoque:", err);
+          logError("Error al refrescar auto-enfoque: " + err, ErrorLevel.ERROR, "CameraView");
         } finally {
           setIsFocusing(false);
         }
@@ -201,13 +216,13 @@ const CameraView: React.FC<CameraViewProps> = ({
     }
   }, [stream, isFocusing, isAndroid]);
 
-  const handleStreamReady = useCallback((newStream: MediaStream) => {
+  const handleStreamReady = useCallback((newStream: MediaStream): void => {
     if (!isMonitoring) return;
     
     const videoTrack = newStream.getVideoTracks()[0];
     
     if (typeof window !== 'undefined' && 'ImageCapture' in window) {
-      const imageCapture = new (window as any).ImageCapture(videoTrack);
+      const imageCapture = new window.ImageCapture(videoTrack);
       
       if (frameProcessorRef.current) {
         frameProcessorRef.current();
@@ -232,15 +247,15 @@ const CameraView: React.FC<CameraViewProps> = ({
 
   useEffect(() => {
     if (isMonitoring && !stream) {
-      console.log("Starting camera because isMonitoring=true");
+      logError("Starting camera because isMonitoring=true", ErrorLevel.INFO, "CameraView");
       startCamera();
     } else if (!isMonitoring && stream) {
-      console.log("Stopping camera because isMonitoring=false");
+      logError("Stopping camera because isMonitoring=false", ErrorLevel.INFO, "CameraView");
       stopCamera();
     }
     
     return () => {
-      console.log("CameraView component unmounting, stopping camera");
+      logError("CameraView component unmounting, stopping camera", ErrorLevel.INFO, "CameraView");
       stopCamera();
     };
   }, [isMonitoring, stream]);
@@ -249,13 +264,13 @@ const CameraView: React.FC<CameraViewProps> = ({
     if (stream && isFingerDetected && !torchEnabled) {
       const videoTrack = stream.getVideoTracks()[0];
       if (videoTrack && videoTrack.getCapabilities()?.torch) {
-        console.log("Activando linterna después de detectar dedo");
+        logError("Activando linterna después de detectar dedo", ErrorLevel.INFO, "CameraView");
         videoTrack.applyConstraints({
           advanced: [{ torch: true }]
         }).then(() => {
           setTorchEnabled(true);
         }).catch(err => {
-          console.error("Error activando linterna:", err);
+          logError("Error activando linterna: " + err, ErrorLevel.ERROR, "CameraView");
         });
       }
     }
@@ -264,6 +279,8 @@ const CameraView: React.FC<CameraViewProps> = ({
       const focusInterval = setInterval(refreshAutoFocus, 5000);
       return () => clearInterval(focusInterval);
     }
+    
+    return () => {};
   }, [stream, isFingerDetected, torchEnabled, refreshAutoFocus, isAndroid]);
 
   return (

@@ -51,6 +51,26 @@ export interface SignalProcessor {
 }
 
 /**
+ * Interface for RR interval data
+ */
+export interface RRIntervalData {
+  intervals: number[];
+  lastPeakTime: number | null;
+}
+
+/**
+ * Interface for arrhythmia processing result
+ */
+export interface ArrhythmiaProcessingResult {
+  arrhythmiaStatus: string;
+  lastArrhythmiaData: { 
+    timestamp: number; 
+    rmssd: number; 
+    rrVariation: number; 
+  } | null;
+}
+
+/**
  * Extensión global para acceso al procesador de latidos
  */
 declare global {
