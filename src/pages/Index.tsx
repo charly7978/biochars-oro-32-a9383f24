@@ -3,20 +3,20 @@ import React, { useState, useRef, useEffect } from "react";
 import VitalSign from "@/components/VitalSign";
 import CameraView from "@/components/CameraView";
 import { useSignalProcessor } from "@/hooks/useSignalProcessor";
+import { useHeartBeatProcessor } from "@/hooks/useHeartBeatProcessor";
 import { useVitalSignsProcessor } from "@/hooks/useVitalSignsProcessor";
-import { useFingerDetection } from "@/hooks/useFingerDetection"; // Nuevo hook centralizado
+import { useFingerDetection } from "@/hooks/useFingerDetection"; // Usar el hook centralizado
 import PPGSignalMeter from "@/components/PPGSignalMeter";
 import MonitorButton from "@/components/MonitorButton";
 import AppTitle from "@/components/AppTitle";
 import SignalQualityIndicator from "@/components/SignalQualityIndicator";
-import { VitalSignsResult } from "@/modules/vital-signs";
 import { logError, ErrorLevel } from "@/utils/debugUtils";
 
 const Index = () => {
   // Estado general
   const [isMonitoring, setIsMonitoring] = useState(false);
   const [isCameraOn, setIsCameraOn] = useState(false);
-  const [vitalSigns, setVitalSigns] = useState<VitalSignsResult>({
+  const [vitalSigns, setVitalSigns] = useState({
     spo2: 0,
     pressure: "--/--",
     arrhythmiaStatus: "--",
@@ -31,8 +31,8 @@ const Index = () => {
   const [showResults, setShowResults] = useState(false);
   
   // Referencias
-  const measurementTimerRef = useRef<number | null>(null);
-  const cameraStreamRef = useRef<MediaStream | null>(null);
+  const measurementTimerRef = useRef(null);
+  const cameraStreamRef = useRef(null);
   const imageProcessingActiveRef = useRef(false);
   
   // Utilizamos el hook centralizado para detección de dedo
@@ -41,11 +41,12 @@ const Index = () => {
   // Hooks de procesamiento
   const signalProcessor = useSignalProcessor();
   const vitalSignsProcessor = useVitalSignsProcessor();
+  const heartBeatProcessor = useHeartBeatProcessor();
   
   // Estado para la calidad y diagnósticos
-  const [qualityMetrics, setQualityMetrics] = useState<any>(null);
+  const [qualityMetrics, setQualityMetrics] = useState(null);
   const [isQualityAlertActive, setIsQualityAlertActive] = useState(false);
-  const [problemAlgorithms, setProblemAlgorithms] = useState<{algorithm: string, issues: string[], quality: number}[]>([]);
+  const [problemAlgorithms, setProblemAlgorithms] = useState([]);
   const [showDetailedDiagnostics, setShowDetailedDiagnostics] = useState(false);
   
   const enterFullScreen = async () => {
@@ -57,7 +58,7 @@ const Index = () => {
   };
 
   useEffect(() => {
-    const preventScroll = (e: Event) => e.preventDefault();
+    const preventScroll = (e) => e.preventDefault();
     document.body.addEventListener('touchmove', preventScroll, { passive: false });
     document.body.addEventListener('scroll', preventScroll, { passive: false });
 
@@ -69,19 +70,21 @@ const Index = () => {
 
   // Obtener resultados cuando termina la monitorización
   useEffect(() => {
-    if (signalProcessor.lastResult && !isMonitoring) {
-      // Si hay un último resultado válido, actualizar signos vitales
-      if (vitalSignsProcessor.lastResult) {
-        setVitalSigns(vitalSignsProcessor.lastResult);
+    if (signalProcessor.lastSignal && !isMonitoring) {
+      // Si hay un último resultado válido de signos vitales
+      const latestVitals = vitalSignsProcessor.getLastResults();
+      if (latestVitals) {
+        setVitalSigns(latestVitals);
       }
       
-      if (signalProcessor.heartRate > 0) {
-        setHeartRate(signalProcessor.heartRate);
+      // Si hay una frecuencia cardíaca válida
+      if (heartRate > 0) {
+        setHeartRate(heartRate);
       }
       
       setShowResults(true);
     }
-  }, [signalProcessor.lastResult, vitalSignsProcessor.lastResult, isMonitoring, signalProcessor.heartRate]);
+  }, [signalProcessor.lastSignal, isMonitoring, heartRate]);
 
   const startMonitoring = () => {
     if (isMonitoring) {
@@ -167,7 +170,7 @@ const Index = () => {
     fingerDetector.reset();
     
     // Reiniciar procesadores
-    signalProcessor.reset();
+    signalProcessor.stopProcessing();
     vitalSignsProcessor.fullReset();
     
     if (measurementTimerRef.current) {
@@ -211,7 +214,7 @@ const Index = () => {
     setShowDetailedDiagnostics(false);
   };
 
-  const handleStreamReady = (stream: MediaStream) => {
+  const handleStreamReady = (stream) => {
     if (!isMonitoring) return;
     
     // Store stream reference
@@ -225,7 +228,7 @@ const Index = () => {
     }
     
     if (typeof window !== 'undefined' && 'ImageCapture' in window) {
-      const imageCapture = new (window as any).ImageCapture(videoTrack);
+      const imageCapture = new (window).ImageCapture(videoTrack);
       
       // Try enabling torch for better signal
       if (videoTrack.getCapabilities()?.torch) {
@@ -287,36 +290,37 @@ const Index = () => {
             
             const imageData = tempCtx.getImageData(0, 0, targetWidth, targetHeight);
             
-            // Procesar frame para extracción
-            const extractionResult = signalProcessor.processFrame(imageData);
+            // Procesar frame en el procesador de señales
+            const signalResult = signalProcessor.processFrame(imageData);
             
-            if (extractionResult && extractionResult.filteredValue !== undefined) {
+            if (signalResult && signalProcessor.lastSignal) {
               // Actualizar detector de dedos centralizado con la señal
               const fingerDetected = fingerDetector.processSignal(
-                extractionResult.filteredValue,
-                extractionResult.quality,
-                extractionResult.fingerDetected
+                signalProcessor.lastSignal.filteredValue,
+                signalProcessor.lastSignal.quality,
+                signalProcessor.lastSignal.fingerDetected
               );
               
               // Si hay detección de dedo, procesar para signos vitales
               if (fingerDetected) {
-                // Procesar para obtener frecuencia cardíaca y otros signos
-                vitalSignsProcessor.processSignal(
-                  extractionResult.filteredValue,
-                  { 
-                    intervals: heartRate > 0 ? [60000 / heartRate] : [],
-                    lastPeakTime: Date.now()
-                  }
+                // Procesar para obtener frecuencia cardíaca
+                const heartBeatResult = heartBeatProcessor.processSignal(
+                  signalProcessor.lastSignal.filteredValue
                 );
                 
-                // Actualizar frecuencia cardíaca
-                if (signalProcessor.heartRate > 0) {
-                  setHeartRate(signalProcessor.heartRate);
-                }
-                
-                // Si hay un resultado de signos vitales, actualizar
-                if (vitalSignsProcessor.lastResult) {
-                  setVitalSigns(vitalSignsProcessor.lastResult);
+                if (heartBeatResult && heartBeatResult.bpm > 0) {
+                  setHeartRate(heartBeatResult.bpm);
+                  
+                  // Procesar signos vitales con la señal y los datos de pulso
+                  const vitalsResult = vitalSignsProcessor.processSignal(
+                    signalProcessor.lastSignal.filteredValue,
+                    heartBeatResult.rrData
+                  );
+                  
+                  // Actualizar UI con resultados
+                  if (vitalsResult) {
+                    setVitalSigns(vitalsResult);
+                  }
                 }
               }
             }
@@ -397,7 +401,7 @@ const Index = () => {
 
           <div className="flex-1">
             <PPGSignalMeter 
-              value={signalProcessor.lastResult?.filteredValue || 0}
+              value={signalProcessor.lastSignal?.filteredValue || 0}
               quality={fingerDetector.signalQuality}
               isFingerDetected={fingerDetector.isFingerDetected}
               onStartMeasurement={startMonitoring}
@@ -407,8 +411,6 @@ const Index = () => {
               isArrhythmia={vitalSigns.arrhythmiaStatus.toLowerCase().includes('arr')}
             />
           </div>
-
-          <AppTitle />
 
           <div className="absolute inset-x-0 top-[45%] bottom-[60px] bg-black/10 px-4 py-6">
             <div className="grid grid-cols-2 gap-x-8 gap-y-4 place-items-center h-full overflow-y-auto pb-4">
@@ -453,18 +455,20 @@ const Index = () => {
 
           <div className="absolute inset-x-0 bottom-4 flex gap-4 px-4">
             <div className="w-1/2">
-              <MonitorButton 
-                isMonitoring={isMonitoring} 
-                onToggle={handleToggleMonitoring} 
-                variant="monitor"
-              />
+              <button 
+                className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-lg text-lg font-bold"
+                onClick={handleToggleMonitoring}
+              >
+                {isMonitoring ? "DETENER" : "INICIAR"}
+              </button>
             </div>
             <div className="w-1/2">
-              <MonitorButton 
-                isMonitoring={isMonitoring} 
-                onToggle={handleReset} 
-                variant="reset"
-              />
+              <button 
+                className="w-full bg-gray-700 hover:bg-gray-800 text-white py-3 rounded-lg text-lg font-bold"
+                onClick={handleReset}
+              >
+                RESET
+              </button>
             </div>
           </div>
         </div>
