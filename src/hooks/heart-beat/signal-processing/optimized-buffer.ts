@@ -1,5 +1,7 @@
 
 /**
+ * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
+ * 
  * Buffer circular optimizado para procesamiento de señales PPG
  * Mejora el rendimiento y reduce la presión sobre el recolector de basura
  */
@@ -151,17 +153,12 @@ export class OptimizedPPGBuffer<T extends TimestampedPPGData = TimestampedPPGDat
     
     // Transferir los datos al nuevo buffer
     points.forEach(point => {
-      // Ensure point has all required properties
-      const enhancedPoint = { ...point } as U;
-      
-      // Garantizar que tanto time como timestamp existan
-      if ('timestamp' in point && !('time' in point)) {
-        (enhancedPoint as unknown as { time: number }).time = point.timestamp;
-      } else if ('time' in point && !('timestamp' in point)) {
-        (enhancedPoint as unknown as { timestamp: number }).timestamp = point.time;
+      // Ensure point has time property if needed for backward compatibility
+      const enhancedPoint = {...point};
+      if (!('time' in enhancedPoint) && 'timestamp' in enhancedPoint) {
+        enhancedPoint.time = enhancedPoint.timestamp;
       }
-      
-      optimizedBuffer.push(enhancedPoint);
+      optimizedBuffer.push(enhancedPoint as U);
     });
     
     return optimizedBuffer;
@@ -181,18 +178,14 @@ export class CircularBufferAdapter<T extends TimestampedPPGData = TimestampedPPG
   }
   
   public override push(item: T): void {
-    // Ensure item has all required properties
-    const enhancedItem = { ...item } as T;
-    
-    // Garantizar que tanto time como timestamp existan
-    if ('timestamp' in item && !('time' in item)) {
-      (enhancedItem as unknown as { time: number }).time = item.timestamp;
-    } else if ('time' in item && !('timestamp' in item)) {
-      (enhancedItem as unknown as { timestamp: number }).timestamp = item.time;
+    // Ensure item has time property if not present
+    const enhancedItem = {...item};
+    if (!('time' in enhancedItem) && 'timestamp' in enhancedItem) {
+      enhancedItem.time = enhancedItem.timestamp;
     }
     
-    super.push(enhancedItem);
-    this.optimizedBuffer.push(enhancedItem);
+    super.push(enhancedItem as T);
+    this.optimizedBuffer.push(enhancedItem as T);
   }
   
   public override get(index: number): T | undefined {
