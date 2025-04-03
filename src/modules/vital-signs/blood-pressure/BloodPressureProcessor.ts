@@ -1,13 +1,13 @@
 
 /**
- * Simplified blood pressure processor without any value constraints
+ * Simplified blood pressure processor without TensorFlow dependencies
  */
 import { BloodPressureResult } from './BloodPressureResult';
-import { calculateMAP, validateBloodPressure, formatBloodPressure, categorizeBloodPressure } from './BloodPressureUtils';
+import { calculateMAP, validateBloodPressure, formatBloodPressure } from './BloodPressureUtils';
 
 /**
  * Processes PPG signals to extract blood pressure values
- * using direct measurement with MAXIMUM raw amplification
+ * using simplified algorithms that don't depend on external models
  */
 export class BloodPressureProcessor {
   private lastValidResult: BloodPressureResult | null = null;
@@ -31,42 +31,36 @@ export class BloodPressureProcessor {
   
   /**
    * Process a PPG signal to extract blood pressure
-   * Showing RAW values with MAXIMUM amplification
    */
   public process(value: number): BloodPressureResult {
-    // Direct calculation with MAXIMUM amplification
-    const result = this.directCalculation(value);
+    console.log("Processing blood pressure with value:", value);
     
-    // Store result without validation
-    this.lastValidResult = result;
+    // Use traditional calculation for blood pressure
+    const traditionalResult = this.traditionalCalculation(value);
     
-    // Return the direct result
-    return result;
+    // Store and return traditional result
+    this.lastValidResult = traditionalResult;
+    return traditionalResult;
   }
   
   /**
-   * Calculate blood pressure directly from signal value
-   * with MAXIMUM amplification
+   * Calculate blood pressure using traditional algorithm
    */
-  private directCalculation(value: number): BloodPressureResult {
-    // Direct multiplication of signal with MAXIMUM amplification factors
-    const signalAmplitude = Math.abs(value);
+  private traditionalCalculation(value: number): BloodPressureResult {
+    // Basic algorithm (simplified for demo)
+    const baseSystolic = 120;
+    const baseDiastolic = 80;
     
-    // Calculate systolic and diastolic with MAXIMUM amplification
-    // Starting from typical baseline values
-    const systolic = Math.round(120 + value * 80); // increased amplification
-    const diastolic = Math.round(80 + value * 60); // increased amplification
+    // Apply some variation based on the signal value
+    const systolic = Math.round(baseSystolic + value * 10);
+    const diastolic = Math.round(baseDiastolic + value * 5);
     const map = calculateMAP(systolic, diastolic);
-    
-    // Get category without constraining the values
-    const category = categorizeBloodPressure(systolic, diastolic);
     
     return {
       systolic,
       diastolic,
       map,
-      category,
-      confidence: signalAmplitude * 3 // Simple confidence based on signal strength
+      confidence: 0.7 // Fixed confidence for traditional method
     };
   }
   
