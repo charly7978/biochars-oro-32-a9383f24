@@ -1,11 +1,11 @@
+
 /**
  * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
  *
  * Functions for checking signal quality and weak signals
  * Improved to reduce false positives and add rhythmic pattern detection
  */
-import { checkSignalQuality as originalCheckSignalQuality, isFingerDetectedByPattern } from '../../../modules/heart-beat/signal-quality';
-import { evaluateSignalQuality, calculatePerfusionIndex } from '../../../modules/vital-signs/utils/signal-processing-utils';
+import { checkSignalQuality, isFingerDetectedByPattern } from '../../../modules/heart-beat/signal-quality';
 
 // Signal history for pattern detection
 let signalHistory: Array<{time: number, value: number}> = [];
@@ -18,24 +18,9 @@ let signalVariance = 0;
 let consecutiveStableFrames = 0;
 const REQUIRED_STABLE_FRAMES = 15; // Must have physiologically stable signal for this many frames
 
-// Advanced metrics for optimal detection
-let perfusionIndexHistory: number[] = [];
-const MIN_VALID_PERFUSION_INDEX = 0.25; // Minimum perfusion index for valid signal
-let stabilityScore = 0;
-let noiseLevel = 0;
-
 // Track time-based consistency
 let lastProcessTime = 0;
 const MAX_ALLOWED_GAP_MS = 150; // Maximum time gap allowed between processing
-
-// Save raw quality metrics for external use
-let qualityMetrics = {
-  amplitude: 0,
-  stability: 0,
-  noiseLevel: 0,
-  fingerDetectionConfidence: 0,
-  overallQuality: 0,
-};
 
 /**
  * Checks if the signal is too weak, indicating possible finger removal
@@ -65,8 +50,6 @@ export function checkWeakSignal(
       patternDetectionCount = 0;
       fingDetectionConfirmed = false;
       consecutiveStableFrames = 0;
-      perfusionIndexHistory = [];
-      stabilityScore = 0;
     }
   }
   lastProcessTime = now;
@@ -82,37 +65,13 @@ export function checkWeakSignal(
     signalMean = values.reduce((sum, val) => sum + val, 0) / values.length;
     signalVariance = values.reduce((sum, val) => sum + Math.pow(val - signalMean, 2), 0) / values.length;
     
-    // Calculate perfusion index
-    if (values.length > 5) {
-      const latestPerfusionIndex = calculatePerfusionIndex(values);
-      perfusionIndexHistory.push(latestPerfusionIndex);
-      
-      // Keep reasonable history size
-      if (perfusionIndexHistory.length > 20) {
-        perfusionIndexHistory.shift();
-      }
-      
-      // Update quality metrics
-      const recentSignalQuality = evaluateSignalQuality(values);
-      
-      qualityMetrics = {
-        amplitude: Math.max(...values) - Math.min(...values),
-        stability: stabilityScore,
-        noiseLevel: noiseLevel,
-        fingerDetectionConfidence: fingDetectionConfirmed ? 0.9 : patternDetectionCount / 10,
-        overallQuality: recentSignalQuality / 100 // Convert to 0-1 scale
-      };
-    }
-    
     // Check if variance is within physiological range
     const isPhysiological = signalVariance > 0.01 && signalVariance < 0.5;
     
     if (isPhysiological) {
       consecutiveStableFrames++;
-      stabilityScore = Math.min(1.0, consecutiveStableFrames / (REQUIRED_STABLE_FRAMES * 1.5));
     } else {
       consecutiveStableFrames = 0;
-      stabilityScore = Math.max(0, stabilityScore - 0.1);
       
       // If we had confirmed detection but signal is no longer physiological, reset
       if (fingDetectionConfirmed) {
@@ -135,9 +94,7 @@ export function checkWeakSignal(
       console.log("Finger detected by rhythmic pattern after physiological validation!", {
         time: new Date(now).toISOString(),
         variance: signalVariance,
-        stableFrames: consecutiveStableFrames,
-        perfusionIndex: perfusionIndexHistory.length > 0 ? 
-          perfusionIndexHistory[perfusionIndexHistory.length - 1] : 0
+        stableFrames: consecutiveStableFrames
       });
       
       return {
@@ -145,25 +102,6 @@ export function checkWeakSignal(
         updatedWeakSignalsCount: 0
       };
     }
-  }
-  
-  // Check average perfusion index for more robust detection
-  const avgPerfusionIndex = perfusionIndexHistory.length > 0 ? 
-    perfusionIndexHistory.reduce((sum, val) => sum + val, 0) / perfusionIndexHistory.length : 0;
-  
-  // Strong perfusion index = finger definitely present
-  if (avgPerfusionIndex > MIN_VALID_PERFUSION_INDEX && consecutiveStableFrames >= REQUIRED_STABLE_FRAMES/2) {
-    if (!fingDetectionConfirmed) {
-      console.log("Finger detected by strong perfusion index!", {
-        perfusionIndex: avgPerfusionIndex,
-        threshold: MIN_VALID_PERFUSION_INDEX
-      });
-      fingDetectionConfirmed = true;
-    }
-    return {
-      isWeakSignal: false,
-      updatedWeakSignalsCount: 0
-    };
   }
   
   // Use higher thresholds if not specified
@@ -181,7 +119,7 @@ export function checkWeakSignal(
     console.log("Finger detection lost due to consecutive weak signals:", consecutiveWeakSignalsCount);
   }
   
-  const result = originalCheckSignalQuality(value, consecutiveWeakSignalsCount, finalConfig);
+  const result = checkSignalQuality(value, consecutiveWeakSignalsCount, finalConfig);
   
   // If finger is confirmed but signal is weak, give benefit of doubt for longer
   if (fingDetectionConfirmed && result.isWeakSignal) {
@@ -207,16 +145,6 @@ export function resetSignalQualityState() {
   signalVariance = 0;
   consecutiveStableFrames = 0;
   lastProcessTime = 0;
-  perfusionIndexHistory = [];
-  stabilityScore = 0;
-  noiseLevel = 0;
-  qualityMetrics = {
-    amplitude: 0,
-    stability: 0,
-    noiseLevel: 0,
-    fingerDetectionConfidence: 0,
-    overallQuality: 0,
-  };
   console.log("Signal quality state reset, including pattern detection");
   
   return {
@@ -229,19 +157,6 @@ export function resetSignalQualityState() {
  */
 export function isFingerDetected(): boolean {
   return fingDetectionConfirmed || (patternDetectionCount >= 3 && consecutiveStableFrames >= REQUIRED_STABLE_FRAMES);
-}
-
-/**
- * Get current signal quality metrics
- */
-export function getSignalQualityMetrics(): {
-  amplitude: number,
-  stability: number,
-  noiseLevel: number,
-  fingerDetectionConfidence: number,
-  overallQuality: number
-} {
-  return { ...qualityMetrics };
 }
 
 /**
@@ -275,6 +190,3 @@ export function createWeakSignalResult(arrhythmiaCounter: number = 0): any {
     }
   };
 }
-
-// Re-export the original checkSignalQuality function
-export { originalCheckSignalQuality as checkSignalQuality };
