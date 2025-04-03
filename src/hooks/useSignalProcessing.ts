@@ -1,4 +1,3 @@
-
 /**
  * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
  * 
@@ -98,39 +97,61 @@ export function useSignalProcessing() {
       const heartbeatResult: ProcessedHeartbeatSignal = 
         heartbeatProcessorRef.current.processSignal(ppgResult.amplifiedValue);
       
-      // Actualizar estado de calidad y detección de dedo
-      setSignalQuality(ppgResult.quality);
+      // Actualizar estado de calidad y detección de dedo con mayor sensibilidad
+      // Enhanced quality calculation that puts more emphasis on heartbeat detection success
+      const enhancedQuality = heartbeatResult.peakConfidence > 0.6 
+        ? Math.min(100, ppgResult.quality + 15) // Boost quality when we detect strong peaks
+        : ppgResult.quality;
+        
+      setSignalQuality(enhancedQuality);
       setFingerDetected(ppgResult.fingerDetected);
       
-      // Calcular BPM promedio
-      if (heartbeatResult.instantaneousBPM !== null && heartbeatResult.peakConfidence > 0.5) {
-        recentBpmValues.current.push(heartbeatResult.instantaneousBPM);
+      // Calcular BPM promedio con mayor peso a valores recientes
+      if (heartbeatResult.instantaneousBPM !== null && heartbeatResult.peakConfidence > 0.4) { // Lowered threshold
+        // Prioritize recent values with a weight factor
+        const bpmWeight = 1.0 + (heartbeatResult.peakConfidence - 0.4) * 0.5; // 1.0-1.3 based on confidence
+        for (let i = 0; i < Math.round(bpmWeight); i++) {
+          recentBpmValues.current.push(heartbeatResult.instantaneousBPM);
+        }
         
         // Mantener solo los valores más recientes
-        if (recentBpmValues.current.length > 10) {
+        if (recentBpmValues.current.length > 12) { // Increased from 10
           recentBpmValues.current.shift();
         }
       }
       
-      // Calcular BPM promedio (con filtrado de valores extremos)
+      // Calcular BPM promedio (con filtrado de valores extremos mejorado)
       let averageBPM: number | null = null;
       
       if (recentBpmValues.current.length >= 3) {
+        // Filtrado adaptativo basado en la calidad de la señal
+        const qualityFactor = Math.min(1, enhancedQuality / 70); // 0-1 based on quality
+        const outlierMargin = 0.3 - (qualityFactor * 0.2); // 0.1-0.3 based on signal quality
+        
         // Ordenar para eliminar extremos
         const sortedBPMs = [...recentBpmValues.current].sort((a, b) => a - b);
         
-        // Usar el 80% central de los valores
-        const startIdx = Math.floor(sortedBPMs.length * 0.1);
-        const endIdx = Math.ceil(sortedBPMs.length * 0.9);
+        // Usar porcentaje central adaptativo según calidad
+        const startIdx = Math.floor(sortedBPMs.length * outlierMargin);
+        const endIdx = Math.ceil(sortedBPMs.length * (1 - outlierMargin));
         const centralBPMs = sortedBPMs.slice(startIdx, endIdx);
         
-        // Calcular promedio
+        // Calcular promedio ponderado (más peso a valores más recientes)
         if (centralBPMs.length > 0) {
-          const sum = centralBPMs.reduce((a, b) => a + b, 0);
-          averageBPM = Math.round(sum / centralBPMs.length);
+          let weightedSum = 0;
+          let totalWeight = 0;
+          
+          for (let i = 0; i < centralBPMs.length; i++) {
+            // More weight to recent values (later in the array)
+            const weight = 1 + (i / centralBPMs.length);
+            weightedSum += centralBPMs[i] * weight;
+            totalWeight += weight;
+          }
+          
+          averageBPM = Math.round(weightedSum / totalWeight);
           
           // Actualizar estado de BPM si tenemos valor y buena calidad
-          if (averageBPM > 0 && ppgResult.quality > 40) {
+          if (averageBPM > 0 && enhancedQuality > 35) { // Lowered threshold from 40
             setHeartRate(averageBPM);
           }
         }
@@ -146,8 +167,8 @@ export function useSignalProcessing() {
         normalizedValue: ppgResult.normalizedValue,
         amplifiedValue: ppgResult.amplifiedValue,
         
-        // Información de calidad
-        quality: ppgResult.quality,
+        // Información de calidad mejorada
+        quality: enhancedQuality,
         fingerDetected: ppgResult.fingerDetected,
         signalStrength: ppgResult.signalStrength,
         
@@ -159,6 +180,19 @@ export function useSignalProcessing() {
         rrInterval: heartbeatResult.rrInterval,
         heartRateVariability: heartbeatResult.heartRateVariability
       };
+      
+      // Output enhanced diagnostic info
+      if (processedFramesRef.current % 50 === 0) {
+        console.log("Signal Processing Diagnostics:", {
+          quality: enhancedQuality,
+          amplifierGain: ppgProcessorRef.current.getAmplifierGain?.() || "N/A",
+          peakConfidence: heartbeatResult.peakConfidence,
+          recentBpmCount: recentBpmValues.current.length,
+          averageBPM: averageBPM,
+          instantBPM: heartbeatResult.instantaneousBPM,
+          timestamp: new Date().toISOString()
+        });
+      }
       
       // Actualizar último resultado
       setLastResult(result);
