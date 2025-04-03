@@ -4,7 +4,7 @@
  * Functions for checking signal quality and weak signals
  * Improved to reduce false positives and add rhythmic pattern detection
  */
-import { checkSignalQuality as originalCheckSignalQuality, isFingerDetectedByPattern } from '../../../modules/heart-beat/signal-quality';
+import { checkSignalQuality, isFingerDetectedByPattern } from '../../../modules/heart-beat/signal-quality';
 import { evaluateSignalQuality, calculatePerfusionIndex } from '../../../modules/vital-signs/utils/signal-processing-utils';
 
 // Signal history for pattern detection
@@ -181,7 +181,7 @@ export function checkWeakSignal(
     console.log("Finger detection lost due to consecutive weak signals:", consecutiveWeakSignalsCount);
   }
   
-  const result = originalCheckSignalQuality(value, consecutiveWeakSignalsCount, finalConfig);
+  const result = checkSignalQuality(value, consecutiveWeakSignalsCount, finalConfig);
   
   // If finger is confirmed but signal is weak, give benefit of doubt for longer
   if (fingDetectionConfirmed && result.isWeakSignal) {
@@ -275,6 +275,3 @@ export function createWeakSignalResult(arrhythmiaCounter: number = 0): any {
     }
   };
 }
-
-// Re-export the original checkSignalQuality function
-export { originalCheckSignalQuality as checkSignalQuality };
