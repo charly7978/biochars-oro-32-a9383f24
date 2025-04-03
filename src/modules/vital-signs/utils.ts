@@ -31,7 +31,7 @@ export {
 
 // Re-export perfusion utilities
 export {
-  calculatePerfusionIndex
+  calculatePerfusionIndex as calculatePerfusionRatio
 } from './utils/perfusion-utils';
 
 // Re-export from core utils
