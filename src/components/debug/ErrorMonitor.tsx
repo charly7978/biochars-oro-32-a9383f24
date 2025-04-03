@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -22,9 +21,9 @@ const ErrorMonitor: React.FC = () => {
     total: 0,
     info: 0,
     warning: 0,
-    error: number: 0,
+    error: 0,
     critical: 0,
-    lastHour: 0,
+    lastHour: null,
     lastErrorTime: null
   });
   const [preventionState, setPreventionState] = useState(getErrorPreventionState());

@@ -7,8 +7,9 @@
  */
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { usePPGExtraction } from './usePPGExtraction';
-import { useSignalProcessing, ProcessedSignalResult } from './useSignalProcessing';
+import { useSignalProcessing } from './useSignalProcessing';
 import { useVitalSignsProcessor } from './useVitalSignsProcessor';
+import { logError, ErrorLevel } from '@/utils/debugUtils';
 
 /**
  * Resultado integrado del procesamiento completo
@@ -65,7 +66,12 @@ export function useVitalSignsWithProcessing() {
       
       // El procesamiento posterior se maneja en el useEffect
     } catch (error) {
-      console.error("Error procesando frame:", error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      logError(
+        `Error procesando frame: ${errorMessage}`,
+        ErrorLevel.ERROR,
+        "VitalSignsProcessor"
+      );
     }
   }, [isMonitoring, extraction]);
   
@@ -125,7 +131,7 @@ export function useVitalSignsWithProcessing() {
    * Inicia el monitoreo completo
    */
   const startMonitoring = useCallback(() => {
-    console.log("useVitalSignsWithProcessing: Iniciando monitoreo");
+    logError("useVitalSignsWithProcessing: Iniciando monitoreo", ErrorLevel.INFO, "VitalSignsProcessor");
     
     // Iniciar todos los subsistemas
     extraction.startProcessing();

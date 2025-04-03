@@ -141,7 +141,7 @@ export function logError(
 function sendToErrorMonitoring(errorEvent: ErrorEvent): void {
   // This function can be implemented to send errors to a monitoring service
   // For now, it's just a placeholder
-  if (window.navigator.onLine && level === ErrorLevel.CRITICAL) {
+  if (window.navigator.onLine && errorEvent.level === ErrorLevel.CRITICAL) {
     // Example implementation:
     // const endpoint = 'https://api.errormonitoring.com/report';
     // fetch(endpoint, {
