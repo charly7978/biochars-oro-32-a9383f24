@@ -23,6 +23,8 @@ export const useDebugMode = () => {
   
   // Initialize debug mode
   useEffect(() => {
+    let cleanupErrorPrevention: (() => void) | null = null;
+
     if (isDebugMode) {
       setVerboseLogging(true);
       logError("Modo de depuración activado", ErrorLevel.INFO, "DebugMode");
@@ -33,7 +35,7 @@ export const useDebugMode = () => {
         setupGlobalHandlers: true
       });
       
-      const cleanupErrorPrevention = initializeErrorPreventionSystem();
+      cleanupErrorPrevention = initializeErrorPreventionSystem();
       
       // Set up keyboard shortcut (Ctrl+Shift+D)
       const handleKeyDown = (e: KeyboardEvent) => {
@@ -46,7 +48,9 @@ export const useDebugMode = () => {
       
       return () => {
         window.removeEventListener('keydown', handleKeyDown);
-        cleanupErrorPrevention();
+        if (cleanupErrorPrevention) {
+          cleanupErrorPrevention();
+        }
       };
     } else {
       setVerboseLogging(false);
@@ -57,10 +61,12 @@ export const useDebugMode = () => {
         setupGlobalHandlers: true
       });
       
-      const cleanupErrorPrevention = initializeErrorPreventionSystem();
+      cleanupErrorPrevention = initializeErrorPreventionSystem();
       
       return () => {
-        cleanupErrorPrevention();
+        if (cleanupErrorPrevention) {
+          cleanupErrorPrevention();
+        }
       };
     }
   }, [isDebugMode]);
@@ -151,3 +157,4 @@ export const useDebugMode = () => {
     resetIssues
   };
 };
+
