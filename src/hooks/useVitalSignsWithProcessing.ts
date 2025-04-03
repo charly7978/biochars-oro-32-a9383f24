@@ -20,6 +20,10 @@ interface SignalQualityMetrics {
   periodicity: number;
   noiseLevel: number;
   
+  // Propiedades de diagnóstico
+  hasQualityAlert: boolean;
+  diagnosticDetails: string[];
+  
   // Métricas específicas por algoritmo
   algorithmSpecific: {
     cardiac?: {
@@ -164,6 +168,19 @@ export function useVitalSignsWithProcessing() {
         const spo2Feedback = algorithmFeedbackRef.current.find(f => f.algorithm.includes('SpO2'));
         const cardiacFeedback = algorithmFeedbackRef.current.find(f => f.algorithm.includes('BloodPressure'));
         
+        // Recopilar detalles de diagnóstico
+        const diagnosticDetails: string[] = [];
+        if (quality < 40) {
+          diagnosticDetails.push("Señal de baja calidad");
+        }
+        
+        // Añadir feedback de algoritmos a los detalles
+        algorithmFeedbackRef.current.forEach(feedback => {
+          if (feedback.issues.length > 0) {
+            diagnosticDetails.push(...feedback.issues);
+          }
+        });
+        
         // Crear objeto de métricas con la estructura requerida por SignalQualityIndicator
         const metrics: SignalQualityMetrics = {
           generalQuality: quality,
@@ -171,6 +188,10 @@ export function useVitalSignsWithProcessing() {
           stability: Math.max(0, quality * 0.8),
           periodicity: quality > 70 ? 85 : quality * 0.9,
           noiseLevel: Math.max(0, 100 - quality),
+          
+          // Nuevas propiedades requeridas
+          hasQualityAlert: quality < 50 || diagnosticDetails.length > 0,
+          diagnosticDetails: diagnosticDetails,
           
           algorithmSpecific: {
             cardiac: cardiacFeedback ? {
