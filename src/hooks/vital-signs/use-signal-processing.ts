@@ -4,7 +4,7 @@
  */
 
 import { useRef, useCallback } from 'react';
-import { VitalSignsResult } from '../../modules/vital-signs/types/vital-signs-result';
+import { VitalSignsResult } from '../../types/vital-signs';
 import { VitalSignsProcessor } from '../../modules/vital-signs/VitalSignsProcessor';
 
 /**
@@ -68,7 +68,8 @@ export const useSignalProcessing = () => {
     }
     
     // Process signal directly - no simulation
-    let result = processorRef.current.processSignal(value, rrData);
+    // Fixed: Pass parameters correctly as expected by processSignal method
+    const result = processorRef.current.processSignal(value, rrData);
     
     return result;
   }, []);
