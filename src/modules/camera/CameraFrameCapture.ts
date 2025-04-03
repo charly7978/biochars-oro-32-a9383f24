@@ -3,6 +3,7 @@
  * Captura de frames de la cámara
  * Proporciona funcionalidades para la captura y procesamiento inicial de imágenes
  */
+import { logError, ErrorLevel } from "@/utils/debugUtils";
 
 /**
  * Configura la cámara con los parámetros óptimos según el dispositivo
@@ -15,20 +16,29 @@ export const configureCameraForDevice = (
   return new Promise<void>(async (resolve, reject) => {
     try {
       const capabilities = videoTrack.getCapabilities();
-      console.log("Capacidades de la cámara:", capabilities);
+      logError(`Capacidades de la cámara: ${JSON.stringify(capabilities)}`, ErrorLevel.INFO, "CameraConfig");
       
       const advancedConstraints: MediaTrackConstraintSet[] = [];
       
       // Configuración según plataforma
       if (isAndroid) {
+        logError("Configurando para dispositivo Android", ErrorLevel.INFO, "CameraConfig");
         if (capabilities.torch) {
-          console.log("Activando linterna en Android");
-          await videoTrack.applyConstraints({
-            advanced: [{ torch: true }]
-          });
+          logError("Activando linterna en Android", ErrorLevel.INFO, "CameraConfig");
+          try {
+            await videoTrack.applyConstraints({
+              advanced: [{ torch: true }]
+            });
+          } catch (err) {
+            logError(`Error al activar linterna en Android: ${err}`, ErrorLevel.WARNING, "CameraConfig", err);
+          }
+        } else {
+          logError("Linterna no disponible en dispositivo Android", ErrorLevel.WARNING, "CameraConfig");
         }
       } else {
         // Configuración para otras plataformas
+        logError(`Configurando para ${isIOS ? 'iOS' : 'otros dispositivos'}`, ErrorLevel.INFO, "CameraConfig");
+        
         if (capabilities.exposureMode) {
           const exposureConstraint: MediaTrackConstraintSet = { 
             exposureMode: 'continuous' 
@@ -39,14 +49,20 @@ export const configureCameraForDevice = (
           }
           
           advancedConstraints.push(exposureConstraint);
+        } else {
+          logError("Exposición continua no soportada", ErrorLevel.INFO, "CameraConfig");
         }
         
         if (capabilities.focusMode) {
           advancedConstraints.push({ focusMode: 'continuous' });
+        } else {
+          logError("Enfoque continuo no soportado", ErrorLevel.INFO, "CameraConfig");
         }
         
         if (capabilities.whiteBalanceMode) {
           advancedConstraints.push({ whiteBalanceMode: 'continuous' });
+        } else {
+          logError("Balance de blancos continuo no soportado", ErrorLevel.INFO, "CameraConfig");
         }
         
         if (capabilities.brightness && capabilities.brightness.max) {
@@ -60,26 +76,34 @@ export const configureCameraForDevice = (
         }
 
         if (advancedConstraints.length > 0) {
-          console.log("Aplicando configuraciones avanzadas:", advancedConstraints);
-          await videoTrack.applyConstraints({
-            advanced: advancedConstraints
-          });
+          logError(`Aplicando configuraciones avanzadas: ${JSON.stringify(advancedConstraints)}`, ErrorLevel.INFO, "CameraConfig");
+          try {
+            await videoTrack.applyConstraints({
+              advanced: advancedConstraints
+            });
+          } catch (err) {
+            logError(`Error al aplicar configuraciones avanzadas: ${err}`, ErrorLevel.WARNING, "CameraConfig", err);
+          }
         }
 
         // Activar linterna para todas las plataformas si está disponible
         if (capabilities.torch) {
-          console.log("Activando linterna para mejorar la señal PPG");
-          await videoTrack.applyConstraints({
-            advanced: [{ torch: true }]
-          });
+          logError("Activando linterna para mejorar la señal PPG", ErrorLevel.INFO, "CameraConfig");
+          try {
+            await videoTrack.applyConstraints({
+              advanced: [{ torch: true }]
+            });
+          } catch (err) {
+            logError(`Error al activar linterna: ${err}`, ErrorLevel.WARNING, "CameraConfig", err);
+          }
         } else {
-          console.log("La linterna no está disponible en este dispositivo");
+          logError("La linterna no está disponible en este dispositivo", ErrorLevel.WARNING, "CameraConfig");
         }
       }
       
       resolve();
     } catch (error) {
-      console.error("Error al configurar la cámara:", error);
+      logError(`Error crítico al configurar la cámara: ${error}`, ErrorLevel.ERROR, "CameraConfig", error);
       // Resolver de todos modos para no bloquear el flujo
       resolve();
     }
@@ -113,7 +137,7 @@ export const extractFrameData = (
     // Obtener los datos de imagen para procesamiento
     return ctx.getImageData(0, 0, targetWidth, targetHeight);
   } catch (error) {
-    console.error("Error al extraer datos del frame:", error);
+    logError(`Error al extraer datos del frame: ${error}`, ErrorLevel.ERROR, "FrameExtraction", error);
     return null;
   }
 };
@@ -133,15 +157,20 @@ export const processFramesControlled = (
   let lastFpsUpdateTime = Date.now();
   let processingFps = 0;
   let requestId: number | null = null;
+  let consecutiveErrors = 0;
+  const MAX_CONSECUTIVE_ERRORS = 5;
   
   // Canvas para procesamiento de frames
   const tempCanvas = document.createElement('canvas');
   const tempCtx = tempCanvas.getContext('2d', {willReadFrequently: true});
   
   if (!tempCtx) {
-    console.error("No se pudo obtener el contexto 2D para procesamiento de frames");
+    logError("No se pudo obtener el contexto 2D para procesamiento de frames", ErrorLevel.ERROR, "FrameProcessing");
     return () => {};
   }
+  
+  // Log start of frame processing
+  logError(`Iniciando procesamiento de frames a ${targetFrameRate} FPS`, ErrorLevel.INFO, "FrameProcessing");
   
   const processImage = async () => {
     if (!isMonitoring) return;
@@ -157,6 +186,8 @@ export const processFramesControlled = (
         const imageData = extractFrameData(frame, tempCanvas, tempCtx);
         if (imageData) {
           processCallback(imageData);
+          // Reset error count on success
+          consecutiveErrors = 0;
         }
         
         frameCount++;
@@ -167,10 +198,19 @@ export const processFramesControlled = (
           processingFps = frameCount;
           frameCount = 0;
           lastFpsUpdateTime = now;
-          console.log(`Rendimiento de procesamiento: ${processingFps} FPS`);
+          logError(`Rendimiento de procesamiento: ${processingFps} FPS`, ErrorLevel.INFO, "FrameProcessing");
         }
       } catch (error) {
-        console.error("Error capturando frame:", error);
+        consecutiveErrors++;
+        const errorLevel = consecutiveErrors >= MAX_CONSECUTIVE_ERRORS ? ErrorLevel.ERROR : ErrorLevel.WARNING;
+        logError(`Error capturando frame (${consecutiveErrors}/${MAX_CONSECUTIVE_ERRORS}): ${error}`, errorLevel, "FrameProcessing", error);
+        
+        // If we've had too many consecutive errors, introduce a small delay
+        // to avoid overwhelming the system
+        if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
+          await new Promise(resolve => setTimeout(resolve, 500));
+          consecutiveErrors = Math.max(0, consecutiveErrors - 1);
+        }
       }
     }
     
@@ -187,6 +227,7 @@ export const processFramesControlled = (
     if (requestId !== null) {
       cancelAnimationFrame(requestId);
       requestId = null;
+      logError("Procesamiento de frames detenido", ErrorLevel.INFO, "FrameProcessing");
     }
   };
 };
