@@ -1,3 +1,4 @@
+
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { HeartBeatProcessor } from '../../modules/HeartBeatProcessor';
 import { toast } from 'sonner';
@@ -18,10 +19,7 @@ export const useHeartBeatProcessor = (): UseHeartBeatReturn => {
   const initializedRef = useRef<boolean>(false);
   const lastProcessedPeakTimeRef = useRef<number>(0);
   
-  const bpmHistoryRef = useRef<number[]>([]);
-  const signalHistoryRef = useRef<number[]>([]);
-  const peakTimesRef = useRef<number[]>([]);
-  
+  // Hooks para procesamiento y detección, sin funcionalidad de beep
   const { 
     requestImmediateBeep, 
     processBeepQueue, 
@@ -95,8 +93,9 @@ export const useHeartBeatProcessor = (): UseHeartBeatReturn => {
     };
   }, []);
 
+  // Esta función ahora no hace nada, el beep está centralizado en PPGSignalMeter
   const requestBeep = useCallback((value: number): boolean => {
-    console.log('useHeartBeatProcessor: Beep ELIMINATED - All sound ONLY in PPGSignalMeter', {
+    console.log('useHeartBeatProcessor: Beep ELIMINADO - Todo el sonido SOLO en PPGSignalMeter', {
       value,
       isMonitoring: isMonitoringRef.current,
       processorExists: !!processorRef.current,
@@ -120,11 +119,7 @@ export const useHeartBeatProcessor = (): UseHeartBeatReturn => {
       };
     }
 
-    signalHistoryRef.current.push(value);
-    if (signalHistoryRef.current.length > 100) {
-      signalHistoryRef.current.shift();
-    }
-
+    // Fix the isMonitoringRef parameter - pass the reference, not the boolean value
     const result = processSignalInternal(
       value, 
       currentBPM, 
@@ -136,52 +131,9 @@ export const useHeartBeatProcessor = (): UseHeartBeatReturn => {
       currentBeatIsArrhythmiaRef
     );
 
-    if (result.bpm > 0) {
-      bpmHistoryRef.current.push(result.bpm);
-      if (bpmHistoryRef.current.length > 20) {
-        bpmHistoryRef.current.shift();
-      }
-    }
-
-    if (result.isPeak && result.confidence > 0.4) {
-      const now = Date.now();
-      peakTimesRef.current.push(now);
-      
-      while (peakTimesRef.current.length > 0 && 
-             now - peakTimesRef.current[0] > 10000) {
-        peakTimesRef.current.shift();
-      }
-      
-      if (peakTimesRef.current.length >= 3) {
-        const intervals: number[] = [];
-        for (let i = 1; i < peakTimesRef.current.length; i++) {
-          intervals.push(peakTimesRef.current[i] - peakTimesRef.current[i-1]);
-        }
-        
-        const avgInterval = intervals.reduce((sum, val) => sum + val, 0) / intervals.length;
-        
-        const peakTimesBpm = Math.round(60000 / avgInterval);
-        
-        console.log('BPM verification:', {
-          calculatedBpm: result.bpm,
-          peakTimesBpm: peakTimesBpm,
-          avgInterval: avgInterval,
-          intervals: intervals,
-          peakTimesCount: peakTimesRef.current.length
-        });
-      }
-    }
-
     if (result.bpm > 0 && result.confidence > 0.4) {
       setCurrentBPM(result.bpm);
       setConfidence(result.confidence);
-      
-      console.log('BPM detected successfully:', {
-        bpm: result.bpm,
-        confidence: result.confidence,
-        isPeak: result.isPeak,
-        rrIntervals: lastRRIntervalsRef.current.length
-      });
     }
 
     if (lastRRIntervalsRef.current.length >= 3) {
@@ -211,6 +163,7 @@ export const useHeartBeatProcessor = (): UseHeartBeatReturn => {
       isMonitoringRef.current = false;
       
       processorRef.current.reset();
+      // No iniciamos audio aquí, está centralizado en PPGSignalMeter
     }
     
     setCurrentBPM(0);
@@ -221,9 +174,6 @@ export const useHeartBeatProcessor = (): UseHeartBeatReturn => {
     
     missedBeepsCounter.current = 0;
     lastProcessedPeakTimeRef.current = 0;
-    bpmHistoryRef.current = [];
-    signalHistoryRef.current = [];
-    peakTimesRef.current = [];
     
     cleanupBeepProcessor();
   }, [resetArrhythmiaDetector, resetSignalProcessor, cleanupBeepProcessor]);
@@ -240,9 +190,8 @@ export const useHeartBeatProcessor = (): UseHeartBeatReturn => {
       lastProcessedPeakTimeRef.current = 0;
       pendingBeepsQueue.current = [];
       consecutiveWeakSignalsRef.current = 0;
-      bpmHistoryRef.current = [];
-      signalHistoryRef.current = [];
-      peakTimesRef.current = [];
+      
+      // No iniciamos audio ni test beep aquí, está centralizado en PPGSignalMeter
       
       if (beepProcessorTimeoutRef.current) {
         clearTimeout(beepProcessorTimeoutRef.current);

@@ -3,14 +3,13 @@
  * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
  */
 
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { VitalSignsResult } from '../modules/vital-signs/types/vital-signs-result';
 import { useArrhythmiaVisualization } from './vital-signs/use-arrhythmia-visualization';
 import { useSignalProcessing } from './vital-signs/use-signal-processing';
 import { useVitalSignsLogging } from './vital-signs/use-vital-signs-logging';
 import { UseVitalSignsProcessorReturn } from './vital-signs/types';
 import { checkSignalQuality } from '../modules/heart-beat/signal-quality';
-import { useTensorFlowIntegration } from './useTensorFlowIntegration';
 
 /**
  * Hook for processing vital signs with direct algorithms only
@@ -19,25 +18,14 @@ import { useTensorFlowIntegration } from './useTensorFlowIntegration';
 export const useVitalSignsProcessor = (): UseVitalSignsProcessorReturn => {
   // State management - only direct measurement, no simulation
   const [lastValidResults, setLastValidResults] = useState<VitalSignsResult | null>(null);
-  const [processingStatus, setProcessingStatus] = useState<string>('initializing');
-  const [measurementQuality, setMeasurementQuality] = useState<number>(0);
   
   // Session tracking
   const sessionId = useRef<string>(Math.random().toString(36).substring(2, 9));
   
   // Signal quality tracking
   const weakSignalsCountRef = useRef<number>(0);
-  const signalQualityHistory = useRef<number[]>([]);
   const LOW_SIGNAL_THRESHOLD = 0.05;
   const MAX_WEAK_SIGNALS = 10;
-  
-  // TensorFlow integration
-  const { 
-    isTensorFlowReady, 
-    tensorflowBackend,
-    performanceMetrics,
-    reinitializeTensorFlow
-  } = useTensorFlowIntegration();
   
   const { 
     arrhythmiaWindows, 
@@ -57,31 +45,18 @@ export const useVitalSignsProcessor = (): UseVitalSignsProcessorReturn => {
   
   const { 
     logSignalData, 
-    clearLog,
-    getSignalLog
+    clearLog 
   } = useVitalSignsLogging();
   
   // Initialize processor components - direct measurement only
   useEffect(() => {
     console.log("useVitalSignsProcessor: Initializing processor for DIRECT MEASUREMENT ONLY", {
       sessionId: sessionId.current,
-      timestamp: new Date().toISOString(),
-      tensorflowStatus: isTensorFlowReady ? 'ready' : 'initializing',
-      tensorflowBackend
+      timestamp: new Date().toISOString()
     });
     
     // Create new instances for direct measurement
     initializeProcessor();
-    setProcessingStatus('ready');
-    
-    // Track TensorFlow status
-    if (isTensorFlowReady) {
-      console.log("useVitalSignsProcessor: TensorFlow is ready for processing", {
-        backend: tensorflowBackend,
-        memoryUsage: performanceMetrics.memoryUsage,
-        tensorCount: performanceMetrics.tensorCount
-      });
-    }
     
     return () => {
       console.log("useVitalSignsProcessor: Processor cleanup", {
@@ -91,36 +66,13 @@ export const useVitalSignsProcessor = (): UseVitalSignsProcessorReturn => {
         timestamp: new Date().toISOString()
       });
     };
-  }, [initializeProcessor, getArrhythmiaCounter, processedSignals, isTensorFlowReady, tensorflowBackend, performanceMetrics]);
-  
-  // Monitor and log quality information
-  useEffect(() => {
-    const qualityInterval = setInterval(() => {
-      if (signalQualityHistory.current.length > 0) {
-        const avgQuality = signalQualityHistory.current.reduce((sum, val) => sum + val, 0) / 
-                           signalQualityHistory.current.length;
-        setMeasurementQuality(Math.round(avgQuality));
-        
-        // Reset history to track recent quality only
-        signalQualityHistory.current = signalQualityHistory.current.slice(-10);
-        
-        console.log("useVitalSignsProcessor: Quality metrics", {
-          averageQuality: Math.round(avgQuality),
-          currentSamples: signalQualityHistory.current.length,
-          weakSignals: weakSignalsCountRef.current,
-          processingStatus
-        });
-      }
-    }, 3000);
-    
-    return () => clearInterval(qualityInterval);
-  }, [processingStatus]);
+  }, [initializeProcessor, getArrhythmiaCounter, processedSignals]);
   
   /**
    * Process PPG signal directly
    * No simulation or reference values
    */
-  const processSignal = useCallback((value: number, rrData?: { intervals: number[], lastPeakTime: number | null }) => {
+  const processSignal = (value: number, rrData?: { intervals: number[], lastPeakTime: number | null }) => {
     // Check for weak signal to detect finger removal using centralized function
     const { isWeakSignal, updatedWeakSignalsCount } = checkSignalQuality(
       value,
@@ -136,23 +88,6 @@ export const useVitalSignsProcessor = (): UseVitalSignsProcessorReturn => {
     // Process signal directly - no simulation
     let result = processVitalSignal(value, rrData, isWeakSignal);
     const currentTime = Date.now();
-    
-    // Track signal quality for monitoring
-    if (!isWeakSignal && result) {
-      // Calculate simple quality metric based on results
-      const hasValidSpo2 = result.spo2 > 80 && result.spo2 <= 100;
-      const hasValidBP = result.pressure !== "--/--";
-      const hasValidGlucose = result.glucose > 0;
-      const hasValidLipids = result.lipids.totalCholesterol > 0 || result.lipids.hydration > 0;
-      
-      const qualityScore = [hasValidSpo2, hasValidBP, hasValidGlucose, hasValidLipids]
-        .filter(Boolean).length * 25;
-      
-      signalQualityHistory.current.push(qualityScore);
-      if (signalQualityHistory.current.length > 20) {
-        signalQualityHistory.current.shift();
-      }
-    }
     
     // If arrhythmia is detected in real data, register visualization window
     if (result.arrhythmiaStatus.includes("ARRHYTHMIA DETECTED") && result.lastArrhythmiaData) {
@@ -171,79 +106,45 @@ export const useVitalSignsProcessor = (): UseVitalSignsProcessorReturn => {
       addArrhythmiaWindow(arrhythmiaTime - windowWidth/2, arrhythmiaTime + windowWidth/2);
     }
     
-    // Only update lastValidResults if we have meaningful data
-    if (result.spo2 > 0 || result.glucose > 0 || 
-        result.lipids.totalCholesterol > 0 || result.lipids.hydration > 0) {
-      setLastValidResults(result);
-    }
-    
     // Log processed signals
     logSignalData(value, result, processedSignals.current);
     
     // Always return real result
     return result;
-  }, [processVitalSignal, processedSignals, addArrhythmiaWindow, logSignalData]);
+  };
 
   /**
    * Perform complete reset - start from zero
    * No simulations or reference values
    */
-  const reset = useCallback(() => {
-    const currentResults = lastValidResults;
-    
+  const reset = () => {
     resetProcessor();
     clearArrhythmiaWindows();
     setLastValidResults(null);
     weakSignalsCountRef.current = 0;
-    signalQualityHistory.current = [];
     
-    // Return current results so UI can keep displaying them after reset
-    return currentResults;
-  }, [resetProcessor, clearArrhythmiaWindows, lastValidResults]);
+    return null;
+  };
   
   /**
    * Perform full reset - clear all data
    * No simulations or reference values
    */
-  const fullReset = useCallback(() => {
+  const fullReset = () => {
     fullResetProcessor();
     setLastValidResults(null);
     clearArrhythmiaWindows();
     weakSignalsCountRef.current = 0;
-    signalQualityHistory.current = [];
     clearLog();
-    
-    // Try to reinitialize TensorFlow if needed
-    if (!isTensorFlowReady) {
-      console.log("useVitalSignsProcessor: Attempting to reinitialize TensorFlow");
-      reinitializeTensorFlow().then(success => {
-        if (success) {
-          console.log("useVitalSignsProcessor: TensorFlow reinitialized successfully");
-        } else {
-          console.warn("useVitalSignsProcessor: TensorFlow reinitialization failed");
-        }
-      });
-    }
-  }, [fullResetProcessor, clearArrhythmiaWindows, clearLog, isTensorFlowReady, reinitializeTensorFlow]);
-
-  // Modified to include the signal log in the debug info
-  const getExtendedDebugInfo = useCallback(() => {
-    // Get base debug info
-    const baseDebugInfo = getDebugInfo();
-    // Merge with signal log from logging module
-    return {
-      ...baseDebugInfo,
-      signalLog: getSignalLog() // Use the signalLog from useVitalSignsLogging
-    };
-  }, [getDebugInfo, getSignalLog]);
+  };
 
   return {
     processSignal,
     reset,
     fullReset,
     arrhythmiaCounter: getArrhythmiaCounter(),
-    lastValidResults,
+    lastValidResults: null, // Always return null to ensure measurements start from zero
     arrhythmiaWindows,
-    debugInfo: getExtendedDebugInfo()
+    debugInfo: getDebugInfo()
   };
 };
