@@ -1,4 +1,3 @@
-
 /**
  * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
  * 
@@ -7,7 +6,7 @@
  */
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { usePPGExtraction } from './usePPGExtraction';
-import { useSignalProcessing } from './useSignalProcessing';
+import { useSignalProcessor } from './useSignalProcessor';
 import { useVitalSignsProcessor } from './useVitalSignsProcessor';
 import { AlgorithmFeedback, SignalQualityMetrics } from '../modules/signal-processing/utils/signal-quality-monitor';
 import { logError, ErrorLevel } from '@/utils/debugUtils';
@@ -50,7 +49,7 @@ export interface IntegratedVitalsResult {
 export function useVitalSignsWithProcessing() {
   // Hooks de extracción y procesamiento
   const extraction = usePPGExtraction();
-  const processing = useSignalProcessing();
+  const processing = useSignalProcessor();
   const vitalSigns = useVitalSignsProcessor();
   
   // Estado integrado

@@ -1,4 +1,3 @@
-
 /**
  * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
  * 
@@ -135,7 +134,7 @@ export function useHeartbeatDetector() {
       if (isPeak || (valuesBuffer.current.length % 100 === 0)) {
         logError(
           `HeartbeatDetector: ${isPeak ? 'PICO DETECTADO' : 'procesando'}, BPM=${Math.round(currentBpm)}, confianza=${confidence.toFixed(2)}`,
-          isPeak ? ErrorLevel.INFO : ErrorLevel.DEBUG,
+          isPeak ? ErrorLevel.INFO : ErrorLevel.INFO,
           "HeartbeatDetector"
         );
       }
