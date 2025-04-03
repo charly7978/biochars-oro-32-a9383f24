@@ -61,6 +61,6 @@ export const useVitalSignsLogging = () => {
     logSignalData,
     clearLog,
     getSignalLog,
-    signalLog
+    signalLog: signalLog.current // Expose the signal log directly
   };
 };

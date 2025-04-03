@@ -1,4 +1,3 @@
-
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { VitalSignsProcessor } from '../../modules/VitalSignsProcessor';
 import { VitalSignsResult } from '../../modules/vital-signs/types/vital-signs-result';
@@ -10,6 +9,7 @@ export const useSignalProcessing = () => {
   const processedSignals = useRef<number>(0);
   const lastResults = useRef<VitalSignsResult | null>(null);
   const processingIntervalRef = useRef<number | null>(null);
+  const signalLogRef = useRef<{ timestamp: number; value: number; result: any; }[]>([]);
   
   // Use TensorFlow integration
   const { 
@@ -51,6 +51,19 @@ export const useSignalProcessing = () => {
         const result = processor.processSignal(value, rrData);
         lastResults.current = result;
         
+        // Add to signal log
+        const timestamp = Date.now();
+        signalLogRef.current.push({
+          timestamp,
+          value,
+          result: { ...result }
+        });
+        
+        // Keep log at a reasonable size
+        if (signalLogRef.current.length > 100) {
+          signalLogRef.current = signalLogRef.current.slice(-100);
+        }
+        
         return result;
       } catch (error) {
         console.error("Error processing signal:", error);
@@ -85,6 +98,7 @@ export const useSignalProcessing = () => {
       processor.fullReset();
       lastResults.current = null;
       processedSignals.current = 0;
+      signalLogRef.current = [];
       console.log("Signal processor fully reset");
     }
   }, [processor]);
@@ -102,7 +116,8 @@ export const useSignalProcessing = () => {
       hasProcessor: !!processor,
       memoryUsage: performanceMetrics?.memoryUsage || 0,
       tensorCount: performanceMetrics?.tensorCount || 0,
-      tensorflowReady: isTensorFlowReady
+      tensorflowReady: isTensorFlowReady,
+      signalLog: signalLogRef.current
     };
   }, [processor, performanceMetrics, isTensorFlowReady]);
   

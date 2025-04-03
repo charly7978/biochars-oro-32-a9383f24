@@ -1,3 +1,4 @@
+
 /**
  * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
  */
@@ -56,7 +57,8 @@ export const useVitalSignsProcessor = (): UseVitalSignsProcessorReturn => {
   
   const { 
     logSignalData, 
-    clearLog 
+    clearLog,
+    getSignalLog
   } = useVitalSignsLogging();
   
   // Initialize processor components - direct measurement only
@@ -224,6 +226,17 @@ export const useVitalSignsProcessor = (): UseVitalSignsProcessorReturn => {
     }
   }, [fullResetProcessor, clearArrhythmiaWindows, clearLog, isTensorFlowReady, reinitializeTensorFlow]);
 
+  // Modified to include the signal log in the debug info
+  const getExtendedDebugInfo = useCallback(() => {
+    // Get base debug info
+    const baseDebugInfo = getDebugInfo();
+    // Merge with signal log from logging module
+    return {
+      ...baseDebugInfo,
+      signalLog: getSignalLog() // Use the signalLog from useVitalSignsLogging
+    };
+  }, [getDebugInfo, getSignalLog]);
+
   return {
     processSignal,
     reset,
@@ -231,6 +244,6 @@ export const useVitalSignsProcessor = (): UseVitalSignsProcessorReturn => {
     arrhythmiaCounter: getArrhythmiaCounter(),
     lastValidResults,
     arrhythmiaWindows,
-    debugInfo: getDebugInfo()
+    debugInfo: getExtendedDebugInfo()
   };
 };
