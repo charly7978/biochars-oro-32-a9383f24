@@ -7,7 +7,7 @@
 
 // Export the traditional processor
 export { VitalSignsProcessor } from './VitalSignsProcessor';
-export type { VitalSignsResult } from './types/vital-signs-result';
+export type { VitalSignsResult as TraditionalVitalSignsResult } from './types/vital-signs-result';
 
 // Export the new modular processor
 export { ModularVitalSignsProcessor } from './ModularVitalSignsProcessor';
@@ -37,16 +37,9 @@ export * from './specialized/BloodPressureProcessor';
 export * from './specialized/SpO2Processor';
 export * from './specialized/CardiacProcessor';
 
-// Export arrhythmia types
+// Export shared signal utils and arrhythmia types
 export * from './arrhythmia/types';
 export * from './shared-signal-utils';
-
-// Export enhanced peak detection and signal quality modules
-export * from './enhanced-detection/fourier-analyzer';
-export * from './enhanced-detection/wavelet-analyzer';
-export * from './enhanced-detection/multi-beat-validator';
-export * from './enhanced-detection/adaptive-threshold';
-export * from './enhanced-detection/spectral-analyzer';
 
 // Export specific utility functions
 export { 
@@ -60,35 +53,11 @@ export {
   // Export peak detection functions
   findPeaksAndValleys,
   calculateAmplitude,
-  // Direct export from enhanced detection modules instead of utils
-  findPeaksFourier,
-  findPeaksWavelet,
-  validateMultiBeatSequence,
-  getAdaptiveThreshold,
   
   // Export filter functions
   applySMAFilter,
   amplifySignal,
   
-  // Export spectral analysis functions
-  // Direct export from spectral analyzer module
-  calculateSignalNoiseRatio,
-  calculatePulsatilityIndex,
-  calculateConsistencyMetrics,
-  performSpectralAnalysis,
-  
   // Export perfusion functions
   calculatePerfusionIndex
 } from './utils';
-
-// Re-export the enhanced detection functions to resolve missing exports
-export { findPeaksFourier } from './enhanced-detection/fourier-analyzer';
-export { findPeaksWavelet } from './enhanced-detection/wavelet-analyzer';
-export { validateMultiBeatSequence } from './enhanced-detection/multi-beat-validator';
-export { getAdaptiveThreshold } from './enhanced-detection/adaptive-threshold';
-export { 
-  calculateSignalNoiseRatio,
-  calculatePulsatilityIndex,
-  calculateConsistencyMetrics,
-  performSpectralAnalysis
-} from './enhanced-detection/spectral-analyzer';
