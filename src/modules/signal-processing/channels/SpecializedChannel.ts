@@ -1,3 +1,4 @@
+
 import { VitalSignType, ChannelFeedback } from '../../../types/signal';
 
 /**
@@ -51,6 +52,45 @@ export abstract class SpecializedChannel {
       channelId: this.vitalSignType
     };
   }
+  
+  /**
+   * Process value method for OptimizedChannel compatibility
+   */
+  public processValue(value: number): number {
+    return this.processSignal(value);
+  }
+  
+  /**
+   * Reset method for OptimizedChannel compatibility
+   */
+  public reset(): void {
+    // Implementation can be provided by subclasses
+    console.log(`Reset ${this.vitalSignType} channel`);
+  }
+  
+  /**
+   * Configure method for OptimizedChannel compatibility
+   */
+  public configure(options: any): void {
+    if (options.amplificationFactor !== undefined) {
+      this.config.amplificationFactor = options.amplificationFactor;
+    }
+    
+    if (options.filterStrength !== undefined) {
+      this.config.filterStrength = options.filterStrength;
+    }
+    
+    if (options.qualityThreshold !== undefined) {
+      this.config.qualityThreshold = options.qualityThreshold;
+    }
+  }
+  
+  /**
+   * Get channel type for OptimizedChannel compatibility
+   */
+  get type(): string {
+    return this.vitalSignType;
+  }
 }
 
 /**
@@ -69,6 +109,7 @@ export class OptimizedSignalChannel {
   // Instead of readonly properties, make them private with getters/setters
   private _sampleRate: number = 30;
   private _bufferSize: number = 128;
+  private _type: string = 'generic';
   
   constructor(sampleRate: number = 30, bufferSize: number = 128) {
     this._sampleRate = sampleRate;
@@ -89,6 +130,13 @@ export class OptimizedSignalChannel {
   }
 
   /**
+   * Process value method for OptimizedChannel compatibility
+   */
+  public processValue(value: number): number {
+    return this.processSignal(value);
+  }
+
+  /**
    * Apply signal-specific optimization to the signal
    */
   protected applySignalOptimization(value: number): number {
@@ -103,6 +151,26 @@ export class OptimizedSignalChannel {
     // Apply any common signal processing steps here
     return value * 1.1;
   }
+  
+  /**
+   * Reset method for OptimizedChannel compatibility
+   */
+  public reset(): void {
+    console.log(`Reset ${this._type} channel`);
+  }
+  
+  /**
+   * Configure method for OptimizedChannel compatibility
+   */
+  public configure(options: any): void {
+    if (options.sampleRate !== undefined) {
+      this._sampleRate = options.sampleRate;
+    }
+    
+    if (options.bufferSize !== undefined) {
+      this._bufferSize = options.bufferSize;
+    }
+  }
 
   // Create getters
   get sampleRate(): number {
@@ -112,6 +180,10 @@ export class OptimizedSignalChannel {
   get bufferSize(): number {
     return this._bufferSize;
   }
+  
+  get type(): string {
+    return this._type;
+  }
 
   // Create setters that will be used instead of direct assignment
   set sampleRate(value: number) {
@@ -120,5 +192,9 @@ export class OptimizedSignalChannel {
 
   set bufferSize(value: number) {
     this._bufferSize = value;
+  }
+  
+  set type(value: string) {
+    this._type = value;
   }
 }

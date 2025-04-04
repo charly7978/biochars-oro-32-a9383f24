@@ -21,6 +21,40 @@ export class SignalValidator {
     };
   }
 
+  // Add method to validate PPG data points specifically
+  validatePPGDataPoint(data: any): SignalValidationResult {
+    if (!data) {
+      return {
+        isValid: false,
+        errorCode: 'INVALID_PPG_DATA',
+        errorMessage: 'PPG data point is null or undefined'
+      };
+    }
+    
+    // Ensure timestamp exists
+    if (this.config.validateTimestamp && (!data.timestamp && !data.time)) {
+      return {
+        isValid: false,
+        errorCode: 'MISSING_TIMESTAMP',
+        errorMessage: 'PPG data point is missing timestamp'
+      };
+    }
+    
+    // Validate value exists
+    if (data.value === undefined || data.value === null) {
+      return {
+        isValid: false,
+        errorCode: 'MISSING_VALUE',
+        errorMessage: 'PPG data point is missing value'
+      };
+    }
+    
+    return {
+      isValid: true,
+      validatedData: data
+    };
+  }
+
   private validateData(data: any): boolean {
     // Basic validation logic
     if (!data) return false;

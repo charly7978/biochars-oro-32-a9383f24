@@ -17,7 +17,10 @@ export * from './channels/SpecializedChannel';
 export type {
   ProcessedPPGSignal,
   SignalProcessor,
-  SignalProcessingOptions
+  SignalProcessingOptions,
+  VitalSignsResult,
+  RRIntervalData,
+  ArrhythmiaProcessingResult
 } from './types';
 
 // Re-export from channels
