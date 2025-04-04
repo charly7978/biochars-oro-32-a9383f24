@@ -1,9 +1,8 @@
 
 /**
- * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
- * 
  * Módulo central para procesamiento de señales
  * Exporta todas las funciones y tipos necesarios para el procesamiento de señales reales
+ * SOLO PROCESAMIENTO REAL - NO HAY SIMULACIONES
  */
 
 // Exportar tipos
@@ -48,3 +47,34 @@ export {
   getLastSignalQuality,
   isFingerDetectedByAmplitude
 } from './finger-detection/amplitude-detector';
+
+// Exportar procesador de señales neuronal
+export {
+  processTensorSignal,
+  createNeuralProcessor,
+  getNeuralNetworkState,
+  resetNeuralNetwork,
+  applyAdaptiveCalibration
+} from './neural/tensor-processor';
+
+// Exportar modelos tensoriales optimizados para procesamiento en tiempo real
+export {
+  MixedModel,
+  getMixedModel,
+  resetMixedModel,
+  type MixedModelPrediction,
+  type MixedModelConfig
+} from './utils/mixed-model';
+
+// Exportar tipos de procesamiento de señales
+export type { 
+  ProcessedPPGSignal, 
+  ProcessedHeartbeatSignal,
+  SignalProcessingOptions,
+  SignalProcessorConfig,
+  RealTimeProcessingConfig
+} from './types';
+
+// Exportar procesadores principales
+export { PPGSignalProcessor } from './processors/ppg-processor';
+export { HeartbeatProcessor } from './processors/heartbeat-processor';
