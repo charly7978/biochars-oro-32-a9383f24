@@ -10,6 +10,7 @@ import PPGSignalMeter from "@/components/PPGSignalMeter";
 import MeasurementConfirmationDialog from "@/components/MeasurementConfirmationDialog";
 import { Button } from "@/components/ui/button";
 import { Activity } from "lucide-react";
+import { toast } from "sonner";
 
 // Define interfaces for the browser compatibility
 interface DocumentWithFullscreen extends Document {
