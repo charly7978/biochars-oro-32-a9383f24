@@ -22,6 +22,17 @@ export type DetectionSource =
 export interface DetectionState {
   isFingerDetected: boolean;
   confidence: number;
+  // Add missing properties needed by FingerDetectionMonitor
+  sources: Record<DetectionSource, { detected: boolean, confidence: number }>;
+  thresholds: {
+    sensitivityLevel: number;
+    qualityFactor: number;
+    environmentFactor: number;
+    adaptationRate: number;
+    amplitudeThreshold: number;
+    falsePositiveReduction: number;
+    falseNegativeReduction: number;
+  };
 }
 
 /**
@@ -49,9 +60,26 @@ export class UnifiedFingerDetector {
    * Get current detection state
    */
   public getDetectionState(): DetectionState {
+    const sourcesObject: Record<DetectionSource, { detected: boolean, confidence: number }> = {} as Record<DetectionSource, { detected: boolean, confidence: number }>;
+    
+    // Convert Map to object for easier consumption
+    this.detectionSources.forEach((value, key) => {
+      sourcesObject[key] = value;
+    });
+    
     return {
       isFingerDetected: this.isFingerDetected,
-      confidence: this.detectionConfidence
+      confidence: this.detectionConfidence,
+      sources: sourcesObject,
+      thresholds: {
+        sensitivityLevel: this.sensitivityFactor,
+        qualityFactor: 1.0, // Default value
+        environmentFactor: 1.0, // Default value
+        adaptationRate: this.adaptationRate,
+        amplitudeThreshold: this.amplitudeThreshold,
+        falsePositiveReduction: this.falsePositiveReductionFactor,
+        falseNegativeReduction: this.falseNegativeReductionFactor
+      }
     };
   }
   

@@ -1,4 +1,3 @@
-
 /**
  * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
  * 
@@ -7,253 +6,203 @@
  */
 import { logError, ErrorLevel } from '@/utils/debugUtils';
 
-// Parameter optimization interfaces
-export interface OptimizationParameter {
-  name: string;
-  min: number;
-  max: number;
-  step: number;
-  default: number;
-}
+// Forward export the DetectionState interface to keep compatibility
+export type { DetectionState } from './unified-finger-detector';
 
 export interface ParameterOptions {
-  [key: string]: {
-    name: string;
-    type: string;
-    min: number;
-    max: number;
-  };
+  name: string;
+  type: 'continuous' | 'discrete' | 'categorical';
+  min: number;
+  max: number;
 }
 
 export interface BayesianDataPoint {
   params: Record<string, number>;
   value: number;
+  metadata?: {
+    timestamp?: number;
+    quality?: number;
+    source?: string;
+  };
 }
 
 export interface BayesianOptimizerConfig {
   explorationWeight?: number;
   maxIterations?: number;
   randomInitialSamples?: number;
+  minObservationsBeforeOptimizing?: number;
 }
 
-// Simple Gaussian Process implementation
-export class GaussianProcess {
-  private kernelParams: { lengthScale: number; signalVariance: number };
-  private trainingData: { x: number[]; y: number }[] = [];
-  
-  constructor(kernelParams = { lengthScale: 1.0, signalVariance: 1.0 }) {
-    this.kernelParams = kernelParams;
-  }
-  
-  // Radial basis function kernel
-  private rbfKernel(x1: number[], x2: number[]): number {
-    if (x1.length !== x2.length) {
-      throw new Error('Vectors must have the same dimension');
-    }
-    
-    let sumSquaredDiff = 0;
-    for (let i = 0; i < x1.length; i++) {
-      sumSquaredDiff += Math.pow(x1[i] - x2[i], 2);
-    }
-    
-    return this.kernelParams.signalVariance * 
-      Math.exp(-sumSquaredDiff / (2 * Math.pow(this.kernelParams.lengthScale, 2)));
-  }
-  
-  // Add a data point to the model
-  public addPoint(x: number[], y: number): void {
-    this.trainingData.push({ x, y });
-  }
-  
-  // Predict at a new point
-  public predict(x: number[]): { mean: number; variance: number } {
-    if (this.trainingData.length === 0) {
-      return { mean: 0, variance: 1 };
-    }
-    
-    // Build kernel matrix
-    const n = this.trainingData.length;
-    const K = Array(n).fill(0).map(() => Array(n).fill(0));
-    
-    for (let i = 0; i < n; i++) {
-      for (let j = 0; j <= i; j++) {
-        const kValue = this.rbfKernel(this.trainingData[i].x, this.trainingData[j].x);
-        K[i][j] = kValue;
-        K[j][i] = kValue;
-      }
-    }
-    
-    // Compute k_star (kernel values between x and each training point)
-    const kStar = this.trainingData.map(point => this.rbfKernel(x, point.x));
-    
-    // Simple matrix operations (for a proper implementation, use proper matrix inversion)
-    // This is a simplified version for demonstration
-    const yVector = this.trainingData.map(point => point.y);
-    
-    // Using a simple approach for inverse; in a real implementation use proper matrix inversion
-    // This is just for demonstration and will not work well for large datasets
-    let mean = 0;
-    for (let i = 0; i < n; i++) {
-      mean += kStar[i] * yVector[i];
-    }
-    
-    // Simplified variance calculation
-    const variance = this.kernelParams.signalVariance - Math.min(...kStar);
-    
-    return { mean, variance };
-  }
-  
-  // Reset the model
-  public reset(): void {
-    this.trainingData = [];
-  }
+export interface GaussianProcess {
+  predict: (x: Record<string, number>) => { mean: number; variance: number };
+  update: (x: Record<string, number>, y: number) => void;
+  reset: () => void;
 }
 
-// Simple Bayesian Optimizer
-export class SimpleBayesianOptimizer {
-  private parameterOptions: ParameterOptions;
-  private config: BayesianOptimizerConfig;
-  private gp: GaussianProcess;
-  private best: BayesianDataPoint | null = null;
+export interface BayesianOptimizer {
+  optimize: (objectiveFunction: (params: Record<string, number>) => number, maxIterations?: number, callback?: (iteration: number, params: Record<string, number>, value: number) => void) => Promise<{ params: Record<string, number>, value: number }>;
+  suggest: () => Promise<Record<string, number>>;
+  addObservation: (params: Record<string, number>, value: number) => void;
+  getCurrentBest: () => { params: Record<string, number>, value: number } | null;
+  reset: () => void;
+  getGaussianProcess: () => GaussianProcess;
+  getParameterOptions: () => Record<string, ParameterOptions>;
+  getObservations: () => BayesianDataPoint[];
+}
+
+export interface OptimizationParameter {
+  name: string;
+  min: number;
+  max: number;
+  step?: number;
+  default: number;
+  initialValue?: number;
+  description?: string;
+  weight?: number;
+}
+
+class SimpleBayesianOptimizer implements BayesianOptimizer {
+  private parameterOptions: Record<string, ParameterOptions>;
   private observations: BayesianDataPoint[] = [];
-  
-  constructor(parameterOptions: ParameterOptions, config: BayesianOptimizerConfig = {}) {
+  private config: BayesianOptimizerConfig;
+  private bestObservation: BayesianDataPoint | null = null;
+
+  constructor(parameterOptions: Record<string, ParameterOptions>, config: BayesianOptimizerConfig = {}) {
     this.parameterOptions = parameterOptions;
     this.config = {
-      explorationWeight: 0.1,
-      maxIterations: 20,
+      explorationWeight: 0.2,
+      maxIterations: 50,
       randomInitialSamples: 3,
+      minObservationsBeforeOptimizing: 2,
       ...config
     };
-    this.gp = new GaussianProcess();
   }
-  
-  // Add an observation
-  public observe(params: Record<string, number>, value: number): void {
-    const dataPoint = { params, value };
-    this.observations.push(dataPoint);
-    
-    // Update best if needed
-    if (this.best === null || value > this.best.value) {
-      this.best = dataPoint;
-    }
-    
-    // Update GP model
-    const paramArray = this.paramsToArray(params);
-    this.gp.addPoint(paramArray, value);
-  }
-  
-  // Convert parameter object to array
-  private paramsToArray(params: Record<string, number>): number[] {
-    return Object.keys(this.parameterOptions).map(key => params[key]);
-  }
-  
-  // Generate next point to evaluate using expected improvement
-  public next(): Record<string, number> {
-    if (this.observations.length === 0) {
-      return this.generateRandomParams();
-    }
-    
-    // Generate some candidate points and pick the best one
-    const candidates = Array(10).fill(0).map(() => this.generateRandomParams());
-    
-    let bestCandidate = candidates[0];
-    let bestScore = -Infinity;
-    
-    for (const candidate of candidates) {
-      const candidateArray = this.paramsToArray(candidate);
-      const { mean, variance } = this.gp.predict(candidateArray);
+
+  public async optimize(
+    objectiveFunction: (params: Record<string, number>) => number,
+    maxIterations: number = this.config.maxIterations || 50,
+    callback?: (iteration: number, params: Record<string, number>, value: number) => void
+  ): Promise<{ params: Record<string, number>, value: number }> {
+    return new Promise((resolve) => {
+      let currentIteration = 0;
       
-      // Expected improvement calculation
-      const bestValue = this.best ? this.best.value : -Infinity;
-      const z = (mean - bestValue) / Math.sqrt(variance);
-      const ei = (mean - bestValue) * this.normalCDF(z) + 
-                Math.sqrt(variance) * this.normalPDF(z);
-      
-      // Add exploration bonus
-      const explorationBonus = Math.sqrt(variance) * (this.config.explorationWeight || 0.1);
-      const score = ei + explorationBonus;
-      
-      if (score > bestScore) {
-        bestScore = score;
-        bestCandidate = candidate;
-      }
+      const runIteration = () => {
+        if (currentIteration >= maxIterations) {
+          resolve(this.getCurrentBest() || { params: {}, value: 0 });
+          return;
+        }
+
+        const params = this.nextPointToEvaluate();
+        const value = objectiveFunction(params);
+        this.observations.push({ params, value });
+        
+        // Update best observation
+        if (this.bestObservation === null || value > this.bestObservation.value) {
+          this.bestObservation = { params, value };
+        }
+
+        if (callback) {
+          callback(currentIteration, params, value);
+        }
+
+        currentIteration++;
+        runIteration();
+      };
+
+      runIteration();
+    });
+  }
+
+  public async suggest(): Promise<Record<string, number>> {
+    return this.nextPointToEvaluate();
+  }
+
+  public addObservation(params: Record<string, number>, value: number): void {
+    this.observations.push({ params, value });
+    
+    // Update best observation
+    if (this.bestObservation === null || value > this.bestObservation.value) {
+      this.bestObservation = { params, value };
     }
-    
-    return bestCandidate;
   }
-  
-  // Helper for standard normal CDF
-  private normalCDF(x: number): number {
-    return 0.5 * (1 + Math.tanh(Math.sqrt(Math.PI/8) * x));
-  }
-  
-  // Helper for standard normal PDF
-  private normalPDF(x: number): number {
-    return Math.exp(-0.5 * x * x) / Math.sqrt(2 * Math.PI);
-  }
-  
-  // Generate random parameters
-  private generateRandomParams(): Record<string, number> {
-    const params: Record<string, number> = {};
-    
-    for (const key of Object.keys(this.parameterOptions)) {
-      const { min, max } = this.parameterOptions[key];
-      params[key] = min + Math.random() * (max - min);
+
+  public getCurrentBest(): { params: Record<string, number>, value: number } | null {
+    if (this.bestObservation === null) {
+      return null;
     }
-    
-    return params;
+    return {
+      params: this.bestObservation.params,
+      value: this.bestObservation.value
+    };
   }
-  
-  // Run optimization
-  public run(
-    objectiveFunction: (params: Record<string, number>) => number, 
-    iterations: number = 20,
-    callback?: (params: Record<string, number>, value: number, iteration: number) => void
-  ): BayesianDataPoint {
-    for (let i = 0; i < iterations; i++) {
-      const params = this.next();
-      const value = objectiveFunction(params);
-      this.observe(params, value);
-      
-      if (callback) {
-        callback(params, value, i);
-      }
-    }
-    
-    return this.best || { params: {}, value: -Infinity };
-  }
-  
-  // Get best point
-  public best(): BayesianDataPoint | null {
-    return this.best;
-  }
-  
-  // Reset
+
   public reset(): void {
     this.observations = [];
-    this.best = null;
-    this.gp.reset();
+    this.bestObservation = null;
   }
-  
-  // Get Gaussian Process
-  public getGP(): GaussianProcess {
-    return this.gp;
+
+  public getGaussianProcess(): GaussianProcess {
+    // Simple stub implementation
+    return {
+      predict: (x: Record<string, number>) => ({ mean: 0, variance: 1 }),
+      update: () => {},
+      reset: () => {}
+    };
   }
-  
-  // Get parameter options
-  public getParameterOptions(): ParameterOptions {
+
+  public getParameterOptions(): Record<string, ParameterOptions> {
     return this.parameterOptions;
   }
-  
-  // Get observations
+
   public getObservations(): BayesianDataPoint[] {
     return [...this.observations];
   }
 
-  // Next point to evaluate 
-  public nextPointToEvaluate(): Record<string, number> {
-    return this.next();
+  // Helper method to get the next point to evaluate
+  private nextPointToEvaluate(): Record<string, number> {
+    if (this.observations.length < (this.config.minObservationsBeforeOptimizing || 2)) {
+      // Not enough observations yet, generate random point
+      return this.generateRandomPoint();
+    }
+
+    // With some probability, do exploration instead of exploitation
+    if (Math.random() < (this.config.explorationWeight || 0.2)) {
+      return this.generateRandomPoint();
+    }
+
+    // Simple exploitation: jitter around the best point we've seen
+    if (this.bestObservation) {
+      const jitteredParams: Record<string, number> = {};
+      
+      for (const [key, value] of Object.entries(this.bestObservation.params)) {
+        const paramOptions = this.parameterOptions[key];
+        const range = paramOptions.max - paramOptions.min;
+        const jitter = range * 0.1 * (Math.random() * 2 - 1);
+        
+        let newValue = value + jitter;
+        // Clamp to parameter bounds
+        newValue = Math.max(paramOptions.min, Math.min(paramOptions.max, newValue));
+        
+        jitteredParams[key] = newValue;
+      }
+      
+      return jitteredParams;
+    }
+
+    // Fallback to random point
+    return this.generateRandomPoint();
+  }
+
+  private generateRandomPoint(): Record<string, number> {
+    const params: Record<string, number> = {};
+    
+    for (const [key, options] of Object.entries(this.parameterOptions)) {
+      // Generate random value within bounds
+      const randomValue = options.min + Math.random() * (options.max - options.min);
+      params[key] = randomValue;
+    }
+    
+    return params;
   }
 }
 
@@ -265,7 +214,7 @@ export function createBayesianOptimizer(
   initialParameters: Record<string, number> = {},
   config: BayesianOptimizerConfig = {}
 ): BayesianOptimizer {
-  const parameterOptions: ParameterOptions = {};
+  const parameterOptions: Record<string, ParameterOptions> = {};
   
   for (const param of parameters) {
     parameterOptions[param.name] = {
@@ -284,114 +233,22 @@ export function createBayesianOptimizer(
       const initialParams: Record<string, number> = {};
       
       for (const param of parameters) {
-        initialParams[param.name] = initialParameters[param.name] !== undefined 
-          ? initialParameters[param.name] 
-          : param.default;
+        initialParams[param.name] = initialParameters[param.name] !== undefined ? 
+          initialParameters[param.name] : param.default;
       }
       
       // Add initial observation with a default value
-      bayesOptimizer.observe(initialParams, -1);
+      bayesOptimizer.addObservation(initialParams, -1);
     }
   }
   
-  return {
-    optimize: async (objectiveFunction, callback) => {
-      return new Promise((resolve, reject) => {
-        try {
-          bayesOptimizer.run(objectiveFunction, config.maxIterations || 20, callback);
-          resolve(bayesOptimizer.best());
-        } catch (error) {
-          logError(
-            `Error durante la optimización bayesiana: ${error}`,
-            ErrorLevel.ERROR, 
-            "BayesianOptimizer"
-          );
-          reject(error);
-        }
-      });
-    },
-    
-    suggest: async () => {
-      return new Promise((resolve, reject) => {
-        try {
-          const suggestion = bayesOptimizer.nextPointToEvaluate();
-          resolve(suggestion);
-        } catch (error) {
-          logError(
-            `Error sugiriendo nuevos parámetros: ${error}`,
-            ErrorLevel.ERROR, 
-            "BayesianOptimizer"
-          );
-          reject(error);
-        }
-      });
-    },
-    
-    addObservation: (params, value) => {
-      bayesOptimizer.observe(params, value);
-    },
-    
-    getCurrentBest: () => {
-      const best = bayesOptimizer.best();
-      return best ? {
-        params: best.params,
-        value: best.value
-      } : null;
-    },
-    
-    reset: () => {
-      bayesOptimizer.reset();
-    },
-    
-    getGaussianProcess: () => {
-      return bayesOptimizer.getGP();
-    },
-    
-    getParameterOptions: () => {
-      return bayesOptimizer.getParameterOptions();
-    },
-    
-    getObservations: () => {
-      return bayesOptimizer.getObservations();
-    },
-
-    nextPointToEvaluate: () => {
-      return bayesOptimizer.nextPointToEvaluate();
-    }
-  };
-}
-
-// Interface for Bayesian optimizer
-export interface BayesianOptimizer {
-  optimize: (
-    objectiveFunction: (params: Record<string, number>) => number, 
-    callback?: (params: Record<string, number>, value: number, iteration: number) => void
-  ) => Promise<BayesianDataPoint | null>;
-  
-  suggest: () => Promise<Record<string, number>>;
-  
-  addObservation: (
-    params: Record<string, number>, 
-    value: number
-  ) => void;
-  
-  getCurrentBest: () => BayesianDataPoint | null;
-  
-  reset: () => void;
-  
-  getGaussianProcess: () => GaussianProcess;
-  
-  getParameterOptions: () => ParameterOptions;
-  
-  getObservations: () => BayesianDataPoint[];
-
-  nextPointToEvaluate: () => Record<string, number>;
+  return bayesOptimizer;
 }
 
 /**
  * Default parameters for PPG signal optimization
  */
-export const DEFAULT_PPG_PARAMETERS: OptimizationParameter[] = [
+export const DEFAULT_PPG_PARAMETERS = [
   {
     name: 'amplificationFactor',
     min: 1.0,
@@ -418,7 +275,7 @@ export const DEFAULT_PPG_PARAMETERS: OptimizationParameter[] = [
 /**
  * Creates a default optimizer for PPG signal processing
  */
-export function createDefaultPPGOptimizer(initialParameters: Record<string, number> = {}): BayesianOptimizer {
+export function createDefaultPPGOptimizer(initialParameters = {}) {
   return createBayesianOptimizer(DEFAULT_PPG_PARAMETERS, initialParameters, {
     explorationWeight: 0.2,
     maxIterations: 50
@@ -428,7 +285,7 @@ export function createDefaultPPGOptimizer(initialParameters: Record<string, numb
 /**
  * Default parameters for Heartbeat signal optimization
  */
-export const DEFAULT_HEARTBEAT_PARAMETERS: OptimizationParameter[] = [
+export const DEFAULT_HEARTBEAT_PARAMETERS = [
   {
     name: 'peakThreshold',
     min: 0.1,
@@ -448,7 +305,7 @@ export const DEFAULT_HEARTBEAT_PARAMETERS: OptimizationParameter[] = [
 /**
  * Creates a default optimizer for Heartbeat signal processing
  */
-export function createHeartbeatOptimizer(initialParameters: Record<string, number> = {}): BayesianOptimizer {
+export function createHeartbeatOptimizer(initialParameters = {}) {
   return createBayesianOptimizer(DEFAULT_HEARTBEAT_PARAMETERS, initialParameters, {
     explorationWeight: 0.2,
     maxIterations: 50

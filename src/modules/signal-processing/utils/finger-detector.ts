@@ -1,4 +1,3 @@
-
 /**
  * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
  * 
@@ -6,7 +5,7 @@
  * Versión mejorada que se integra con el detector unificado
  */
 import { unifiedFingerDetector } from './unified-finger-detector';
-import { fingerDiagnostics, logFingerDetection } from './finger-diagnostics';
+import { fingerDiagnostics, reportFingerDetection } from './finger-diagnostics';
 import { adaptiveCalibration, getCalibrationParameters } from './adaptive-calibration';
 
 // Almacenamiento para detección de patrones rítmicos
@@ -68,7 +67,7 @@ export function detectFingerPresence(
         });
         
         // Registrar transición de detección
-        logFingerDetection(false, 0.3, 'rhythm-detector', {
+        reportFingerDetection(false, 0.3, 'rhythm-detector', {
           reason: 'pattern-lost',
           timestamp: Date.now()
         });
@@ -120,7 +119,7 @@ export function detectFingerPresence(
       confirmedFingerPresence = true;
       
       // Registrar transición de detección
-      logFingerDetection(true, 0.8, 'rhythm-detector', {
+      reportFingerDetection(true, 0.8, 'rhythm-detector', {
         consistentPatterns: consistentPatternsCount,
         requiredPatterns: REQUIRED_CONSISTENT_PATTERNS,
         intervals: rhythmResult.intervals

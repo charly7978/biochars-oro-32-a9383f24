@@ -2,177 +2,120 @@
 /**
  * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
  * 
- * Diagnostic tools for finger detection
+ * Diagnósticos de detección de dedos
+ * Sistema para registrar y analizar eventos de detección
  */
 import { logError, ErrorLevel } from '@/utils/debugUtils';
 import { DetectionSource } from './unified-finger-detector';
 
-// Finger detection event interface
-export interface FingerDetectionEvent extends Event {
-  eventType: string;
+export type DiagnosticEventType = 
+  'PATTERN_DETECTED' | 
+  'PATTERN_LOST' | 
+  'LOW_AMPLITUDE' | 
+  'PATTERN_TIMEOUT' | 
+  'DETECTOR_RESET' | 
+  'FINGER_DETECTED' | 
+  'FINGER_LOST';
+
+export interface DiagnosticEvent {
+  eventType: DiagnosticEventType;
   source: DetectionSource;
   isFingerDetected: boolean;
   confidence: number;
-  details?: any;
+  timestamp?: number;
+  signalValue?: number;
+  details?: Record<string, any>;
 }
 
-// Create a custom event for finger detection events
-export class FingerDetectedEvent extends Event implements FingerDetectionEvent {
-  eventType: string;
-  source: DetectionSource;
-  isFingerDetected: boolean;
-  confidence: number;
-  details?: any;
-  
-  constructor(
-    source: DetectionSource, 
-    isFingerDetected: boolean,
-    confidence: number,
-    details?: any
-  ) {
-    super('fingerDetection');
-    this.eventType = 'fingerDetection';
-    this.source = source;
-    this.isFingerDetected = isFingerDetected;
-    this.confidence = confidence;
-    this.details = details;
-  }
-}
-
-// Singleton for event listening
-export class FingerDiagnosticsManager {
-  private static instance: FingerDiagnosticsManager;
-  private eventTarget: EventTarget = new EventTarget();
-  private detectionEvents: FingerDetectionEvent[] = [];
+class FingerDiagnostics {
+  private events: DiagnosticEvent[] = [];
   private maxEvents: number = 100;
   
-  private constructor() {
-    // Private constructor for singleton
-  }
-  
-  public static getInstance(): FingerDiagnosticsManager {
-    if (!FingerDiagnosticsManager.instance) {
-      FingerDiagnosticsManager.instance = new FingerDiagnosticsManager();
-    }
-    return FingerDiagnosticsManager.instance;
-  }
-  
-  public addEventListener(
-    callback: (event: FingerDetectionEvent) => void
-  ): () => void {
-    const wrappedCallback = (event: Event) => {
-      const fingerEvent = event as FingerDetectionEvent;
-      callback(fingerEvent);
-    };
-    
-    this.eventTarget.addEventListener('fingerDetection', wrappedCallback);
-    
-    return () => {
-      this.eventTarget.removeEventListener('fingerDetection', wrappedCallback);
-    };
-  }
-  
-  public dispatchEvent(
-    source: DetectionSource, 
-    isFingerDetected: boolean,
-    confidence: number,
-    details?: any
-  ): void {
-    const event = new FingerDetectedEvent(
-      source,
-      isFingerDetected,
-      confidence,
-      details
-    );
-    
-    this.eventTarget.dispatchEvent(event);
-    
-    // Also store for history
-    this.detectionEvents.push(event);
-    if (this.detectionEvents.length > this.maxEvents) {
-      this.detectionEvents.shift();
+  /**
+   * Registra un evento diagnóstico
+   */
+  public logEvent(event: DiagnosticEvent): void {
+    // Añadir timestamp si no existe
+    if (!event.timestamp) {
+      event.timestamp = Date.now();
     }
     
-    // Log to console for debugging
-    if (isFingerDetected) {
+    // Agregar al inicio para tener los más recientes primero
+    this.events.unshift(event);
+    
+    // Limitar número de eventos
+    if (this.events.length > this.maxEvents) {
+      this.events = this.events.slice(0, this.maxEvents);
+    }
+    
+    // Registrar eventos importantes
+    if (['FINGER_DETECTED', 'FINGER_LOST', 'DETECTOR_RESET'].includes(event.eventType)) {
       logError(
-        `Finger detected by ${source} with confidence ${confidence.toFixed(2)}`,
+        `FingerDiagnostics: ${event.eventType} from ${event.source} with confidence ${event.confidence}`,
         ErrorLevel.INFO,
-        'FingerDetection',
-        details
+        "FingerDetection"
       );
     }
   }
   
-  public getDetectionHistory(): FingerDetectionEvent[] {
-    return [...this.detectionEvents];
+  /**
+   * Obtiene los eventos más recientes
+   */
+  public getRecentEvents(count: number = 10): DiagnosticEvent[] {
+    return this.events.slice(0, count);
   }
   
-  public clearHistory(): void {
-    this.detectionEvents = [];
-  }
-  
-  public getDetectionStats(): {
-    totalEvents: number;
-    detectedCount: number;
-    sourceBreakdown: Record<string, { total: number; detected: number }>;
-    averageConfidence: number;
-  } {
-    const stats = {
-      totalEvents: this.detectionEvents.length,
-      detectedCount: 0,
-      sourceBreakdown: {} as Record<string, { total: number; detected: number }>,
-      averageConfidence: 0
-    };
+  /**
+   * Obtiene estadísticas de diagnóstico
+   */
+  public getStatistics(): Record<string, any> {
+    // Contar eventos por tipo
+    const eventCounts: Record<string, number> = {};
     
-    let totalConfidence = 0;
-    
-    this.detectionEvents.forEach((event) => {
-      if (event.isFingerDetected) {
-        stats.detectedCount++;
+    this.events.forEach(event => {
+      if (!eventCounts[event.eventType]) {
+        eventCounts[event.eventType] = 0;
       }
-      
-      totalConfidence += event.confidence;
-      
-      // Update source breakdown
-      if (!stats.sourceBreakdown[event.source]) {
-        stats.sourceBreakdown[event.source] = { total: 0, detected: 0 };
-      }
-      
-      stats.sourceBreakdown[event.source].total++;
-      if (event.isFingerDetected) {
-        stats.sourceBreakdown[event.source].detected++;
-      }
+      eventCounts[event.eventType]++;
     });
     
-    if (stats.totalEvents > 0) {
-      stats.averageConfidence = totalConfidence / stats.totalEvents;
-    }
+    // Calcular confianza promedio
+    const confidenceSum = this.events.reduce((sum, event) => sum + event.confidence, 0);
+    const avgConfidence = this.events.length > 0 ? confidenceSum / this.events.length : 0;
     
-    return stats;
+    return {
+      totalEvents: this.events.length,
+      eventCounts,
+      avgConfidence,
+      lastEvent: this.events[0]
+    };
+  }
+  
+  /**
+   * Limpia todos los eventos
+   */
+  public clearEvents(): void {
+    this.events = [];
   }
 }
 
-// Helper function to get the diagnostics manager
-export function getFingerDiagnosticsManager(): FingerDiagnosticsManager {
-  return FingerDiagnosticsManager.getInstance();
-}
+// Singleton instance
+export const fingerDiagnostics = new FingerDiagnostics();
 
-// Helper function to report a finger detection event
+/**
+ * Reporta detección de dedo (equivalente a logFingerDetection mencionado en el error)
+ */
 export function reportFingerDetection(
+  isDetected: boolean, 
+  confidence: number, 
   source: DetectionSource, 
-  isFingerDetected: boolean,
-  confidence: number,
-  details?: any
+  details?: Record<string, any>
 ): void {
-  const manager = getFingerDiagnosticsManager();
-  manager.dispatchEvent(source, isFingerDetected, confidence, details);
-}
-
-// Helper function to add a detection listener
-export function addFingerDetectionListener(
-  callback: (event: FingerDetectionEvent) => void
-): () => void {
-  const manager = getFingerDiagnosticsManager();
-  return manager.addEventListener(callback);
+  fingerDiagnostics.logEvent({
+    eventType: isDetected ? 'FINGER_DETECTED' : 'FINGER_LOST',
+    source,
+    isFingerDetected: isDetected,
+    confidence,
+    details
+  });
 }

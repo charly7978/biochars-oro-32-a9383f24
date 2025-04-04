@@ -1,10 +1,11 @@
 /**
  * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
  * 
- * Sistema de calibración adaptativa para la detección de dedo
- * Ajusta los parámetros del detector según las condiciones ambientales y del usuario
+ * Calibración adaptativa para detección de dedos
+ * Ajusta sensibilidad y umbrales según condiciones ambientales
  */
 
+import { logError, ErrorLevel } from '@/utils/debugUtils';
 import { unifiedFingerDetector } from './unified-finger-detector';
 import { fingerDiagnostics } from './finger-diagnostics';
 
@@ -191,7 +192,7 @@ class AdaptiveCalibration {
       });
       
     } catch (error) {
-      console.error('AdaptiveCalibration: Error en calibración automática', error);
+      logError('AdaptiveCalibration: Error en calibración automática', error, ErrorLevel.ERROR);
     } finally {
       this.isPerformingCalibration = false;
     }
