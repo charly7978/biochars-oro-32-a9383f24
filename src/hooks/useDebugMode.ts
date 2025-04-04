@@ -1,85 +1,160 @@
 
 import { useState, useCallback, useEffect } from 'react';
-import { useToast } from '@/components/ui/use-toast';
-import { clearDiagnosticEvents } from '@/modules/signal-processing';
+import { 
+  logError, 
+  setVerboseLogging, 
+  ErrorLevel,
+  initializeErrorTracking 
+} from '@/utils/debugUtils';
+import { 
+  initializeErrorPreventionSystem,
+  acknowledgeIssues
+} from '@/utils/errorPrevention';
 
-// Interface for hook return
-interface DebugModeResult {
-  isDebugMode: boolean;
-  toggleDebugMode: () => void;
-  resetDebugData: () => void;
-  debugLevel: number;
-  setDebugLevel: (level: number) => void;
-}
+export const useDebugMode = () => {
+  // Check for debug mode in localStorage
+  const initialDebugMode = localStorage.getItem('debugMode') === 'true';
+  const [isDebugMode, setIsDebugMode] = useState<boolean>(initialDebugMode);
+  const [isPanelVisible, setIsPanelVisible] = useState<boolean>(false);
+  const [signalData, setSignalData] = useState<any[]>([]);
+  const [rawValues, setRawValues] = useState<number[]>([]);
+  const [filteredValues, setFilteredValues] = useState<number[]>([]);
+  const [metrics, setMetrics] = useState<any>({});
+  
+  // Initialize debug mode
+  useEffect(() => {
+    let cleanupErrorPrevention: (() => void) | null = null;
 
-/**
- * Hook for managing debug mode
- */
-export function useDebugMode(): DebugModeResult {
-  const [isDebugMode, setIsDebugMode] = useState<boolean>(false);
-  const [debugLevel, setDebugLevel] = useState<number>(1); // 1-Basic, 2-Intermediate, 3-Advanced
-  const { toast } = useToast();
-
+    if (isDebugMode) {
+      setVerboseLogging(true);
+      logError("Modo de depuración activado", ErrorLevel.INFO, "DebugMode");
+      
+      // Initialize error tracking and prevention systems
+      initializeErrorTracking({
+        verbose: true,
+        setupGlobalHandlers: true
+      });
+      
+      cleanupErrorPrevention = initializeErrorPreventionSystem();
+      
+      // Set up keyboard shortcut (Ctrl+Shift+D)
+      const handleKeyDown = (e: KeyboardEvent) => {
+        if (e.ctrlKey && e.shiftKey && e.key === 'D') {
+          setIsPanelVisible(prev => !prev);
+        }
+      };
+      
+      window.addEventListener('keydown', handleKeyDown);
+      
+      return () => {
+        window.removeEventListener('keydown', handleKeyDown);
+        if (cleanupErrorPrevention) {
+          cleanupErrorPrevention();
+        }
+      };
+    } else {
+      setVerboseLogging(false);
+      
+      // Initialize with basic error tracking
+      initializeErrorTracking({
+        verbose: false,
+        setupGlobalHandlers: true
+      });
+      
+      cleanupErrorPrevention = initializeErrorPreventionSystem();
+      
+      return () => {
+        if (cleanupErrorPrevention) {
+          cleanupErrorPrevention();
+        }
+      };
+    }
+  }, [isDebugMode]);
+  
   // Toggle debug mode
   const toggleDebugMode = useCallback(() => {
-    setIsDebugMode(prev => !prev);
-    toast({
-      title: `Debug Mode ${!isDebugMode ? 'Enabled' : 'Disabled'}`,
-      description: !isDebugMode 
-        ? 'Debug information is now visible'
-        : 'Debug information is now hidden',
-      variant: !isDebugMode ? 'default' : 'destructive',
-    });
-  }, [isDebugMode, toast]);
-
-  // Reset debug data
-  const resetDebugData = useCallback(() => {
-    // Clear diagnostic events
-    clearDiagnosticEvents();
+    const newMode = !isDebugMode;
+    setIsDebugMode(newMode);
+    localStorage.setItem('debugMode', newMode.toString());
     
-    toast({
-      title: 'Debug Data Reset',
-      description: 'All debug data has been cleared',
-      variant: 'default',
+    logError(
+      `Modo de depuración ${newMode ? 'activado' : 'desactivado'}`, 
+      ErrorLevel.INFO, 
+      "DebugMode"
+    );
+  }, [isDebugMode]);
+  
+  // Show/hide debug panel
+  const toggleDebugPanel = useCallback(() => {
+    setIsPanelVisible(prev => !prev);
+  }, []);
+  
+  // Add signal data for visualization
+  const addSignalData = useCallback((data: any) => {
+    setSignalData(prev => {
+      const newData = [...prev, data];
+      // Keep only the last 300 points
+      if (newData.length > 300) {
+        return newData.slice(-300);
+      }
+      return newData;
     });
-  }, [toast]);
-
-  // Debug keyboard shortcuts
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // Alt + D to toggle debug mode
-      if (e.altKey && e.key === 'd') {
-        toggleDebugMode();
+  }, []);
+  
+  // Add raw value for visualization
+  const addRawValue = useCallback((value: number) => {
+    setRawValues(prev => {
+      const newData = [...prev, value];
+      // Keep only the last 300 points
+      if (newData.length > 300) {
+        return newData.slice(-300);
       }
-      
-      // Alt + R to reset debug data
-      if (e.altKey && e.key === 'r') {
-        resetDebugData();
+      return newData;
+    });
+  }, []);
+  
+  // Add filtered value for visualization
+  const addFilteredValue = useCallback((value: number) => {
+    setFilteredValues(prev => {
+      const newData = [...prev, value];
+      // Keep only the last 300 points
+      if (newData.length > 300) {
+        return newData.slice(-300);
       }
-      
-      // Alt + 1-3 to set debug level
-      if (e.altKey && ['1', '2', '3'].includes(e.key)) {
-        const level = parseInt(e.key);
-        setDebugLevel(level);
-        toast({
-          title: `Debug Level ${level}`,
-          description: `Debug level set to ${
-            level === 1 ? 'Basic' : level === 2 ? 'Intermediate' : 'Advanced'
-          }`,
-          variant: 'default',
-        });
-      }
-    };
-    
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [toggleDebugMode, resetDebugData, toast]);
-
+      return newData;
+    });
+  }, []);
+  
+  // Update metrics
+  const updateMetrics = useCallback((newMetrics: any) => {
+    setMetrics(prev => ({
+      ...prev,
+      ...newMetrics
+    }));
+  }, []);
+  
+  // Acknowledge and reset issues
+  const resetIssues = useCallback(() => {
+    acknowledgeIssues();
+    logError("Issues acknowledged and reset", ErrorLevel.INFO, "DebugMode");
+  }, []);
+  
   return {
     isDebugMode,
     toggleDebugMode,
-    resetDebugData,
-    debugLevel,
-    setDebugLevel
+    isPanelVisible,
+    toggleDebugPanel,
+    showDebugPanel: () => setIsPanelVisible(true),
+    hideDebugPanel: () => setIsPanelVisible(false),
+    signalData,
+    addSignalData,
+    rawValues,
+    addRawValue,
+    filteredValues,
+    addFilteredValue,
+    metrics,
+    updateMetrics,
+    resetIssues
   };
-}
+};
+

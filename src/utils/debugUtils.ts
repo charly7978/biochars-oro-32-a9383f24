@@ -1,130 +1,192 @@
-
 /**
- * Utilidades de depuración para toda la aplicación
+ * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
+ * 
+ * Utilidades para depuración agresiva y rastreo de errores
  */
 
+import { useToast } from "@/hooks/use-toast";
+
+// Define error levels
 export enum ErrorLevel {
-  DEBUG = 'debug',
-  INFO = 'info',
-  WARN = 'warn',
-  WARNING = 'warning', // Adding WARNING as an alias for WARN for backward compatibility
-  ERROR = 'error',
-  CRITICAL = 'critical'
+  INFO = "info",
+  WARNING = "warning",
+  ERROR = "error",
+  CRITICAL = "critical"
 }
 
-export interface ErrorTrackingConfig {
-  verbose?: boolean;
-  setupGlobalHandlers?: boolean;
-  logToConsole?: boolean;
-  maxLogSize?: number;
-  applicationVersion?: string;
-}
-
-export interface LogEntry {
+// Interface for error tracking
+export interface ErrorEvent {
+  timestamp: number;
   message: string;
   level: ErrorLevel;
-  timestamp: number;
-  moduleId?: string;
-  module?: string; // Adding for backward compatibility
-  source?: string;
+  source: string;
   data?: any;
   stack?: string;
+  sessionId?: string;
+  userId?: string;
+  deviceInfo?: {
+    userAgent: string;
+    platform: string;
+    screenSize: string;
+    memoryInfo?: any;
+  };
 }
 
-let errorLogs: LogEntry[] = [];
-let errorBuffer: LogEntry[] = []; // Added separate buffer for buffered logs
-let isVerboseLogging = false;
-let maxLogSize = 1000;
-let maxBufferSize = 500; // Setting a default buffer size
-let errorHandlers: Function[] = [];
+// Global error buffer
+const errorBuffer: ErrorEvent[] = [];
+const MAX_ERROR_BUFFER = 100;
+
+// Flag to control verbose logging
+let verboseLoggingEnabled = false;
+
+// Session identifier for grouping errors
+const sessionId = generateSessionId();
 
 /**
- * Inicializa el sistema de seguimiento de errores
+ * Generate a unique session identifier
  */
-export function initializeErrorTracking(config: ErrorTrackingConfig = {}): void {
-  isVerboseLogging = config.verbose || false;
-  maxLogSize = config.maxLogSize || 1000;
-  
-  // Configurar manejadores globales si se solicita
-  if (config.setupGlobalHandlers) {
-    setupGlobalHandlers();
+function generateSessionId(): string {
+  return Date.now().toString(36) + Math.random().toString(36).substring(2);
+}
+
+/**
+ * Get device information for error context
+ */
+function getDeviceInfo(): ErrorEvent['deviceInfo'] {
+  try {
+    return {
+      userAgent: navigator.userAgent,
+      platform: navigator.platform,
+      screenSize: `${window.innerWidth}x${window.innerHeight}`,
+      memoryInfo: (performance as any).memory ? {
+        jsHeapSizeLimit: (performance as any).memory.jsHeapSizeLimit,
+        totalJSHeapSize: (performance as any).memory.totalJSHeapSize,
+        usedJSHeapSize: (performance as any).memory.usedJSHeapSize
+      } : undefined
+    };
+  } catch (e) {
+    return {
+      userAgent: 'unknown',
+      platform: 'unknown',
+      screenSize: 'unknown'
+    };
   }
-  
-  logError(
-    `Sistema de seguimiento inicializado, verbose: ${isVerboseLogging}`,
-    ErrorLevel.INFO,
-    'ErrorTracking'
-  );
 }
 
 /**
- * Configura el modo verbose de logging
- */
-export function setVerboseLogging(verbose: boolean): void {
-  isVerboseLogging = verbose;
-  logError(
-    `Verbose logging ${verbose ? 'activado' : 'desactivado'}`,
-    ErrorLevel.INFO,
-    'ErrorTracking'
-  );
-}
-
-/**
- * Registra un error en el sistema
+ * Log an error or diagnostic event
  */
 export function logError(
   message: string,
   level: ErrorLevel = ErrorLevel.ERROR,
-  moduleId?: string,
+  source: string = "Unknown",
   data?: any
 ): void {
-  // Solo registrar mensajes de depuración si el modo verbose está activo
-  if (level === ErrorLevel.DEBUG && !isVerboseLogging) {
-    return;
-  }
-  
-  const logEntry: LogEntry = {
+  const errorEvent: ErrorEvent = {
+    timestamp: Date.now(),
     message,
     level,
-    timestamp: Date.now(),
-    moduleId,
-    module: moduleId, // For backward compatibility
-    source: getCallSource(),
+    source,
     data,
-    stack: new Error().stack
+    sessionId,
+    deviceInfo: getDeviceInfo()
   };
   
-  // Agregar al registro
-  errorLogs.push(logEntry);
-  
-  // Also add to buffer for components that use the buffer
-  errorBuffer.push(logEntry);
-  
-  // Limitar tamaño del registro
-  if (errorLogs.length > maxLogSize) {
-    errorLogs.shift();
-  }
-  
-  // Limit buffer size
-  if (errorBuffer.length > maxBufferSize) {
+  // Always add to buffer for retrieval
+  errorBuffer.push(errorEvent);
+  if (errorBuffer.length > MAX_ERROR_BUFFER) {
     errorBuffer.shift();
   }
   
-  // Notificar a manejadores de errores
-  if (level === ErrorLevel.ERROR || level === ErrorLevel.CRITICAL) {
-    notifyErrorHandlers(logEntry);
+  // Console logging based on level
+  const consoleStyles = getConsoleStylesForLevel(level);
+  
+  // Format timestamp
+  const formattedTime = new Date(errorEvent.timestamp).toISOString();
+  
+  // Always log errors and critical issues
+  if (level === ErrorLevel.ERROR || level === ErrorLevel.CRITICAL || verboseLoggingEnabled) {
+    console.group(`%c${level.toUpperCase()} [${formattedTime}] - ${source}`, consoleStyles);
+    console.log(message);
+    if (data) {
+      console.log("Additional data:", data);
+    }
+    console.groupEnd();
   }
   
-  // Mostrar en consola si está configurado
-  if (shouldLogToConsole(level)) {
-    logToConsole(logEntry);
+  // For critical errors, add stack trace
+  if (level === ErrorLevel.CRITICAL) {
+    const stack = new Error().stack;
+    errorEvent.stack = stack;
+    console.error("Stack trace:", stack);
+
+    // Report to window.onerror for global handling
+    setTimeout(() => {
+      const errorObj = new Error(message);
+      errorObj.stack = stack;
+      // @ts-ignore
+      window.onerror && window.onerror(message, source, undefined, undefined, errorObj);
+    }, 0);
+  }
+  
+  // Send error to analytics or monitoring service if available
+  if (level === ErrorLevel.ERROR || level === ErrorLevel.CRITICAL) {
+    sendToErrorMonitoring(errorEvent);
   }
 }
 
 /**
- * Get logs from the error buffer
+ * Send error to monitoring service (placeholder)
  */
-export function getErrorBuffer(): LogEntry[] {
+function sendToErrorMonitoring(errorEvent: ErrorEvent): void {
+  // This function can be implemented to send errors to a monitoring service
+  // For now, it's just a placeholder
+  if (window.navigator.onLine && errorEvent.level === ErrorLevel.CRITICAL) {
+    // Example implementation:
+    // const endpoint = 'https://api.errormonitoring.com/report';
+    // fetch(endpoint, {
+    //   method: 'POST',
+    //   headers: { 'Content-Type': 'application/json' },
+    //   body: JSON.stringify(errorEvent),
+    //   keepalive: true
+    // }).catch(e => console.error('Failed to send error report:', e));
+  }
+}
+
+/**
+ * Get console styling based on error level
+ */
+function getConsoleStylesForLevel(level: ErrorLevel): string {
+  switch (level) {
+    case ErrorLevel.INFO:
+      return "color: #3498db; font-weight: bold;";
+    case ErrorLevel.WARNING:
+      return "color: #f39c12; font-weight: bold;";
+    case ErrorLevel.ERROR:
+      return "color: #e74c3c; font-weight: bold;";
+    case ErrorLevel.CRITICAL:
+      return "color: #ffffff; background-color: #c0392b; font-weight: bold; padding: 2px 5px; border-radius: 3px;";
+    default:
+      return "color: #2c3e50;";
+  }
+}
+
+/**
+ * Enable or disable verbose logging
+ */
+export function setVerboseLogging(enabled: boolean): void {
+  verboseLoggingEnabled = enabled;
+  logError(
+    `Verbose logging ${enabled ? 'enabled' : 'disabled'}`,
+    ErrorLevel.INFO,
+    "DebugUtils"
+  );
+}
+
+/**
+ * Get all errors in the buffer
+ */
+export function getErrorBuffer(): ErrorEvent[] {
   return [...errorBuffer];
 }
 
@@ -132,229 +194,204 @@ export function getErrorBuffer(): LogEntry[] {
  * Clear the error buffer
  */
 export function clearErrorBuffer(): void {
-  errorBuffer = [];
-  logError(
-    'Error buffer cleared',
-    ErrorLevel.INFO,
-    'ErrorTracking'
-  );
+  errorBuffer.length = 0;
+  logError("Error buffer cleared", ErrorLevel.INFO, "DebugUtils");
 }
 
 /**
- * Determina si un nivel de error debe mostrarse en consola
+ * Filter error buffer by criteria
  */
-function shouldLogToConsole(level: ErrorLevel): boolean {
-  // Siempre mostrar errores y críticos
-  if (level === ErrorLevel.ERROR || level === ErrorLevel.CRITICAL) {
+export function filterErrorBuffer(options: {
+  level?: ErrorLevel,
+  source?: string,
+  fromTime?: number,
+  toTime?: number
+}): ErrorEvent[] {
+  return errorBuffer.filter(error => {
+    if (options.level && error.level !== options.level) return false;
+    if (options.source && error.source !== options.source) return false;
+    if (options.fromTime && error.timestamp < options.fromTime) return false;
+    if (options.toTime && error.timestamp > options.toTime) return false;
     return true;
-  }
-  
-  // Para otros niveles, solo mostrar si verbose está activo
-  return isVerboseLogging;
+  });
 }
 
 /**
- * Registra una entrada en la consola
+ * Map error level to toast variant
  */
-function logToConsole(entry: LogEntry): void {
-  const timestamp = new Date(entry.timestamp).toISOString();
-  const prefix = `[${timestamp}] [${entry.level.toUpperCase()}]${entry.moduleId ? ` [${entry.moduleId}]` : ''}`;
-  
-  switch (entry.level) {
-    case ErrorLevel.DEBUG:
-      console.debug(`${prefix} ${entry.message}`, entry.data || '');
-      break;
-    case ErrorLevel.INFO:
-      console.info(`${prefix} ${entry.message}`, entry.data || '');
-      break;
-    case ErrorLevel.WARN:
-      console.warn(`${prefix} ${entry.message}`, entry.data || '');
-      break;
+function mapErrorLevelToToastVariant(level: ErrorLevel): "default" | "destructive" {
+  switch (level) {
+    case ErrorLevel.WARNING:
+      return "default"; // Changed from "warning" to "default"
     case ErrorLevel.ERROR:
     case ErrorLevel.CRITICAL:
-      console.error(`${prefix} ${entry.message}`, entry.data || '');
-      if (entry.stack) {
-        console.error(entry.stack);
-      }
-      break;
+      return "destructive";
+    default:
+      return "default";
   }
 }
 
 /**
- * Obtiene la fuente de la llamada
+ * Hook for using error tracking with toast notifications
  */
-function getCallSource(): string {
+export function useErrorTracking() {
+  const { toast } = useToast();
+  
+  const trackError = (
+    message: string,
+    level: ErrorLevel = ErrorLevel.ERROR,
+    source: string = "Unknown",
+    data?: any,
+    showToast: boolean = true
+  ) => {
+    logError(message, level, source, data);
+    
+    if (showToast) {
+      // Only show toast for warnings, errors and critical issues
+      if (level !== ErrorLevel.INFO) {
+        toast({
+          title: level.toUpperCase(),
+          description: `${source}: ${message}`,
+          variant: mapErrorLevelToToastVariant(level),
+          duration: level === ErrorLevel.CRITICAL ? 5000 : 3000,
+        });
+      }
+    }
+  };
+  
+  return {
+    trackError,
+    getErrors: getErrorBuffer,
+    filterErrors: filterErrorBuffer,
+    clearErrors: clearErrorBuffer,
+    setVerboseLogging
+  };
+}
+
+/**
+ * Check if an object is circular (for safe JSON stringification)
+ */
+export function detectCircular(obj: any): boolean {
   try {
-    const err = new Error();
-    const stack = err.stack || '';
-    const stackLines = stack.split('\n');
-    
-    // Buscar la primera línea que no sea de este archivo
-    const relevantLine = stackLines.find(line => !line.includes('debugUtils.ts'));
-    
-    if (relevantLine) {
-      // Extraer información relevante
-      const match = relevantLine.match(/\s+at\s+([^\s]+)\s+\((.+):(\d+):(\d+)\)/);
-      if (match) {
-        const [_, functionName, filePath, line, column] = match;
-        const filePathParts = filePath.split('/');
-        const fileName = filePathParts[filePathParts.length - 1];
-        return `${functionName} (${fileName}:${line})`;
-      }
+    JSON.stringify(obj);
+    return false;
+  } catch (error) {
+    if ((error as Error).message.includes('circular')) {
+      return true;
     }
-    
-    return 'unknown';
-  } catch (e) {
-    return 'error-getting-source';
-  }
-}
-
-/**
- * Configura manejadores globales para errores no capturados
- */
-function setupGlobalHandlers(): void {
-  // Manejador de errores no capturados
-  window.addEventListener('error', (event) => {
-    logError(
-      `Error no capturado: ${event.message}`,
-      ErrorLevel.ERROR,
-      'GlobalHandler',
-      { 
-        filename: event.filename,
-        lineno: event.lineno,
-        colno: event.colno,
-        error: event.error
-      }
-    );
-  });
-  
-  // Manejador de promesas rechazadas no capturadas
-  window.addEventListener('unhandledrejection', (event) => {
-    const reason = event.reason ? (event.reason.toString ? event.reason.toString() : JSON.stringify(event.reason)) : 'Unknown reason';
-    logError(
-      `Promesa rechazada no capturada: ${reason}`,
-      ErrorLevel.ERROR,
-      'GlobalHandler',
-      { reason: event.reason }
-    );
-  });
-  
-  logError(
-    'Manejadores globales de errores configurados',
-    ErrorLevel.INFO,
-    'ErrorTracking'
-  );
-}
-
-/**
- * Registra un manejador de errores
- */
-export function registerErrorHandler(handler: Function): void {
-  errorHandlers.push(handler);
-  logError(
-    `Nuevo manejador de errores registrado. Total: ${errorHandlers.length}`,
-    ErrorLevel.INFO,
-    'ErrorTracking'
-  );
-}
-
-/**
- * Notifica a todos los manejadores de errores
- */
-function notifyErrorHandlers(entry: LogEntry): void {
-  errorHandlers.forEach(handler => {
-    try {
-      handler(entry);
-    } catch (e) {
-      console.error('Error en manejador de errores:', e);
-    }
-  });
-}
-
-/**
- * Obtiene todos los registros de errores
- */
-export function getErrorLogs(): LogEntry[] {
-  return [...errorLogs];
-}
-
-/**
- * Obtiene los registros filtrados por nivel
- */
-export function getFilteredErrorLogs(level?: ErrorLevel): LogEntry[] {
-  if (!level) {
-    return [...errorLogs];
-  }
-  
-  return errorLogs.filter(entry => entry.level === level);
-}
-
-/**
- * Limpia todos los registros de errores
- */
-export function clearErrorLogs(): void {
-  errorLogs = [];
-  logError(
-    'Registros de error limpiados',
-    ErrorLevel.INFO,
-    'ErrorTracking'
-  );
-}
-
-/**
- * Detecta referencias circulares en un objeto
- */
-export function detectCircular(obj: any, seen = new WeakSet()): boolean {
-  // Valores primitivos no tienen referencias circulares
-  if (obj === null || typeof obj !== 'object') {
     return false;
   }
-  
-  // Si ya hemos visto este objeto, es circular
-  if (seen.has(obj)) {
-    return true;
-  }
-  
-  // Agregar este objeto a los vistos
-  seen.add(obj);
-  
-  // Verificar en propiedades
-  for (const key in obj) {
-    if (Object.prototype.hasOwnProperty.call(obj, key)) {
-      if (detectCircular(obj[key], seen)) {
-        return true;
-      }
-    }
-  }
-  
-  // Verificar en arrays
-  if (Array.isArray(obj)) {
-    for (const item of obj) {
-      if (detectCircular(item, seen)) {
-        return true;
-      }
-    }
-  }
-  
-  return false;
 }
 
 /**
- * Convierte un objeto a JSON, manejando referencias circulares
+ * Safe stringify that handles circular references
  */
-export function safeStringify(obj: any, space?: number): string {
-  try {
-    const cache = new WeakSet();
-    return JSON.stringify(obj, (key, value) => {
-      if (typeof value === 'object' && value !== null) {
-        if (cache.has(value)) {
-          return '[Circular Reference]';
-        }
-        cache.add(value);
+export function safeStringify(obj: any, space: number = 2): string {
+  const seen = new WeakSet();
+  return JSON.stringify(obj, (key, value) => {
+    if (typeof value === 'object' && value !== null) {
+      if (seen.has(value)) {
+        return '[Circular Reference]';
       }
-      return value;
-    }, space);
-  } catch (e) {
-    return `[Error al convertir objeto: ${e}]`;
+      seen.add(value);
+    }
+    return value;
+  }, space);
+}
+
+/**
+ * Performance monitoring utility
+ */
+export function monitorPerformance<T>(
+  fn: () => T,
+  name: string,
+  thresholdMs: number = 100
+): T {
+  const start = performance.now();
+  try {
+    return fn();
+  } finally {
+    const duration = performance.now() - start;
+    if (duration > thresholdMs) {
+      logError(
+        `Performance warning: ${name} took ${duration.toFixed(2)}ms (threshold: ${thresholdMs}ms)`,
+        ErrorLevel.WARNING,
+        "PerformanceMonitor",
+        { duration, threshold: thresholdMs }
+      );
+    }
   }
+}
+
+/**
+ * Wrap a function with error tracking
+ */
+export function withErrorTracking<T extends (...args: any[]) => any>(
+  fn: T,
+  source: string
+): (...args: Parameters<T>) => ReturnType<T> {
+  return (...args: Parameters<T>): ReturnType<T> => {
+    try {
+      return fn(...args);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorStack = error instanceof Error ? error.stack : undefined;
+      
+      logError(
+        `Error in ${source}: ${errorMessage}`,
+        ErrorLevel.ERROR,
+        source,
+        { args, error, stack: errorStack }
+      );
+      
+      throw error;
+    }
+  };
+}
+
+/**
+ * Setup global error handlers
+ */
+export function setupGlobalErrorHandlers(): void {
+  // Handle uncaught exceptions
+  window.onerror = (message, source, lineno, colno, error) => {
+    logError(
+      String(message),
+      ErrorLevel.CRITICAL,
+      source ? String(source) : 'Global',
+      { lineno, colno, error: error instanceof Error ? error.message : String(error) },
+    );
+    return false; // Let default error handler run
+  };
+
+  // Handle unhandled promise rejections
+  window.addEventListener('unhandledrejection', (event) => {
+    const reason = event.reason;
+    logError(
+      `Unhandled Promise Rejection: ${reason instanceof Error ? reason.message : String(reason)}`,
+      ErrorLevel.CRITICAL,
+      'Promise',
+      { reason, stack: reason instanceof Error ? reason.stack : new Error().stack }
+    );
+  });
+
+  logError('Global error handlers configured', ErrorLevel.INFO, 'DebugUtils');
+}
+
+/**
+ * Initialize error tracking on application startup
+ */
+export function initializeErrorTracking(options: {
+  verbose?: boolean,
+  setupGlobalHandlers?: boolean
+} = {}): void {
+  if (options.verbose) {
+    setVerboseLogging(true);
+  }
+  
+  if (options.setupGlobalHandlers !== false) {
+    setupGlobalErrorHandlers();
+  }
+  
+  logError('Error tracking initialized', ErrorLevel.INFO, 'DebugUtils');
 }
