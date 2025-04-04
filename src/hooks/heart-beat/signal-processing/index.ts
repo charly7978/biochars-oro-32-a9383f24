@@ -15,7 +15,8 @@ export {
   shouldProcessMeasurement, 
   createWeakSignalResult,
   resetSignalQualityState,
-  isFingerDetected
+  isFingerDetected,
+  getSignalQualityState
 } from './signal-quality';
 
 export { 
@@ -30,7 +31,8 @@ export {
 export { 
   updateLastValidBpm, 
   processLowConfidenceResult,
-  enhanceDiagnosticData
+  enhanceDiagnosticData,
+  dispatchArrhythmiaVisualizationEvent
 } from './result-processor';
 
 export {
