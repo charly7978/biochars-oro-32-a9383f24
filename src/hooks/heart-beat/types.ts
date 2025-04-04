@@ -1,4 +1,3 @@
-
 import { RRAnalysisResult } from '../arrhythmia/types';
 
 export interface RRIntervalData {
@@ -6,14 +5,23 @@ export interface RRIntervalData {
   lastPeakTime: number | null;
 }
 
+export interface RRIntervalItem {
+  time: number;
+  rrInterval: number;
+  isValid: boolean;
+}
+
 export interface HeartBeatResult {
   bpm: number;
   confidence: number;
   isPeak: boolean;
-  filteredValue?: number;
   arrhythmiaCount: number;
-  isArrhythmia?: boolean;
-  rrData?: RRIntervalData;
+  cardiacPeakCount?: number;  // Added for compatibility
+  cardiacArrhythmiaCount?: number; // Added for compatibility
+  rrData: {
+    intervals: number[] | RRIntervalItem[];
+    lastPeakTime: number | null;
+  };
 }
 
 export interface UseHeartBeatReturn {

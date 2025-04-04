@@ -5,7 +5,7 @@ import { RRAnalysisResult } from './arrhythmia/types';
 import { useBeepProcessor } from './heart-beat/beep-processor';
 import { useArrhythmiaDetector } from './heart-beat/arrhythmia-detector';
 import { useSignalProcessor } from './heart-beat/signal-processor';
-import { HeartBeatResult, UseHeartBeatReturn } from './heart-beat/types';
+import { HeartBeatResult, UseHeartBeatReturn, RRIntervalItem } from './heart-beat/types';
 import { useCardiacSignal } from './useCardiacSignal';
 
 export const useHeartBeatProcessor = (): UseHeartBeatReturn => {
@@ -123,6 +123,7 @@ export const useHeartBeatProcessor = (): UseHeartBeatReturn => {
       if (lastPeakTimeRef.current && lastPeakTimeRef.current > 0) {
         const rrInterval = now - lastPeakTimeRef.current;
         if (rrInterval > 300 && rrInterval < 1500) { // Valid RR interval range
+          // Store as RRIntervalItem object
           lastRRIntervalsRef.current.push({
             time: now,
             rrInterval,

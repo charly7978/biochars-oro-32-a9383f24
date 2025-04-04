@@ -12,18 +12,16 @@ export interface VitalSignsResult {
     isArrhythmia: boolean;
     confidence: number;
     timestamp: number;
-  };
+  } | null;
 }
 
-export type VitalSignType = 
-  | 'CARDIAC'
-  | 'SPO2'
-  | 'BLOOD_PRESSURE'
-  | 'GLUCOSE'
-  | 'LIPIDS';
+// Using the VitalSignType enum from the central signal.ts file
+export { VitalSignType } from '../../types/signal';
 
 export interface ChannelFeedback {
   value: number;
   timestamp: number;
   quality: number;
+  channelId?: string;
+  suggestedAdjustments?: any;
 }

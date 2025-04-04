@@ -1,4 +1,3 @@
-
 /**
  * Signal processing types
  */
@@ -34,13 +33,12 @@ export interface HeartbeatProcessor {
 }
 
 export interface ProcessedHeartbeatSignal {
-  timestamp: number;
-  bpm: number;
   isPeak: boolean;
   confidence: number;
+  value: number;
+  bpm: number | null;
   rrInterval: number | null;
-  arrhythmiaDetected: boolean;
-  rhythmQuality: number;
+  heartRateVariability: number | null;
 }
 
 export interface HeartbeatProcessingOptions {
@@ -49,6 +47,10 @@ export interface HeartbeatProcessingOptions {
   peakThreshold?: number;
   minPeakDistance?: number;
   arrhythmiaDetectionSensitivity?: number;
+  useAdaptiveControl?: boolean;
+  qualityEnhancedByPrediction?: boolean;
+  adaptationRate?: number;
+  predictionHorizon?: number;
 }
 
 export interface OptimizedChannel {

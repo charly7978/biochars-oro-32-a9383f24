@@ -1,103 +1,124 @@
+import { VitalSignType, ChannelFeedback } from '../../../types/signal';
 
 /**
- * Base class for specialized signal processing channels
- * Each channel optimizes the signal for a specific vital sign
+ * Abstract class for specialized signal processing channels
+ * Provides a base for optimizing signals for specific vital signs
  */
-
-import { VitalSignType } from '../../../types/signal';
-
-/**
- * Configuration for a specialized channel
- */
-export interface ChannelConfig {
-  sampleRate?: number;
-  bufferSize?: number;
-  adaptiveThreshold?: number;
-}
-
-/**
- * Interface for optimized signal channel
- */
-export interface OptimizedSignalChannel {
-  type: VitalSignType;
-  processValue(value: number): number;
-  reset(): void;
-  configure(config: ChannelConfig): void;
-}
-
-/**
- * Base class for all specialized channels
- */
-export abstract class SpecializedChannel implements OptimizedSignalChannel {
-  public type: VitalSignType;
-  protected readonly sampleRate: number = 25; // Default sample rate in Hz
-  protected readonly bufferSize: number = 100; // Max values to store
-  protected adaptiveThreshold: number = 0.5;
-  protected recentValues: number[] = [];
+export abstract class SpecializedChannel {
+  protected vitalSignType: VitalSignType;
+  protected config: ChannelConfig;
   
-  constructor(type: VitalSignType, config: ChannelConfig = {}) {
-    this.type = type;
-    
-    if (config.sampleRate) this.sampleRate = config.sampleRate;
-    if (config.bufferSize) this.bufferSize = config.bufferSize;
-    if (config.adaptiveThreshold !== undefined) this.adaptiveThreshold = config.adaptiveThreshold;
+  constructor(vitalSignType: VitalSignType, config: ChannelConfig) {
+    this.vitalSignType = vitalSignType;
+    this.config = config;
   }
   
   /**
-   * Process a value through the channel
-   * @param value Raw value to process
-   * @returns Optimized value for this specific vital sign
+   * Process the signal with channel-specific optimizations
    */
-  public processValue(value: number): number {
-    // Store value in recent values buffer
-    this.recentValues.push(value);
-    if (this.recentValues.length > this.bufferSize) {
-      this.recentValues.shift();
-    }
+  public processSignal(value: number): number {
+    let optimizedValue = this.applyChannelSpecificOptimization(value);
     
-    // Apply generic preprocessing
-    const preprocessedValue = this.applyCommonPreprocessing(value);
-    
-    // Apply channel-specific optimization
-    const optimizedValue = this.applyChannelSpecificOptimization(preprocessedValue);
+    // Apply any common signal processing steps here
+    optimizedValue = this.applyCommonSignalProcessing(optimizedValue);
     
     return optimizedValue;
   }
   
   /**
-   * Apply common preprocessing steps
-   */
-  protected applyCommonPreprocessing(value: number): number {
-    // Apply generic preprocessing steps
-    return value;
-  }
-  
-  /**
-   * Apply channel-specific optimization
-   * To be implemented by each channel type
+   * Apply channel-specific optimization to the signal
+   * This method must be implemented by subclasses
    */
   protected abstract applyChannelSpecificOptimization(value: number): number;
   
   /**
-   * Reset the channel state
+   * Apply common signal processing steps
+   * This method can be overridden by subclasses
    */
-  public reset(): void {
-    this.recentValues = [];
+  protected applyCommonSignalProcessing(value: number): number {
+    // Apply any common signal processing steps here
+    return value * this.config.amplificationFactor;
   }
   
   /**
-   * Configure channel parameters
+   * Get feedback from the channel
    */
-  public configure(config: ChannelConfig): void {
-    if (config.sampleRate) this.sampleRate = config.sampleRate;
-    if (config.bufferSize) this.bufferSize = config.bufferSize;
-    if (config.adaptiveThreshold !== undefined) this.adaptiveThreshold = config.adaptiveThreshold;
+  public getFeedback(value: number, timestamp: number): ChannelFeedback {
+    return {
+      value: value,
+      timestamp: timestamp,
+      quality: this.config.qualityThreshold,
+      channelId: this.vitalSignType
+    };
   }
 }
 
 /**
- * Factory function to create channels
+ * Configuration interface for specialized channels
  */
-export function createChannel(type: VitalSignType, config: ChannelConfig = {}): OptimizedSignalChannel {
-  throw new Error(`Channel type ${type} not implemented`);
+export interface ChannelConfig {
+  amplificationFactor: number;
+  filterStrength: number;
+  qualityThreshold: number;
+}
+
+/**
+ * Optimized signal channel with configurable parameters
+ */
+export class OptimizedSignalChannel {
+  // Instead of readonly properties, make them private with getters/setters
+  private _sampleRate: number = 30;
+  private _bufferSize: number = 128;
+  
+  constructor(sampleRate: number = 30, bufferSize: number = 128) {
+    this._sampleRate = sampleRate;
+    this._bufferSize = bufferSize;
+  }
+
+  /**
+   * Process the signal with channel-specific optimizations
+   */
+  public processSignal(value: number): number {
+    // Apply signal processing steps here
+    let optimizedValue = this.applySignalOptimization(value);
+    
+    // Apply any common signal processing steps here
+    optimizedValue = this.applyCommonSignalProcessing(optimizedValue);
+    
+    return optimizedValue;
+  }
+
+  /**
+   * Apply signal-specific optimization to the signal
+   */
+  protected applySignalOptimization(value: number): number {
+    // Apply signal-specific processing here
+    return value * 1.05;
+  }
+
+  /**
+   * Apply common signal processing steps
+   */
+  protected applyCommonSignalProcessing(value: number): number {
+    // Apply any common signal processing steps here
+    return value * 1.1;
+  }
+
+  // Create getters
+  get sampleRate(): number {
+    return this._sampleRate;
+  }
+
+  get bufferSize(): number {
+    return this._bufferSize;
+  }
+
+  // Create setters that will be used instead of direct assignment
+  set sampleRate(value: number) {
+    this._sampleRate = value;
+  }
+
+  set bufferSize(value: number) {
+    this._bufferSize = value;
+  }
 }
