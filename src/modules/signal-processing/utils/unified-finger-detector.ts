@@ -1,3 +1,4 @@
+
 /**
  * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
  * 
@@ -14,8 +15,6 @@ type DetectionSource =
   | 'ppg-extractor'      // Detección del extractor PPG
   | 'camera-analysis'    // Análisis de la cámara
   | 'weak-signal-result' // Resultado de la detección de señal débil
-  | 'extraction'         // Extractor genérico
-  | 'signalProcessor'    // Procesador de señal
   | 'manual-override';   // Anulación manual (para pruebas)
 
 // Estado de una fuente de detección
@@ -69,8 +68,6 @@ class UnifiedFingerDetector {
         'ppg-extractor': this.createInitialSourceState(),
         'camera-analysis': this.createInitialSourceState(),
         'weak-signal-result': this.createInitialSourceState(),
-        'extraction': this.createInitialSourceState(),
-        'signalProcessor': this.createInitialSourceState(),
         'manual-override': this.createInitialSourceState()
       },
       historyBuffer: [],
@@ -256,21 +253,6 @@ class UnifiedFingerDetector {
     });
     
     return totalWeight > 0 ? weightedSum / totalWeight : 0;
-  }
-  
-  /**
-   * Adapta los umbrales de detección basado en la calidad de la señal
-   * y otras condiciones ambientales
-   */
-  public adaptThresholds(signalQuality: number, brightness?: number): void {
-    // Implementación simple de adaptación de umbrales basada en calidad
-    // y brillo ambiental (opcional)
-    if (this.debug) {
-      console.log(`UnifiedFingerDetector: Adaptando umbrales - Calidad: ${signalQuality.toFixed(1)}, Brillo: ${brightness?.toFixed(1) || 'N/A'}`);
-    }
-    
-    // Aquí podemos implementar lógica adaptativa si es necesario
-    // Por ahora es un placeholder para la funcionalidad
   }
   
   /**

@@ -4,7 +4,7 @@
  * 
  * Hook integrador para procesamiento de señales y extracción de signos vitales
  * Conecta los módulos de extracción con los de procesamiento
- * Versión mejorada con detección de dedos unificada y diagnóstico
+ * Versión mejorada con detección de dedos unificada
  */
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { usePPGExtraction } from './usePPGExtraction';
@@ -12,7 +12,6 @@ import { useSignalProcessing } from './useSignalProcessing';
 import { useVitalSignsProcessor } from './useVitalSignsProcessor';
 import { logError, ErrorLevel } from '@/utils/debugUtils';
 import { unifiedFingerDetector } from '@/modules/signal-processing/utils/unified-finger-detector';
-import { fingerDiagnostics } from '@/modules/signal-processing/utils/finger-diagnostics';
 
 /**
  * Resultado integrado del procesamiento completo
@@ -61,16 +60,6 @@ export function useVitalSignsWithProcessing() {
   const processedFramesRef = useRef<number>(0);
   const lastProcessTimeRef = useRef<number>(Date.now());
   const ambientBrightnessRef = useRef<number | undefined>(undefined);
-  const lastErrorTimeRef = useRef<number>(0);
-  const errorCountRef = useRef<number>(0);
-  
-  // Estado de depuración
-  const [debugInfo, setDebugInfo] = useState({
-    frameRate: 0,
-    processingTime: 0,
-    extractionQuality: 0,
-    unifiedConfidence: 0
-  });
   
   /**
    * Actualiza el brillo ambiental para adaptar umbrales
@@ -86,72 +75,22 @@ export function useVitalSignsWithProcessing() {
   
   /**
    * Procesa un frame completo de la cámara
-   * Versión mejorada con mejor manejo de errores y diagnóstico
    */
   const processFrame = useCallback((imageData: ImageData) => {
     if (!isMonitoring) return;
     
     try {
-      const startTime = performance.now();
-      
       // 1. Extraer valor PPG crudo del frame
       extraction.processFrame(imageData);
       
-      const endTime = performance.now();
-      const processingTime = endTime - startTime;
-      
-      // Actualizar métricas de depuración cada 30 frames
-      if (processedFramesRef.current % 30 === 0) {
-        const now = Date.now();
-        const elapsedMs = now - lastProcessTimeRef.current;
-        const frameRate = elapsedMs > 0 ? (30 * 1000) / elapsedMs : 0;
-        
-        setDebugInfo({
-          frameRate: Math.round(frameRate * 10) / 10,
-          processingTime: Math.round(processingTime * 100) / 100,
-          extractionQuality: extraction.lastResult?.quality || 0,
-          unifiedConfidence: detectionConfidenceRef.current
-        });
-        
-        lastProcessTimeRef.current = now;
-      }
-      
-      processedFramesRef.current++;
-      
-      // Resetear contador de errores cuando tenemos procesamiento exitoso
-      errorCountRef.current = 0;
-      
+      // El procesamiento posterior se maneja en el useEffect
     } catch (error) {
-      const now = Date.now();
       const errorMessage = error instanceof Error ? error.message : String(error);
-      
-      // Limitar frecuencia de logging de errores
-      if (now - lastErrorTimeRef.current > 5000) {
-        logError(
-          `Error procesando frame: ${errorMessage}`,
-          ErrorLevel.ERROR,
-          "VitalSignsProcessor"
-        );
-        
-        lastErrorTimeRef.current = now;
-      }
-      
-      errorCountRef.current++;
-      
-      // Registrar diagnóstico de error para análisis
-      if (errorCountRef.current % 10 === 1) { // Registrar cada 10 errores 
-        fingerDiagnostics.logEvent({
-          eventType: 'PROCESSING_ERROR',
-          source: 'frame-processing',
-          isFingerDetected: false,
-          confidence: 0,
-          details: {
-            errorMessage,
-            consecutiveErrors: errorCountRef.current,
-            totalFrames: processedFramesRef.current
-          }
-        });
-      }
+      logError(
+        `Error procesando frame: ${errorMessage}`,
+        ErrorLevel.ERROR,
+        "VitalSignsProcessor"
+      );
     }
   }, [isMonitoring, extraction]);
   
@@ -190,23 +129,6 @@ export function useVitalSignsWithProcessing() {
         // Adaptación de umbrales basada en calidad de señal
         unifiedFingerDetector.adaptThresholds(processedSignal.quality);
         
-        // Registrar evento de diagnóstico para analizar calidad de detección
-        if (processedFramesRef.current % 30 === 0) {
-          fingerDiagnostics.logEvent({
-            eventType: 'DETECTION_QUALITY',
-            source: 'vital-signs-processor',
-            isFingerDetected: detectionState.isFingerDetected,
-            confidence: detectionState.confidence,
-            signalQuality: processedSignal.quality,
-            details: {
-              extractionConfidence: extraction.lastResult.quality / 100,
-              processingConfidence: processedSignal.quality / 100,
-              heartRate: processedSignal.averageBPM || 0,
-              consensusLevel: detectionState.consensusLevel
-            }
-          });
-        }
-        
         // Solo procesar para signos vitales si el dedo está detectado según sistema unificado
         if (detectionState.isFingerDetected) {
           // 3. Procesar para obtener signos vitales
@@ -242,7 +164,7 @@ export function useVitalSignsWithProcessing() {
           setLastResult(integratedResult);
           
           // Logging detallado para diagnóstico
-          if (processedFramesRef.current % 60 === 0) {
+          if (processedFramesRef.current % 30 === 0) {
             logError(
               `VitalSignsProcessor: Procesamiento exitoso - Calidad: ${processedSignal.quality}, ` +
               `Confianza detección: ${detectionConfidenceRef.current.toFixed(2)}, ` +
@@ -253,7 +175,7 @@ export function useVitalSignsWithProcessing() {
           }
         } else {
           // Logging para diagnóstico cuando no se detecta dedo
-          if (processedFramesRef.current % 60 === 0) {
+          if (processedFramesRef.current % 30 === 0) {
             logError(
               `VitalSignsProcessor: Dedo no detectado - Confianza: ${detectionConfidenceRef.current.toFixed(2)}, ` +
               `Calidades: Extracción=${extraction.lastResult.quality.toFixed(0)}, ` +
@@ -263,23 +185,13 @@ export function useVitalSignsWithProcessing() {
             );
           }
         }
+        
+        // Incrementar contador de frames procesados
+        processedFramesRef.current++;
+        lastProcessTimeRef.current = Date.now();
       }
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      console.error("Error en procesamiento integrado:", errorMessage);
-      
-      // Registrar diagnóstico de error
-      fingerDiagnostics.logEvent({
-        eventType: 'INTEGRATION_ERROR',
-        source: 'vital-signs-processor',
-        isFingerDetected: false,
-        confidence: 0,
-        details: {
-          errorMessage,
-          processingStage: 'signal-processing',
-          hasExtractionResult: !!extraction.lastResult
-        }
-      });
+      console.error("Error en procesamiento integrado:", error);
     }
   }, [isMonitoring, extraction.lastResult, processing, vitalSigns]);
   
@@ -297,12 +209,8 @@ export function useVitalSignsWithProcessing() {
     // Resetear el detector unificado
     unifiedFingerDetector.reset();
     
-    // Iniciar sesión de diagnóstico
-    fingerDiagnostics.startSession(`vital-signs-${Date.now()}`);
-    
     processedFramesRef.current = 0;
     lastProcessTimeRef.current = Date.now();
-    errorCountRef.current = 0;
     
     setIsMonitoring(true);
   }, [extraction, processing, vitalSigns]);
@@ -320,9 +228,6 @@ export function useVitalSignsWithProcessing() {
     
     // Resetear el detector unificado
     unifiedFingerDetector.reset();
-    
-    // Finalizar sesión de diagnóstico
-    fingerDiagnostics.endSession();
     
     setIsMonitoring(false);
     setUnifiedFingerDetected(false);
@@ -346,7 +251,6 @@ export function useVitalSignsWithProcessing() {
     
     processedFramesRef.current = 0;
     lastProcessTimeRef.current = Date.now();
-    errorCountRef.current = 0;
   }, [extraction, vitalSigns, stopMonitoring]);
   
   return {
@@ -362,16 +266,13 @@ export function useVitalSignsWithProcessing() {
     signalQuality: processing.signalQuality,
     heartRate: processing.heartRate,
     
-    // Información de depuración
-    debugInfo,
-    
     // Acciones
     processFrame,
     startMonitoring,
     stopMonitoring,
     reset,
     
-    // Actualizar brillo ambiental
+    // Nuevo método para actualizar brillo ambiental
     updateAmbientBrightness
   };
 }
