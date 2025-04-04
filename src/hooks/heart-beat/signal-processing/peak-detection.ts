@@ -1,4 +1,3 @@
-
 /**
  * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
  *
@@ -28,13 +27,14 @@ const MAX_DIAGNOSTICS_BUFFER = 100;
 export function shouldProcessMeasurement(value: number): boolean {
   // Añadir diagnóstico sobre decisión de procesamiento
   const signalStrength = Math.abs(value);
-  const processingDecision = signalStrength >= 0.008;
+  // Umbral reducido para mayor sensibilidad
+  const processingDecision = signalStrength >= 0.006; // Reducido de 0.008
   
   // Determinar prioridad basada en la fuerza de la señal
   let priority: 'high' | 'medium' | 'low' = 'low';
-  if (signalStrength >= 0.05) {
+  if (signalStrength >= 0.04) { // Reducido de 0.05
     priority = 'high';
-  } else if (signalStrength >= 0.02) {
+  } else if (signalStrength >= 0.015) { // Reducido de 0.02
     priority = 'medium';
   }
   
@@ -45,12 +45,12 @@ export function shouldProcessMeasurement(value: number): boolean {
     signalStrength,
     processorLoad: 0,
     dataPointsProcessed: 1,
-    peakDetectionConfidence: processingDecision ? signalStrength * 10 : 0,
+    peakDetectionConfidence: processingDecision ? signalStrength * 12 : 0, // Aumentado multiplicador
     processingPriority: priority
   });
   
   // Umbral más sensible para capturar señales reales mientras filtra ruido
-  return processingDecision; // Reducido aún más para mayor sensibilidad
+  return processingDecision;
 }
 
 /**
