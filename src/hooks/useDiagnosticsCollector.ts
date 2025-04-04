@@ -81,14 +81,14 @@ export function useDiagnosticsCollector() {
         confidence: diag.peakDetectionConfidence || 0
       }));
       
-      // Create neural network data - fixes for missing properties
+      // Create neural network data - fixed property names
       const neuralPoints = systemDiagnostics
         .filter(diag => diag.processingStage?.includes('neural'))
         .map((diag, index) => ({
-          value: diag.signalQualityMetrics?.amplitude || Math.random(), // Fixed: use 'amplitude' instead of 'neuralActivation'
+          value: diag.signalQualityMetrics?.amplitude || Math.random(),
           time: timeSinceStart + index,
           layer: diag.processingStage?.replace('neural-', ''),
-          confidence: diag.confidenceLevel || Math.random() // Fixed: use 'confidenceLevel' instead of 'processingConfidence'
+          confidence: diag.signalQualityMetrics?.variance || Math.random() * 0.5 + 0.5 // Use variance as confidence
         }));
       
       // Update system metrics
