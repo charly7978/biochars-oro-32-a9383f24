@@ -1,33 +1,5 @@
-import { HeartBeatResult } from './types';
 
-/**
- * Interface for diagnostic data to fix TypeScript errors
- */
-interface DiagnosticData {
-  signalStrength?: number;
-  signalQuality?: string;
-  detectionStatus?: string;
-  lastProcessedTime?: number;
-  isFingerDetected?: boolean;
-  isArrhythmia?: boolean;
-  lastPeakDetected?: number;
-  peakStrength?: number;
-  lastValidBpmTime?: number;
-  bpmReliability?: number;
-  bpmStatus?: "normal" | "zero" | "high" | "low" | "using_historical";
-  confidenceStatus?: "low" | "high" | "medium" | "very_low";
-  usingHistoricalBPM?: boolean;
-  historyBPM?: number;
-  originalConfidence?: number;
-  adjustedConfidence?: number;
-  processingStatus?: string;
-  arrhythmiaTracking?: boolean;
-  arrhythmiaCount?: number;
-  rhythmAnalysis?: {
-    regularity: number;
-    variability: number;
-  };
-}
+import { HeartBeatResult } from './types';
 
 /**
  * Checks if the signal is too weak to process
@@ -96,7 +68,7 @@ export function createWeakSignalResult(arrhythmiaCount = 0): HeartBeatResult {
       signalQuality: 'weak',
       detectionStatus: 'insufficient_signal',
       lastProcessedTime: Date.now(),
-      isFingerDetected: false,
+      fingerDetected: false,
       isArrhythmia: false
     }
   };
@@ -104,7 +76,7 @@ export function createWeakSignalResult(arrhythmiaCount = 0): HeartBeatResult {
 
 /**
  * Handles peak detection and beep requests
- * Enhanced with arrhythmia detection notification
+ * Enhanced with arrhythmia detection
  */
 export function handlePeakDetection(
   result: HeartBeatResult,
@@ -136,11 +108,6 @@ export function handlePeakDetection(
       
       // Also use direct callback
       requestImmediateBeep(value);
-      
-      // Dispatch arrhythmia visualization event if detected
-      if (result.isArrhythmia) {
-        dispatchArrhythmiaVisualEvent(result.bpm || 0, now);
-      }
     }
     
     // Enhanced diagnostics for peak detection
@@ -151,24 +118,6 @@ export function handlePeakDetection(
       result.diagnosticData.isArrhythmia = result.isArrhythmia || false;
     }
   }
-}
-
-/**
- * Dispatch an event specifically for arrhythmia visualization
- */
-function dispatchArrhythmiaVisualEvent(bpm: number, timestamp: number): void {
-  // Create a dedicated event for visual representation of arrhythmias
-  const arrhythmiaEvent = new CustomEvent('arrhythmia-visual', {
-    detail: {
-      timestamp,
-      bpm,
-      duration: 3000, // 3-second visual indicator
-      severity: bpm > 100 ? 'high' : 'medium'
-    }
-  });
-  
-  window.dispatchEvent(arrhythmiaEvent);
-  console.log('Arrhythmia visualization event dispatched', { timestamp, bpm });
 }
 
 /**
@@ -186,7 +135,7 @@ export function updateLastValidBpm(
     if (result.diagnosticData) {
       result.diagnosticData.lastValidBpmTime = Date.now();
       result.diagnosticData.bpmReliability = result.confidence;
-      result.diagnosticData.bpmStatus = "normal";
+      result.diagnosticData.bpmStatus = 'valid';
     }
   }
 }
@@ -214,9 +163,7 @@ export function processLowConfidenceResult(
         usingHistoricalBPM: true,
         historyBPM: currentBPM,
         originalConfidence: result.confidence,
-        adjustedConfidence: Math.max(0.3, result.confidence),
-        arrhythmiaTracking: true,
-        arrhythmiaCount: arrhythmiaCount
+        adjustedConfidence: Math.max(0.3, result.confidence)
       }
     };
     
@@ -232,7 +179,7 @@ export function processLowConfidenceResult(
         ...(result.diagnosticData || {}),
         bpmStatus: 'zero',
         arrhythmiaTracking: true,
-        arrhythmiaCount: arrhythmiaCount
+        arrhythmiaCount
       }
     };
   }
@@ -243,7 +190,7 @@ export function processLowConfidenceResult(
     diagnosticData: {
       ...(result.diagnosticData || {}),
       processingStatus: 'normal',
-      arrhythmiaCount: arrhythmiaCount
+      arrhythmiaCount
     }
   };
 }
