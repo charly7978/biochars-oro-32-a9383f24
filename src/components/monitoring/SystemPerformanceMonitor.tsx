@@ -1,11 +1,10 @@
-
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Cpu, HardDrive, Memory, Wifi, Clock, Activity } from 'lucide-react';
+import { Cpu, HardDrive, Chip, Wifi, Clock, Activity } from 'lucide-react';
 
 export const SystemPerformanceMonitor: React.FC = () => {
   const [cpuUsage, setCpuUsage] = useState(0);
@@ -22,7 +21,6 @@ export const SystemPerformanceMonitor: React.FC = () => {
     connection: (navigator as any).connection?.effectiveType || 'Unknown'
   });
   
-  // Simulated performance monitoring data
   useEffect(() => {
     const updateMetrics = () => {
       setCpuUsage(Math.floor(Math.random() * 30) + 10); // 10-40%
@@ -72,7 +70,7 @@ export const SystemPerformanceMonitor: React.FC = () => {
               <div className="space-y-1">
                 <div className="flex justify-between items-center">
                   <span className="flex items-center">
-                    <Memory className="h-4 w-4 mr-2" />
+                    <Chip className="h-4 w-4 mr-2" />
                     Uso de Memoria
                   </span>
                   <span className={`font-medium ${getStatusColor(memoryUsage, { low: 30, medium: 60 })}`}>
