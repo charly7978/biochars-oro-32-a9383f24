@@ -13,14 +13,14 @@ import { Activity } from "lucide-react";
 
 // Define interfaces for the browser compatibility
 interface DocumentWithFullscreen extends Document {
-  fullscreenElement?: Element;
+  fullscreenElement: Element | null;
   mozFullScreenElement?: Element;
   webkitFullscreenElement?: Element;
   msFullscreenElement?: Element;
 }
 
 interface ElementWithFullscreen extends HTMLElement {
-  requestFullscreen?: () => Promise<void>;
+  requestFullscreen: () => Promise<void>;
   webkitRequestFullscreen?: () => Promise<void>;
   mozRequestFullScreen?: () => Promise<void>;
   msRequestFullscreen?: () => Promise<void>;
