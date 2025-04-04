@@ -2,31 +2,18 @@
 /**
  * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
  * 
- * Diagnósticos de detección de dedos
- * Sistema para registrar y analizar eventos de detección
+ * Sistema de diagnósticos para la detección de dedos
+ * 
+ * IMPORTANTE: Este sistema registra y analiza eventos de detección
+ * para facilitar el diagnóstico de problemas y mejora continua.
  */
+
 import { logError, ErrorLevel } from '@/utils/debugUtils';
-import { DetectionSource } from './unified-finger-detector';
+import { DiagnosticEvent, DiagnosticEventType, DetectionSource } from './finger-detection-types';
 
-export type DiagnosticEventType = 
-  'PATTERN_DETECTED' | 
-  'PATTERN_LOST' | 
-  'LOW_AMPLITUDE' | 
-  'PATTERN_TIMEOUT' | 
-  'DETECTOR_RESET' | 
-  'FINGER_DETECTED' | 
-  'FINGER_LOST';
-
-export interface DiagnosticEvent {
-  eventType: DiagnosticEventType;
-  source: DetectionSource;
-  isFingerDetected: boolean;
-  confidence: number;
-  timestamp?: number;
-  signalValue?: number;
-  details?: Record<string, any>;
-}
-
+/**
+ * Clase para gestionar diagnósticos de detección de dedos
+ */
 class FingerDiagnostics {
   private events: DiagnosticEvent[] = [];
   private maxEvents: number = 100;
@@ -99,11 +86,11 @@ class FingerDiagnostics {
   }
 }
 
-// Singleton instance
+// Instancia singleton para diagnósticos
 export const fingerDiagnostics = new FingerDiagnostics();
 
 /**
- * Reporta detección de dedo (equivalente a logFingerDetection mencionado en el error)
+ * Reporta detección de dedo
  */
 export function reportFingerDetection(
   isDetected: boolean, 
@@ -118,4 +105,37 @@ export function reportFingerDetection(
     confidence,
     details
   });
+}
+
+/**
+ * Reporta un evento de diagnóstico genérico
+ */
+export function reportDiagnosticEvent(
+  eventType: DiagnosticEventType,
+  source: DetectionSource,
+  isFingerDetected: boolean,
+  confidence: number,
+  details?: Record<string, any>
+): void {
+  fingerDiagnostics.logEvent({
+    eventType,
+    source,
+    isFingerDetected,
+    confidence,
+    details
+  });
+}
+
+/**
+ * Obtiene estadísticas recientes de diagnóstico
+ */
+export function getDiagnosticStats(): Record<string, any> {
+  return fingerDiagnostics.getStatistics();
+}
+
+/**
+ * Limpia los eventos de diagnóstico
+ */
+export function clearDiagnosticEvents(): void {
+  fingerDiagnostics.clearEvents();
 }
