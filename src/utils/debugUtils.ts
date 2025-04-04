@@ -1,4 +1,3 @@
-
 /**
  * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
  * 
@@ -26,6 +25,15 @@ interface DebugConfig {
   deviceInfo?: Record<string, any>;
 }
 
+// Estructura para entrada de log
+export interface LogEntry {
+  timestamp: number;
+  level: ErrorLevel;
+  message: string;
+  module?: string;
+  details?: Record<string, any>;
+}
+
 // Estado global
 const debugState = {
   isInitialized: false,
@@ -36,14 +44,12 @@ const debugState = {
     maxLogSize: 1000,
     applicationVersion: '1.0.0'
   } as DebugConfig,
-  logs: [] as {
-    timestamp: number;
-    level: ErrorLevel;
-    message: string;
-    module?: string;
-    details?: Record<string, any>;
-  }[],
-  errorHandlers: [] as ((error: Error, info: any) => void)[]
+  logs: [] as LogEntry[],
+  errorHandlers: [] as ((error: Error, info: any) => void)[],
+  
+  // Buffer específico para componentes de UI
+  errorBuffer: [] as LogEntry[],
+  maxBufferSize: 500
 };
 
 /**
@@ -197,7 +203,7 @@ export function logError(
     initializeErrorTracking();
   }
 
-  const logEntry = {
+  const logEntry: LogEntry = {
     timestamp: Date.now(),
     level,
     message,
@@ -205,12 +211,19 @@ export function logError(
     details
   };
   
-  // Agregar al registro
+  // Agregar al registro principal
   debugState.logs.push(logEntry);
   
-  // Limitar tamaño del registro
+  // Agregar al buffer para componentes UI
+  debugState.errorBuffer.push(logEntry);
+  
+  // Limitar tamaño de los registros
   if (debugState.logs.length > debugState.config.maxLogSize) {
     debugState.logs.shift();
+  }
+  
+  if (debugState.errorBuffer.length > debugState.maxBufferSize) {
+    debugState.errorBuffer.shift();
   }
   
   // Imprimir en consola si está habilitado
@@ -290,8 +303,73 @@ export function clearErrorLogs(): void {
 }
 
 /**
- * Habilita o deshabilita el registro detallado
+ * Obtiene el buffer de errores para componentes UI
  */
-export function setVerboseLogging(enabled: boolean): void {
-  debugState.config.verbose = enabled;
+export function getErrorBuffer(
+  filter?: {
+    level?: ErrorLevel;
+    module?: string;
+    since?: number;
+  }
+): LogEntry[] {
+  let entries = [...debugState.errorBuffer];
+  
+  if (filter) {
+    if (filter.level) {
+      const levelIndex = Object.values(ErrorLevel).indexOf(filter.level);
+      entries = entries.filter(entry => {
+        const entryLevelIndex = Object.values(ErrorLevel).indexOf(entry.level);
+        return entryLevelIndex >= levelIndex;
+      });
+    }
+    
+    if (filter.module) {
+      entries = entries.filter(entry => entry.module === filter.module);
+    }
+    
+    if (filter.since) {
+      entries = entries.filter(entry => entry.timestamp >= filter.since);
+    }
+  }
+  
+  return entries;
+}
+
+/**
+ * Limpia el buffer de errores para componentes UI
+ */
+export function clearErrorBuffer(): void {
+  debugState.errorBuffer = [];
+}
+
+/**
+ * Detecta referencias circulares en objetos
+ */
+export function detectCircular(obj: any, seen = new WeakSet()): boolean {
+  if (obj === null || typeof obj !== 'object') return false;
+  if (seen.has(obj)) return true;
+  
+  seen.add(obj);
+  
+  for (const key of Object.keys(obj)) {
+    if (detectCircular(obj[key], seen)) return true;
+  }
+  
+  return false;
+}
+
+/**
+ * Stringifica objetos de forma segura, evitando referencias circulares
+ */
+export function safeStringify(obj: any, space: number | string = 2): string {
+  const seen = new WeakSet();
+  return JSON.stringify(obj, (key, value) => {
+    if (typeof value === 'object' && value !== null) {
+      if (seen.has(value)) {
+        return '[Circular Reference]';
+      }
+      seen.add(value);
+    }
+    return value;
+  }, space);
 }
