@@ -39,8 +39,9 @@ export interface DetectionState {
   isFingerDetected: boolean;
   amplitude: SourceDetectionResult;
   rhythm: SourceDetectionResult;
-  sources: Record<DetectionSource, { detected: boolean, confidence: number }>;
+  sources: Record<string, { detected: boolean, confidence: number }>;
   lastUpdate: number;
+  thresholds?: Record<string, number>;
 }
 
 /**
@@ -109,6 +110,5 @@ export interface AdaptiveCalibrationParams {
   amplitudeThreshold?: number;
   falsePositiveReduction?: number;
   falseNegativeReduction?: number;
-  environmentalState?: EnvironmentalState;
   [key: string]: number | EnvironmentalState | undefined;
 }

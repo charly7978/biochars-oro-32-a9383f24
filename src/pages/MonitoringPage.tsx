@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { ArrowLeft, Activity, Zap, Layers, Database, Cpu, BarChart2, Fingerprint } from 'lucide-react';
 import { SignalProcessingMonitor } from '@/components/monitoring/SignalProcessingMonitor';
 import { NeuralNetworkMonitor } from '@/components/monitoring/NeuralNetworkMonitor';
-import FingerDetectionMonitor from '@/components/debug/FingerDetectionMonitor';
+import FingerDetectionMonitor from '@/components/FingerDetectionMonitor';
 import OptimizerMonitor from '@/components/debug/OptimizerMonitor';
 import { SystemPerformanceMonitor } from '@/components/monitoring/SystemPerformanceMonitor';
 import { CalibrationMonitor } from '@/components/monitoring/CalibrationMonitor';
