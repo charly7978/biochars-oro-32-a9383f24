@@ -7,6 +7,7 @@ export enum ErrorLevel {
   DEBUG = 'debug',
   INFO = 'info',
   WARN = 'warn',
+  WARNING = 'warning', // Adding WARNING as an alias for WARN for backward compatibility
   ERROR = 'error',
   CRITICAL = 'critical'
 }
@@ -24,14 +25,17 @@ export interface LogEntry {
   level: ErrorLevel;
   timestamp: number;
   moduleId?: string;
+  module?: string; // Adding for backward compatibility
   source?: string;
   data?: any;
   stack?: string;
 }
 
 let errorLogs: LogEntry[] = [];
+let errorBuffer: LogEntry[] = []; // Added separate buffer for buffered logs
 let isVerboseLogging = false;
 let maxLogSize = 1000;
+let maxBufferSize = 500; // Setting a default buffer size
 let errorHandlers: Function[] = [];
 
 /**
@@ -84,6 +88,7 @@ export function logError(
     level,
     timestamp: Date.now(),
     moduleId,
+    module: moduleId, // For backward compatibility
     source: getCallSource(),
     data,
     stack: new Error().stack
@@ -92,9 +97,17 @@ export function logError(
   // Agregar al registro
   errorLogs.push(logEntry);
   
+  // Also add to buffer for components that use the buffer
+  errorBuffer.push(logEntry);
+  
   // Limitar tamaño del registro
   if (errorLogs.length > maxLogSize) {
     errorLogs.shift();
+  }
+  
+  // Limit buffer size
+  if (errorBuffer.length > maxBufferSize) {
+    errorBuffer.shift();
   }
   
   // Notificar a manejadores de errores
@@ -106,6 +119,25 @@ export function logError(
   if (shouldLogToConsole(level)) {
     logToConsole(logEntry);
   }
+}
+
+/**
+ * Get logs from the error buffer
+ */
+export function getErrorBuffer(): LogEntry[] {
+  return [...errorBuffer];
+}
+
+/**
+ * Clear the error buffer
+ */
+export function clearErrorBuffer(): void {
+  errorBuffer = [];
+  logError(
+    'Error buffer cleared',
+    ErrorLevel.INFO,
+    'ErrorTracking'
+  );
 }
 
 /**

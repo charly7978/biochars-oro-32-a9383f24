@@ -26,7 +26,7 @@ import { SystemPerformanceMonitor } from './SystemPerformanceMonitor';
 import { TensorflowMonitor } from './TensorflowMonitor';
 import { ModuleStatusPanel } from './ModuleStatusPanel';
 import { ErrorLogViewer } from './ErrorLogViewer';
-import { FingerDetectionMonitor } from './FingerDetectionMonitor';
+import FingerDetectionMonitor from './FingerDetectionMonitor';
 
 /**
  * Comprehensive monitoring dashboard for the application

@@ -41,8 +41,8 @@ export const ErrorLogViewer: React.FC = () => {
         
         // Extraer módulos únicos para el filtro
         const modules = Array.from(new Set(errorLogs
-          .filter(log => log.module)
-          .map(log => log.module as string)
+          .filter(log => log.moduleId || log.module)
+          .map(log => log.moduleId || log.module as string)
         ));
         setAvailableModules(modules);
       } catch (error) {
@@ -82,7 +82,7 @@ export const ErrorLogViewer: React.FC = () => {
     
     // Filtrar por módulo
     if (filterModule !== 'all') {
-      filtered = filtered.filter(log => log.module === filterModule);
+      filtered = filtered.filter(log => log.moduleId === filterModule || log.module === filterModule);
     }
     
     // Filtrar por búsqueda
@@ -90,7 +90,7 @@ export const ErrorLogViewer: React.FC = () => {
       const query = searchQuery.toLowerCase();
       filtered = filtered.filter(log => 
         log.message.toLowerCase().includes(query) ||
-        (log.module && log.module.toLowerCase().includes(query))
+        ((log.moduleId || log.module) && (log.moduleId?.toLowerCase().includes(query) || log.module?.toLowerCase().includes(query)))
       );
     }
     
@@ -170,6 +170,7 @@ export const ErrorLogViewer: React.FC = () => {
     switch (level) {
       case ErrorLevel.DEBUG: return "bg-gray-100 text-gray-800";
       case ErrorLevel.INFO: return "bg-blue-100 text-blue-800";
+      case ErrorLevel.WARN:
       case ErrorLevel.WARNING: return "bg-yellow-100 text-yellow-800";
       case ErrorLevel.ERROR: return "bg-red-100 text-red-800";
       case ErrorLevel.CRITICAL: return "bg-purple-100 text-purple-800";
@@ -182,6 +183,7 @@ export const ErrorLogViewer: React.FC = () => {
     switch (level) {
       case ErrorLevel.DEBUG: return <File className="h-3 w-3" />;
       case ErrorLevel.INFO: return <Info className="h-3 w-3" />;
+      case ErrorLevel.WARN:
       case ErrorLevel.WARNING: return <AlertTriangle className="h-3 w-3" />;
       case ErrorLevel.ERROR: return <AlertCircle className="h-3 w-3" />;
       case ErrorLevel.CRITICAL: return <X className="h-3 w-3" />;
@@ -195,20 +197,20 @@ export const ErrorLogViewer: React.FC = () => {
     byLevel: {
       [ErrorLevel.DEBUG]: logs.filter(log => log.level === ErrorLevel.DEBUG).length,
       [ErrorLevel.INFO]: logs.filter(log => log.level === ErrorLevel.INFO).length,
-      [ErrorLevel.WARNING]: logs.filter(log => log.level === ErrorLevel.WARNING).length,
+      [ErrorLevel.WARN]: logs.filter(log => log.level === ErrorLevel.WARN || log.level === ErrorLevel.WARNING).length,
       [ErrorLevel.ERROR]: logs.filter(log => log.level === ErrorLevel.ERROR).length,
       [ErrorLevel.CRITICAL]: logs.filter(log => log.level === ErrorLevel.CRITICAL).length,
     },
     byModule: availableModules.reduce((acc, module) => {
-      acc[module] = logs.filter(log => log.module === module).length;
+      acc[module] = logs.filter(log => log.moduleId === module || log.module === module).length;
       return acc;
     }, {} as Record<string, number>),
     mostRecentError: logs.filter(log => log.level === ErrorLevel.ERROR || log.level === ErrorLevel.CRITICAL)
       .sort((a, b) => b.timestamp - a.timestamp)[0],
     mostFrequentModule: availableModules.length > 0 
       ? availableModules.sort((a, b) => {
-          const countA = logs.filter(log => log.module === a).length;
-          const countB = logs.filter(log => log.module === b).length;
+          const countA = logs.filter(log => log.moduleId === a || log.module === a).length;
+          const countB = logs.filter(log => log.moduleId === b || log.module === b).length;
           return countB - countA;
         })[0]
       : undefined,
@@ -293,7 +295,7 @@ export const ErrorLogViewer: React.FC = () => {
                     <SelectItem value="all">Todos los niveles</SelectItem>
                     <SelectItem value={ErrorLevel.DEBUG}>{ErrorLevel.DEBUG}</SelectItem>
                     <SelectItem value={ErrorLevel.INFO}>{ErrorLevel.INFO}</SelectItem>
-                    <SelectItem value={ErrorLevel.WARNING}>{ErrorLevel.WARNING}</SelectItem>
+                    <SelectItem value={ErrorLevel.WARN}>{ErrorLevel.WARN}</SelectItem>
                     <SelectItem value={ErrorLevel.ERROR}>{ErrorLevel.ERROR}</SelectItem>
                     <SelectItem value={ErrorLevel.CRITICAL}>{ErrorLevel.CRITICAL}</SelectItem>
                   </SelectContent>
@@ -352,7 +354,7 @@ export const ErrorLogViewer: React.FC = () => {
                               </Badge>
                             </TableCell>
                             <TableCell>
-                              {log.module || 'N/A'}
+                              {log.moduleId || log.module || 'N/A'}
                             </TableCell>
                             <TableCell className="max-w-md break-words">
                               {log.message}
@@ -473,7 +475,7 @@ export const ErrorLogViewer: React.FC = () => {
                       </div>
                       <div>
                         <span className="text-sm font-medium">Módulo:</span>
-                        <span className="text-sm ml-2">{logStats.mostRecentError.module || 'N/A'}</span>
+                        <span className="text-sm ml-2">{logStats.mostRecentError.moduleId || logStats.mostRecentError.module || 'N/A'}</span>
                       </div>
                       <div>
                         <span className="text-sm font-medium">Mensaje:</span>
