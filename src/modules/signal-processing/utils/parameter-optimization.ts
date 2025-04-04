@@ -10,9 +10,12 @@ import {
   createBayesianOptimizer,
   DEFAULT_PPG_PARAMETERS,
   type BayesianOptimizer,
-  type OptimizationParameter,
   type BayesianOptimizerConfig
 } from './bayesian-optimization';
+
+// Re-export the OptimizationParameter type
+import type { OptimizationParameter } from './bayesian-optimization';
+export type { OptimizationParameter };
 
 /**
  * Estados del optimizador
@@ -376,3 +379,6 @@ export function createSignalParameterOptimizer(
     ...options
   });
 }
+
+// Explicitly export the class to resolve the import error
+export { DefaultSignalParameterOptimizer as SignalParameterOptimizer };
