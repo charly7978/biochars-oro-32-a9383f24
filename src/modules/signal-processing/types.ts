@@ -2,194 +2,126 @@
 /**
  * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
  * 
- * Tipos para el procesamiento de señales
- * Define interfaces comunes para diferentes procesadores
+ * Definiciones de tipos para procesamiento de señal
  */
 
 /**
- * Opciones de procesamiento de señal
+ * Opciones de configuración para procesadores de señal
  */
 export interface SignalProcessingOptions {
-  amplificationFactor?: number; // Factor de amplificación de señal
-  filterStrength?: number; // Fuerza del filtrado
-  sampleRate?: number; // Tasa de muestreo en muestras por segundo
-  qualityThreshold?: number; // Umbral de calidad de señal (0-100)
-  fingerDetectionSensitivity?: number; // Sensibilidad para detección de dedos (0-1)
-  peakDetectionSensitivity?: number; // Sensibilidad para detección de picos (0-1)
-  adaptationRate?: number; // Tasa de adaptación para filtros adaptativos (0-1)
-  signalQualityThreshold?: number; // Umbral de calidad para procesamiento (0-100)
-  useAdaptiveControl?: boolean; // Si se debe usar control adaptativo
-  qualityEnhancedByPrediction?: boolean; // Si se mejora la calidad mediante predicción
-  confidenceThreshold?: number; // Umbral de confianza para actualización de modelo (0-1)
-  maxMemoryUsage?: number; // Uso máximo de memoria en MB
-  optimizePerformance?: boolean; // Si se deben aplicar optimizaciones de rendimiento
-  preferGPUAcceleration?: boolean; // Si se debe preferir aceleración por GPU
+  // Factor de amplificación de señal
+  amplificationFactor?: number;
+  
+  // Fuerza de filtrado
+  filterStrength?: number;
+  
+  // Umbral de calidad de señal
+  qualityThreshold?: number;
+  
+  // Sensibilidad de detección de dedo
+  fingerDetectionSensitivity?: number;
+  
+  // Nuevos parámetros para control adaptativo
+  useAdaptiveControl?: boolean;
+  
+  // Usar predicción para mejorar calidad
+  qualityEnhancedByPrediction?: boolean;
+  
+  // Horizonte de predicción
+  predictionHorizon?: number;
+  
+  // Tasa de adaptación
+  adaptationRate?: number;
 }
 
 /**
- * Procesador de señal genérico
+ * Interfaz común para todos los procesadores de señal
  */
 export interface SignalProcessor<T> {
+  // Procesa un valor de señal y devuelve un resultado
   processSignal(value: number): T;
+  
+  // Configuración del procesador
   configure(options: SignalProcessingOptions): void;
+  
+  // Reinicia el procesador
   reset(): void;
 }
 
 /**
- * Señal PPG procesada
+ * Resultado del procesamiento de señal PPG
  */
 export interface ProcessedPPGSignal {
-  timestamp: number; // Timestamp en milisegundos
-  rawValue: number; // Valor crudo
-  filteredValue: number; // Valor filtrado
-  normalizedValue: number; // Valor normalizado
-  amplifiedValue: number; // Valor amplificado
-  quality: number; // Calidad de señal (0-100)
-  fingerDetected: boolean; // Si se detecta dedo
-  signalStrength: number; // Fuerza de señal (0-100)
+  // Marca de tiempo de la señal
+  timestamp: number;
+  
+  // Valor sin procesar
+  rawValue: number;
+  
+  // Valor filtrado
+  filteredValue: number;
+  
+  // Valor normalizado
+  normalizedValue: number;
+  
+  // Valor amplificado
+  amplifiedValue: number;
+  
+  // Calidad de la señal (0-100)
+  quality: number;
+  
+  // Indicador de detección de dedo
+  fingerDetected: boolean;
+  
+  // Fuerza de la señal
+  signalStrength: number;
 }
 
 /**
- * Señal de latido cardíaco procesada
+ * Resultado del procesamiento de señal cardíaca
  */
 export interface ProcessedHeartbeatSignal {
-  timestamp: number; // Timestamp en milisegundos
-  value: number; // Valor de latido procesado
-  isPeak: boolean; // Si es un pico cardíaco
-  peakConfidence: number; // Confianza en la detección del pico
-  instantaneousBPM: number | null; // BPM instantáneo
-  rrInterval: number | null; // Intervalo R-R (ms)
-  heartRateVariability: number | null; // Variabilidad del ritmo cardíaco
-}
-
-/**
- * Punto de datos para optimización
- */
-export interface DataPoint {
-  input: number[];
-  output: number;
-  quality?: number;
-  timestamp?: number;
-}
-
-/**
- * Resultado de optimización
- */
-export interface OptimizationResult {
-  bestParams: number[];
-  expectedImprovement: number;
-  confidence: number;
-}
-
-/**
- * Punto de datos para optimización bayesiana 
- */
-export interface BayesianDataPoint {
-  params: Record<string, number>;
+  // Marca de tiempo de la señal
+  timestamp: number;
+  
+  // Valor de la señal
   value: number;
-  metadata?: {
-    timestamp?: number;
-    quality?: number;
-    source?: string;
-  };
+  
+  // Indicador de detección de pico
+  isPeak: boolean;
+  
+  // Confianza en la detección del pico (0-1)
+  peakConfidence: number;
+  
+  // BPM instantáneo (basado en intervalo RR)
+  instantaneousBPM: number | null;
+  
+  // Intervalo RR en ms
+  rrInterval: number | null;
+  
+  // Variabilidad del ritmo cardíaco
+  heartRateVariability: number | null;
 }
 
 /**
- * Estado de memoria
+ * Tipos de procesadores disponibles
  */
-export interface MemoryState {
-  usedMemory: number;
-  totalMemory: number;
-  usagePercentage: number;
-  isMemoryLimited: boolean;
+export enum ProcessorType {
+  PPG = 'ppg',
+  HEARTBEAT = 'heartbeat'
 }
 
 /**
- * Estado de calibración
+ * Opciones para el sistema de procesamiento completo
  */
-export interface CalibrationState {
-  isCalibrated: boolean;
-  lastCalibrationTime: number;
-  calibrationQuality: number;
-  parameters: Record<string, number>;
-}
-
-/**
- * Estado de optimización
- */
-export interface OptimizationState {
-  isOptimized: boolean;
-  lastOptimizationTime: number;
-  performanceScore: number;
-  parameters: Record<string, number>;
-  memoryUsage: MemoryState;
-}
-
-/**
- * Mensaje para comunicación entre componentes del sistema adaptativo
- */
-export interface AdaptiveSystemMessage {
-  source: string;
-  destination: string;
-  type: string;
-  payload: any;
-  timestamp?: number;
-  priority?: 'high' | 'medium' | 'low';
-  id?: string;
-}
-
-/**
- * Parámetro de optimización
- */
-export interface OptimizationParameter {
-  name: string;
-  min: number;
-  max: number;
-  step?: number;
-  default: number;
-  initialValue?: number;
-  description?: string;
-  weight?: number;
-}
-
-/**
- * Configuración del sistema adaptativo
- */
-export interface AdaptiveSystemConfig {
-  enableOptimization: boolean;
-  optimizationInterval: number;
-  adaptationRate: number;
-  fingerDetectionThreshold: number;
-  qualityThreshold: number;
-  memoryManagement: {
-    maxObservations: number;
-    gcInterval: number;
-    maxBufferSize: number;
-  };
-  diagnostics: {
-    enableDetailedLogs: boolean;
-    logLevel: 'debug' | 'info' | 'warn' | 'error';
-    collectMetrics: boolean;
-  };
-}
-
-/**
- * Resultado de predicción adaptativa
- */
-export interface PredictionResult {
-  predictedValue: number;
-  confidence: number;
-  predictedTimestamp?: number;
-}
-
-/**
- * Estado del buffer de memoria circular
- */
-export interface CircularBufferState {
-  size: number;
-  capacity: number;
-  memoryUsage: number;
-  avgValue: number;
-  minValue: number;
-  maxValue: number;
+export interface ProcessingSystemOptions extends SignalProcessingOptions {
+  // Tipo de procesador a utilizar
+  processorType?: ProcessorType;
+  
+  // Frecuencia de muestreo objetivo
+  targetSampleRate?: number;
+  
+  // Funciones de callback
+  onResultsReady?: (result: ProcessedPPGSignal | ProcessedHeartbeatSignal) => void;
+  onError?: (error: Error) => void;
 }

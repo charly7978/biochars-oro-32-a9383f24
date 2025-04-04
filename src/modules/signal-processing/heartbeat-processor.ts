@@ -19,12 +19,12 @@ export class HeartbeatProcessor implements SignalProcessor<ProcessedHeartbeatSig
   // Detección de picos
   private lastPeakTime: number | null = null;
   private lastPeakValue: number = 0;
-  private peakThreshold: number = 0.15; // Reducido de 0.2 para detectar picos más pequeños
-  private minPeakDistance: number = 230; // Reducido de 250 para permitir picos más próximos
+  private peakThreshold: number = 0.2;
+  private minPeakDistance: number = 250; // ms
   
   // Configuración
   private adaptiveToPeakHistory: boolean = true;
-  private dynamicThresholdFactor: number = 0.5; // Reducido de 0.6 para ser menos estricto
+  private dynamicThresholdFactor: number = 0.6;
   
   // Predictive modeling and adaptive control
   private adaptivePredictor: AdaptivePredictor;
@@ -145,8 +145,7 @@ export class HeartbeatProcessor implements SignalProcessor<ProcessedHeartbeatSig
     if (this.values.length < 3) return false;
     
     const recent = this.values.slice(-3);
-    // Relajamos las condiciones para considerar como máximo local
-    return (recent[1] > recent[0] * 1.08) && (recent[1] >= value * 0.95);
+    return recent[1] > recent[0] && recent[1] >= value;
   }
   
   /**
@@ -160,41 +159,28 @@ export class HeartbeatProcessor implements SignalProcessor<ProcessedHeartbeatSig
     // Comprobar la forma de onda alrededor del potencial pico
     const segment = this.values.slice(-5);
     
-    // Verificar patrón ascendente-descendente, relajando criterios
+    // Verificar patrón ascendente-descendente típico de un latido cardíaco real
     const hasCardiacPattern = 
       segment[0] < segment[1] && 
-      segment[1] <= segment[2] && 
-      segment[2] > segment[3] * 0.95 && // Permitimos hasta 5% de caída en lugar de estricto >
-      segment[3] > segment[4] * 0.9;    // Permitimos hasta 10% de caída
+      segment[1] < segment[2] && 
+      segment[2] > segment[3] && 
+      segment[3] > segment[4];
     
     if (!hasCardiacPattern) {
-      // Intentamos una ventana más pequeña si falla el patrón principal
-      const miniSegment = segment.slice(-3);
-      const hasSmallPattern = 
-        miniSegment[0] > miniSegment[1] * 1.05 && 
-        miniSegment[0] > miniSegment[2] * 1.08;
-        
-      if (!hasSmallPattern) {
-        return { isValidPeak: false, confidence: 0 };
-      }
+      return { isValidPeak: false, confidence: 0 };
     }
     
-    // Calculamos prominencia con mayor sensibilidad
-    const prominence = Math.max(
+    // Calcular la prominencia del pico (diferencia con valores circundantes)
+    const prominence = Math.min(
       segment[2] - segment[0],
       segment[2] - segment[4]
     );
     
-    // Ajustamos confianza para ser más permisiva con picos pequeños
-    let confidence = Math.min(1, prominence / (this.peakThreshold * 1.5));
-    
-    // Aumentar artificialmente la confianza si hay un patrón claro
-    if (hasCardiacPattern) {
-      confidence = Math.min(1, confidence * 1.2);
-    }
+    // Normalizar la prominencia para obtener la confianza (0-1)
+    const confidence = Math.min(1, prominence / (this.peakThreshold * 2));
     
     return { 
-      isValidPeak: confidence > 0.4, // Reducido umbral de confianza de 0.5 a 0.4
+      isValidPeak: confidence > 0.5,
       confidence 
     };
   }
@@ -276,7 +262,7 @@ export class HeartbeatProcessor implements SignalProcessor<ProcessedHeartbeatSig
     this.rrIntervals = [];
     this.lastPeakTime = null;
     this.lastPeakValue = 0;
-    this.peakThreshold = 0.15;
+    this.peakThreshold = 0.2;
     
     // Reset adaptive predictor
     this.adaptivePredictor.reset();

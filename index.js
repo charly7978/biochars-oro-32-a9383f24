@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect } from "react";
 import VitalSign from "@/components/VitalSign";
 import CameraView from "@/components/CameraView";
@@ -7,9 +8,6 @@ import { useVitalSignsProcessor } from "@/hooks/useVitalSignsProcessor";
 import PPGSignalMeter from "@/components/PPGSignalMeter";
 import MeasurementConfirmationDialog from "@/components/MeasurementConfirmationDialog";
 import { toast } from "sonner";
-import { initializeErrorTracking, logError, ErrorLevel } from "@/utils/debugUtils";
-import { initializeErrorPreventionSystem } from "@/utils/errorPrevention";
-import { handleCameraError, setCameraState, CameraState } from "@/utils/deviceErrorTracker";
 
 const Index = () => {
   const [isMonitoring, setIsMonitoring] = useState(false);
@@ -25,27 +23,10 @@ const Index = () => {
   const [elapsedTime, setElapsedTime] = useState(0);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const measurementTimerRef = useRef(null);
-  const cameraRecoveryTimerRef = useRef(null);
   
   const { startProcessing, stopProcessing, lastSignal, processFrame } = useSignalProcessor();
   const { processSignal: processHeartBeat } = useHeartBeatProcessor();
   const { processSignal: processVitalSigns, reset: resetVitalSigns } = useVitalSignsProcessor();
-
-  useEffect(() => {
-    initializeErrorTracking({
-      verbose: false,
-      setupGlobalHandlers: true
-    });
-    
-    const cleanupErrorPrevention = initializeErrorPreventionSystem();
-    
-    logError("Application initialized", ErrorLevel.INFO, "App");
-    
-    return () => {
-      cleanupErrorPrevention();
-      logError("Application cleanup", ErrorLevel.INFO, "App");
-    };
-  }, []);
 
   const enterFullScreen = async () => {
     const elem = document.documentElement;
@@ -63,13 +44,13 @@ const Index = () => {
       if (window.navigator.userAgent.match(/Android/i)) {
         if (window.AndroidFullScreen) {
           window.AndroidFullScreen.immersiveMode(
-            function() { logError('Immersive mode enabled', ErrorLevel.INFO, 'FullScreen'); },
-            function(error) { logError('Failed to enable immersive mode: ' + error, ErrorLevel.WARNING, 'FullScreen'); }
+            function() { console.log('Immersive mode enabled'); },
+            function() { console.log('Failed to enable immersive mode'); }
           );
         }
       }
     } catch (err) {
-      logError('Error al entrar en pantalla completa: ' + err, ErrorLevel.WARNING, 'FullScreen', { error: err });
+      console.log('Error al entrar en pantalla completa:', err);
     }
   };
 
@@ -82,17 +63,13 @@ const Index = () => {
           await screen.orientation.lock('portrait');
         }
       } catch (error) {
-        logError('No se pudo bloquear la orientación: ' + error, ErrorLevel.WARNING, 'Orientation', { error });
+        console.log('No se pudo bloquear la orientación:', error);
       }
     };
     
     const setMaxResolution = () => {
-      try {
-        if ('devicePixelRatio' in window && window.devicePixelRatio !== 1) {
-          document.body.style.zoom = 1 / window.devicePixelRatio;
-        }
-      } catch (error) {
-        logError('Error setting resolution: ' + error, ErrorLevel.WARNING, 'Resolution', { error });
+      if ('devicePixelRatio' in window && window.devicePixelRatio !== 1) {
+        document.body.style.zoom = 1 / window.devicePixelRatio;
       }
     };
     
@@ -124,13 +101,6 @@ const Index = () => {
       document.body.removeEventListener('gestureend', preventScroll);
       window.removeEventListener('orientationchange', enterFullScreen);
       document.removeEventListener('fullscreenchange', enterFullScreen);
-      
-      if (measurementTimerRef.current) {
-        clearInterval(measurementTimerRef.current);
-      }
-      if (cameraRecoveryTimerRef.current) {
-        clearTimeout(cameraRecoveryTimerRef.current);
-      }
     };
   }, []);
 
@@ -138,7 +108,6 @@ const Index = () => {
     enterFullScreen();
     setIsMonitoring(true);
     setIsCameraOn(true);
-    setCameraState(CameraState.REQUESTING);
     startProcessing();
     setElapsedTime(0);
     
@@ -174,7 +143,6 @@ const Index = () => {
   const completeMonitoring = () => {
     setIsMonitoring(false);
     setIsCameraOn(false);
-    setCameraState(CameraState.INACTIVE);
     stopProcessing();
     resetVitalSigns();
     setElapsedTime(0);
@@ -196,7 +164,6 @@ const Index = () => {
   const stopMonitoring = () => {
     setIsMonitoring(false);
     setIsCameraOn(false);
-    setCameraState(CameraState.INACTIVE);
     stopProcessing();
     resetVitalSigns();
     setElapsedTime(0);
@@ -213,124 +180,74 @@ const Index = () => {
       clearInterval(measurementTimerRef.current);
       measurementTimerRef.current = null;
     }
-    
-    if (cameraRecoveryTimerRef.current) {
-      clearTimeout(cameraRecoveryTimerRef.current);
-      cameraRecoveryTimerRef.current = null;
-    }
   };
 
   const handleStreamReady = (stream) => {
     if (!isMonitoring) return;
     
-    try {
-      setCameraState(CameraState.ACTIVE);
+    const videoTrack = stream.getVideoTracks()[0];
+    const imageCapture = new ImageCapture(videoTrack);
+    
+    const capabilities = videoTrack.getCapabilities();
+    if (capabilities.width && capabilities.height) {
+      const maxWidth = capabilities.width.max;
+      const maxHeight = capabilities.height.max;
       
-      const videoTrack = stream.getVideoTracks()[0];
-      const imageCapture = new ImageCapture(videoTrack);
-      
-      const capabilities = videoTrack.getCapabilities();
-      if (capabilities.width && capabilities.height) {
-        const maxWidth = capabilities.width.max;
-        const maxHeight = capabilities.height.max;
-        
-        videoTrack.applyConstraints({
-          width: { ideal: maxWidth },
-          height: { ideal: maxHeight },
-          torch: true
-        }).catch(err => {
-          logError("Error applying high resolution configuration", ErrorLevel.WARNING, "Camera", { error: err });
-          
-          videoTrack.applyConstraints({
-            torch: true
-          }).catch(innerErr => {
-            logError("Error applying minimal camera configuration", ErrorLevel.ERROR, "Camera", { error: innerErr });
-          });
-        });
-      } else if (videoTrack.getCapabilities()?.torch) {
-        videoTrack.applyConstraints({
-          advanced: [{ torch: true }]
-        }).catch(err => {
-          logError("Error activating torch", ErrorLevel.WARNING, "Camera", { error: err });
-        });
-      }
-      
-      const tempCanvas = document.createElement('canvas');
-      const tempCtx = tempCanvas.getContext('2d');
-      if (!tempCtx) {
-        logError("No se pudo obtener el contexto 2D", ErrorLevel.ERROR, "Camera");
-        return;
-      }
-      
-      const processImage = async () => {
-        if (!isMonitoring) return;
-        
-        try {
-          const frame = await imageCapture.grabFrame();
-          tempCanvas.width = frame.width;
-          tempCanvas.height = frame.height;
-          tempCtx.drawImage(frame, 0, 0);
-          const imageData = tempCtx.getImageData(0, 0, frame.width, frame.height);
-          processFrame(imageData);
-          
-          if (isMonitoring) {
-            requestAnimationFrame(processImage);
-          }
-        } catch (error) {
-          const { errorDetails, shouldRetry, recoveryAction } = handleCameraError(error, {
-            label: videoTrack.label,
-            deviceId: videoTrack.getSettings().deviceId
-          });
-          
-          if (shouldRetry && recoveryAction && isMonitoring) {
-            if (cameraRecoveryTimerRef.current) {
-              clearTimeout(cameraRecoveryTimerRef.current);
-            }
-            
-            cameraRecoveryTimerRef.current = setTimeout(async () => {
-              if (isMonitoring) {
-                try {
-                  await recoveryAction();
-                  setCameraState(CameraState.REQUESTING);
-                } catch (recoveryError) {
-                  logError("Recovery action failed", ErrorLevel.ERROR, "Camera", { error: recoveryError });
-                }
-              }
-            }, 1000);
-          } else if (isMonitoring) {
-            requestAnimationFrame(processImage);
-          }
-        }
-      };
-
-      processImage();
-    } catch (error) {
-      logError("Error during stream setup", ErrorLevel.ERROR, "Camera", { error });
-      setCameraState(CameraState.ERROR);
+      videoTrack.applyConstraints({
+        width: { ideal: maxWidth },
+        height: { ideal: maxHeight },
+        torch: true
+      }).catch(err => console.error("Error aplicando configuración de alta resolución:", err));
+    } else if (videoTrack.getCapabilities()?.torch) {
+      videoTrack.applyConstraints({
+        advanced: [{ torch: true }]
+      }).catch(err => console.error("Error activando linterna:", err));
     }
+    
+    const tempCanvas = document.createElement('canvas');
+    const tempCtx = tempCanvas.getContext('2d');
+    if (!tempCtx) {
+      console.error("No se pudo obtener el contexto 2D");
+      return;
+    }
+    
+    const processImage = async () => {
+      if (!isMonitoring) return;
+      
+      try {
+        const frame = await imageCapture.grabFrame();
+        tempCanvas.width = frame.width;
+        tempCanvas.height = frame.height;
+        tempCtx.drawImage(frame, 0, 0);
+        const imageData = tempCtx.getImageData(0, 0, frame.width, frame.height);
+        processFrame(imageData);
+        
+        if (isMonitoring) {
+          requestAnimationFrame(processImage);
+        }
+      } catch (error) {
+        console.error("Error capturando frame:", error);
+        if (isMonitoring) {
+          requestAnimationFrame(processImage);
+        }
+      }
+    };
+
+    processImage();
   };
 
   useEffect(() => {
     if (lastSignal && lastSignal.fingerDetected && isMonitoring) {
-      try {
-        const heartBeatResult = processHeartBeat(lastSignal.filteredValue);
-        setHeartRate(heartBeatResult.bpm);
-        
-        const vitals = processVitalSigns(lastSignal.filteredValue, heartBeatResult.rrData);
-        if (vitals) {
-          setVitalSigns(vitals);
-          setArrhythmiaCount(vitals.arrhythmiaStatus.split('|')[1] || "--");
-        }
-        
-        setSignalQuality(lastSignal.quality);
-      } catch (error) {
-        logError(
-          "Error processing signal data", 
-          ErrorLevel.ERROR, 
-          "SignalProcessing", 
-          { error, lastSignalState: lastSignal }
-        );
+      const heartBeatResult = processHeartBeat(lastSignal.filteredValue);
+      setHeartRate(heartBeatResult.bpm);
+      
+      const vitals = processVitalSigns(lastSignal.filteredValue, heartBeatResult.rrData);
+      if (vitals) {
+        setVitalSigns(vitals);
+        setArrhythmiaCount(vitals.arrhythmiaStatus.split('|')[1] || "--");
       }
+      
+      setSignalQuality(lastSignal.quality);
     }
   }, [lastSignal, isMonitoring, processHeartBeat, processVitalSigns]);
 
