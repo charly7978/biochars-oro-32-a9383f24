@@ -1,216 +1,556 @@
 /**
- * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE
+ * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
  * 
- * Bayesian Optimization utility for PPG signal processing
- * Provides utilities for parameter optimization using Bayesian methods
+ * Optimizador Bayesiano para procesamiento de señales
  */
 
 /**
- * Interface for optimization parameters
+ * Configuración del optimizador
+ */
+export interface BayesianOptimizerConfig {
+  explorationWeight?: number;
+  maxIterations?: number;
+  initialPoints?: number;
+  noiseLevel?: number;
+}
+
+/**
+ * Parámetro a optimizar
  */
 export interface OptimizationParameter {
   name: string;
   min: number;
   max: number;
-  current: number;
+  default: number;
+  step?: number;
 }
 
 /**
- * Result of an optimization iteration
+ * Opciones de parámetro
  */
-export interface OptimizationResult {
-  parameters: Record<string, number>;
-  expectedImprovement: number;
-  uncertainty: number;
+export interface ParameterOptions {
+  min: number;
+  max: number;
+  step: number;
+  default: number;
 }
 
 /**
- * Bayesian optimization engine for signal processing
+ * Punto de datos para proceso gaussiano
  */
-export class BayesianOptimizer {
-  private parameters: OptimizationParameter[] = [];
-  private observedValues: Array<{params: Record<string, number>, score: number}> = [];
-  private explorationFactor: number = 0.1;
-  private readonly MAX_HISTORY_SIZE = 50;
+export interface BayesianDataPoint {
+  params: Record<string, number>;
+  value: number;
+}
 
+/**
+ * Interfaz pública del optimizador
+ */
+export interface BayesianOptimizer {
   /**
-   * Create a new optimizer with a set of parameters to optimize
+   * Añade un punto de datos al modelo
+   * @param params Parámetros
+   * @param value Valor
    */
-  constructor(parameters: OptimizationParameter[]) {
+  addPoint(params: Record<string, number>, value: number): void;
+  
+  /**
+   * Obtiene el siguiente conjunto de parámetros a probar
+   */
+  suggestNext(): Record<string, number>;
+  
+  /**
+   * Optimiza la función objetivo
+   * @param objectiveFunction Función objetivo
+   * @param iterations Número de iteraciones
+   * @param callback Función de callback
+   */
+  optimize(
+    objectiveFunction: (params: Record<string, number>) => number,
+    iterations: number,
+    callback?: (iteration: number, params: Record<string, number>, value: number) => void
+  ): Promise<{
+    params: Record<string, number>;
+    value: number;
+  } | null>;
+  
+  /**
+   * Reinicia el optimizador
+   */
+  reset(): void;
+  
+  /**
+   * Obtiene el mejor resultado
+   */
+  getBest(): BayesianDataPoint | null;
+  
+  /**
+   * Obtiene todos los resultados
+   */
+  getAll(): BayesianDataPoint[];
+}
+
+/**
+ * Implementación del proceso gaussiano
+ */
+export interface GaussianProcess {
+  /**
+   * Entrena el modelo con los datos proporcionados
+   * @param data Puntos de datos
+   */
+  train(data: BayesianDataPoint[]): void;
+  
+  /**
+   * Predice el valor para los parámetros dados
+   * @param params Parámetros
+   */
+  predict(params: Record<string, number>): number;
+  
+  /**
+   * Sugiere el siguiente conjunto de parámetros a probar
+   * @param explorationWeight Peso de exploración
+   */
+  suggest(explorationWeight: number): Record<string, number>;
+}
+
+/**
+ * Implementación del optimizador bayesiano
+ */
+class DefaultBayesianOptimizer implements BayesianOptimizer {
+  private parameters: OptimizationParameter[];
+  private data: BayesianDataPoint[] = [];
+  private gp: GaussianProcess;
+  private config: BayesianOptimizerConfig;
+  private initialParams: Record<string, number>;
+  
+  /**
+   * Constructor
+   * @param parameters Parámetros a optimizar
+   * @param initialParams Parámetros iniciales
+   * @param config Configuración
+   */
+  constructor(
+    parameters: OptimizationParameter[],
+    initialParams: Record<string, number> = {},
+    config: BayesianOptimizerConfig = {}
+  ) {
     this.parameters = parameters;
-    console.log("BayesianOptimizer: Created with parameters", 
-      parameters.map(p => `${p.name}: ${p.min}-${p.max}, current: ${p.current}`));
-  }
-
-  /**
-   * Add an observation with current parameter values and resulting score
-   */
-  public addObservation(paramValues: Record<string, number>, score: number): void {
-    this.observedValues.push({params: {...paramValues}, score});
-    
-    // Keep history bounded
-    if (this.observedValues.length > this.MAX_HISTORY_SIZE) {
-      this.observedValues.shift();
-    }
-    
-    console.log("BayesianOptimizer: Added observation with score", score);
-  }
-
-  /**
-   * Compute expected improvement for a parameter set based on observed values
-   */
-  private computeExpectedImprovement(paramValues: Record<string, number>): number {
-    if (this.observedValues.length < 3) return 0.5; // Not enough data
-    
-    // Simplified EI calculation - actual Bayesian EI would use Gaussian process
-    const paramDistance = (a: Record<string, number>, b: Record<string, number>) => {
-      return Object.keys(a).reduce((sum, key) => {
-        const paramDef = this.parameters.find(p => p.name === key);
-        if (!paramDef) return sum;
-        
-        // Normalize distance by parameter range
-        const range = paramDef.max - paramDef.min;
-        const normalizedDist = Math.abs(a[key] - b[key]) / range;
-        return sum + normalizedDist * normalizedDist;
-      }, 0);
+    this.initialParams = initialParams;
+    this.config = {
+      explorationWeight: 0.2,
+      maxIterations: 100,
+      initialPoints: 5,
+      noiseLevel: 0.01,
+      ...config
     };
     
-    // For each observed point, compute distance and weight
-    const distanceWeights = this.observedValues.map(obs => {
-      const dist = paramDistance(obs.params, paramValues);
-      // Convert distance to similarity (closer = higher weight)
-      return { score: obs.score, weight: Math.exp(-5 * dist) };
-    });
+    this.gp = new GaussianProcessImpl(parameters, this.config.noiseLevel || 0.01);
     
-    // Compute weighted average of scores
-    const totalWeight = distanceWeights.reduce((sum, dw) => sum + dw.weight, 0);
-    if (totalWeight === 0) return 0.5;
-    
-    const weightedScore = distanceWeights.reduce(
-      (sum, dw) => sum + dw.score * dw.weight, 0
-    ) / totalWeight;
-    
-    // Compute variance as uncertainty measure
-    const variance = distanceWeights.reduce(
-      (sum, dw) => sum + dw.weight * Math.pow(dw.score - weightedScore, 2), 0
-    ) / totalWeight;
-    
-    // Combine mean and variance with exploration factor
-    // This is a simplified acquisition function inspired by Upper Confidence Bound
-    return weightedScore + this.explorationFactor * Math.sqrt(variance);
-  }
-
-  /**
-   * Suggest next parameter values to try based on previous observations
-   */
-  public suggestNextParameters(): OptimizationResult {
-    if (this.observedValues.length < 3) {
-      // Not enough data for meaningful optimization, return current with some randomness
-      const result: Record<string, number> = {};
-      let totalUncertainty = 0;
-      
-      this.parameters.forEach(param => {
-        // Small random perturbation
-        const range = param.max - param.min;
-        const perturbation = (Math.random() - 0.5) * range * 0.2;
-        result[param.name] = Math.max(param.min, 
-                              Math.min(param.max, param.current + perturbation));
-        totalUncertainty += range * 0.1;
-      });
-      
-      return {
-        parameters: result,
-        expectedImprovement: 0.5,
-        uncertainty: totalUncertainty / this.parameters.length
-      };
-    }
-    
-    // Start with best observed parameters
-    const bestObservation = [...this.observedValues]
-      .sort((a, b) => b.score - a.score)[0];
-    
-    // Search space around best observation
-    const candidateCount = 10;
-    const candidates: Array<{params: Record<string, number>, ei: number, uncertainty: number}> = [];
-    
-    // Generate candidates around best observation
-    for (let i = 0; i < candidateCount; i++) {
-      const candidateParams: Record<string, number> = {};
-      let uncertainty = 0;
-      
-      this.parameters.forEach(param => {
-        const range = param.max - param.min;
-        // Explore parameter space with random perturbations
-        const perturbation = (Math.random() - 0.5) * range * (0.1 + this.explorationFactor);
-        const value = Math.max(param.min, 
-                     Math.min(param.max, bestObservation.params[param.name] + perturbation));
-        candidateParams[param.name] = value;
-        
-        // Calculate uncertainty as distance from best known point
-        const paramUncertainty = Math.abs(value - bestObservation.params[param.name]) / range;
-        uncertainty += paramUncertainty;
-      });
-      
-      const ei = this.computeExpectedImprovement(candidateParams);
-      candidates.push({
-        params: candidateParams,
-        ei,
-        uncertainty: uncertainty / this.parameters.length
+    // Inicializar con puntos aleatorios
+    if (Object.keys(initialParams).length === 0) {
+      for (let i = 0; i < (this.config.initialPoints || 5); i++) {
+        const randomParams: Record<string, number> = {};
+        for (const param of parameters) {
+          randomParams[param.name] = param.min + Math.random() * (param.max - param.min);
+        }
+        this.data.push({
+          params: randomParams,
+          value: 0 // Valor inicial
+        });
+      }
+    } else {
+      this.data.push({
+        params: initialParams,
+        value: 0
       });
     }
-    
-    // Sort by expected improvement and pick the best
-    candidates.sort((a, b) => b.ei - a.ei);
-    const bestCandidate = candidates[0];
-    
-    console.log("BayesianOptimizer: Suggesting parameters with EI", 
-                bestCandidate.ei.toFixed(3), 
-                "uncertainty", bestCandidate.uncertainty.toFixed(3));
-    
-    return {
-      parameters: bestCandidate.params,
-      expectedImprovement: bestCandidate.ei,
-      uncertainty: bestCandidate.uncertainty
-    };
   }
-
+  
   /**
-   * Set the exploration factor (higher = more exploration)
+   * Añade un punto de datos al modelo
+   * @param params Parámetros
+   * @param value Valor
    */
-  public setExplorationFactor(factor: number): void {
-    this.explorationFactor = Math.max(0.01, Math.min(1, factor));
+  public addPoint(params: Record<string, number>, value: number): void {
+    this.data.push({ params, value });
   }
-
+  
   /**
-   * Get the best parameters found so far
+   * Obtiene el siguiente conjunto de parámetros a probar
    */
-  public getBestParameters(): Record<string, number> | null {
-    if (this.observedValues.length === 0) return null;
-    
-    const bestObservation = [...this.observedValues]
-      .sort((a, b) => b.score - a.score)[0];
-    
-    return {...bestObservation.params};
+  public suggestNext(): Record<string, number> {
+    this.gp.train(this.data);
+    return this.gp.suggest(this.config.explorationWeight || 0.2);
   }
-
+  
   /**
-   * Reset the optimizer
+   * Optimiza la función objetivo
+   * @param objectiveFunction Función objetivo
+   * @param iterations Número de iteraciones
+   * @param callback Función de callback
+   */
+  public async optimize(
+    objectiveFunction: (params: Record<string, number>) => number,
+    iterations: number,
+    callback?: (iteration: number, params: Record<string, number>, value: number) => void
+  ): Promise<{
+    params: Record<string, number>;
+    value: number;
+  } | null> {
+    let bestResult: {
+      params: Record<string, number>;
+      value: number;
+    } | null = null;
+    
+    for (let i = 0; i < iterations; i++) {
+      const nextParams = this.suggestNext();
+      const value = objectiveFunction(nextParams);
+      
+      this.addPoint(nextParams, value);
+      
+      if (callback) {
+        callback(i, nextParams, value);
+      }
+      
+      if (!bestResult || value > bestResult.value) {
+        bestResult = { params: nextParams, value };
+      }
+    }
+    
+    return bestResult;
+  }
+  
+  /**
+   * Reinicia el optimizador
    */
   public reset(): void {
-    this.observedValues = [];
-    console.log("BayesianOptimizer: Reset");
+    this.data = [];
+    this.gp = new GaussianProcessImpl(this.parameters, this.config.noiseLevel || 0.01);
+    
+    // Inicializar con puntos aleatorios
+    if (Object.keys(this.initialParams).length === 0) {
+      for (let i = 0; i < (this.config.initialPoints || 5); i++) {
+        const randomParams: Record<string, number> = {};
+        for (const param of this.parameters) {
+          randomParams[param.name] = param.min + Math.random() * (param.max - param.min);
+        }
+        this.data.push({
+          params: randomParams,
+          value: 0 // Valor inicial
+        });
+      }
+    } else {
+      this.data.push({
+        params: this.initialParams,
+        value: 0
+      });
+    }
+  }
+  
+  /**
+   * Obtiene el mejor resultado
+   */
+  public getBest(): BayesianDataPoint | null {
+    if (this.data.length === 0) {
+      return null;
+    }
+    
+    let best = this.data[0];
+    for (const point of this.data) {
+      if (point.value > best.value) {
+        best = point;
+      }
+    }
+    return best;
+  }
+  
+  /**
+   * Obtiene todos los resultados
+   */
+  public getAll(): BayesianDataPoint[] {
+    return [...this.data];
   }
 }
 
 /**
- * Create a new optimizer with default PPG processing parameters
+ * Implementación del proceso gaussiano
  */
-export function createDefaultPPGOptimizer(): BayesianOptimizer {
-  return new BayesianOptimizer([
-    { name: "qualityThreshold", min: 0.3, max: 0.9, current: 0.7 },
-    { name: "amplificationFactor", min: 0.5, max: 5.0, current: 2.0 },
-    { name: "adaptationRate", min: 0.01, max: 0.5, current: 0.15 },
-    { name: "filterStrength", min: 0.1, max: 3.0, current: 1.0 },
-    { name: "predictionHorizon", min: 1, max: 10, current: 5 },
-  ]);
+class GaussianProcessImpl implements GaussianProcess {
+  private parameters: OptimizationParameter[];
+  private kernel: (x1: Record<string, number>, x2: Record<string, number>) => number;
+  private noiseLevel: number;
+  private data: BayesianDataPoint[] = [];
+  
+  /**
+   * Constructor
+   * @param parameters Parámetros a optimizar
+   * @param noiseLevel Nivel de ruido
+   */
+  constructor(parameters: OptimizationParameter[], noiseLevel: number) {
+    this.parameters = parameters;
+    this.noiseLevel = noiseLevel;
+    
+    // Kernel RBF
+    this.kernel = (x1: Record<string, number>, x2: Record<string, number>) => {
+      let distance = 0;
+      for (const param of parameters) {
+        distance += Math.pow(x1[param.name] - x2[param.name], 2);
+      }
+      const sigma = 5.0; // Longitud de escala
+      return Math.exp(-distance / (2 * sigma * sigma));
+    };
+  }
+  
+  /**
+   * Entrena el modelo con los datos proporcionados
+   * @param data Puntos de datos
+   */
+  public train(data: BayesianDataPoint[]): void {
+    this.data = data;
+  }
+  
+  /**
+   * Predice el valor para los parámetros dados
+   * @param params Parámetros
+   */
+  public predict(params: Record<string, number>): number {
+    if (this.data.length === 0) {
+      return 0;
+    }
+    
+    let kValues: number[] = [];
+    for (const point of this.data) {
+      kValues.push(this.kernel(params, point.params));
+    }
+    
+    // Invertir matriz de covarianza
+    const covarianceMatrix = this.getCovarianceMatrix();
+    const invertedMatrix = this.invertMatrix(covarianceMatrix);
+    
+    // Calcular pesos
+    let weights: number[] = [];
+    for (let i = 0; i < this.data.length; i++) {
+      let weight = 0;
+      for (let j = 0; j < this.data.length; j++) {
+        weight += invertedMatrix[i][j] * this.data[j].value;
+      }
+      weights.push(weight);
+    }
+    
+    // Predicción
+    let prediction = 0;
+    for (let i = 0; i < this.data.length; i++) {
+      prediction += kValues[i] * weights[i];
+    }
+    
+    return prediction;
+  }
+  
+  /**
+   * Sugiere el siguiente conjunto de parámetros a probar
+   * @param explorationWeight Peso de exploración
+   */
+  public suggest(explorationWeight: number): Record<string, number> {
+    let bestParams: Record<string, number> | null = null;
+    let bestUCB = -Infinity;
+    
+    for (let i = 0; i < 1000; i++) {
+      const randomParams: Record<string, number> = {};
+      for (const param of this.parameters) {
+        randomParams[param.name] = param.min + Math.random() * (param.max - param.min);
+      }
+      
+      const prediction = this.predict(randomParams);
+      const uncertainty = this.calculateUncertainty(randomParams);
+      const ucb = prediction + explorationWeight * uncertainty;
+      
+      if (ucb > bestUCB) {
+        bestUCB = ucb;
+        bestParams = randomParams;
+      }
+    }
+    
+    return bestParams || {};
+  }
+  
+  /**
+   * Calcula la incertidumbre
+   * @param params Parámetros
+   */
+  private calculateUncertainty(params: Record<string, number>): number {
+    // Implementación simplificada
+    let uncertainty = 0;
+    for (const point of this.data) {
+      uncertainty += Math.pow(this.kernel(params, point.params), 2);
+    }
+    return Math.sqrt(uncertainty);
+  }
+  
+  /**
+   * Obtiene la matriz de covarianza
+   */
+  private getCovarianceMatrix(): number[][] {
+    const matrix: number[][] = [];
+    for (let i = 0; i < this.data.length; i++) {
+      matrix[i] = [];
+      for (let j = 0; j < this.data.length; j++) {
+        matrix[i][j] = this.kernel(this.data[i].params, this.data[j].params);
+        if (i === j) {
+          matrix[i][j] += this.noiseLevel;
+        }
+      }
+    }
+    return matrix;
+  }
+  
+  /**
+   * Invierte la matriz
+   * @param matrix Matriz
+   */
+  private invertMatrix(matrix: number[][]): number[][] {
+    const size = matrix.length;
+    const identity = [];
+    for (let i = 0; i < size; i++) {
+      identity[i] = [];
+      for (let j = 0; j < size; j++) {
+        identity[i][j] = i === j ? 1 : 0;
+      }
+    }
+    
+    const augmentedMatrix = matrix.map((row, i) => row.concat(identity[i]));
+    
+    for (let i = 0; i < size; i++) {
+      let diagonalElement = augmentedMatrix[i][i];
+      
+      if (diagonalElement === 0) {
+        for (let j = i + 1; j < size; j++) {
+          if (augmentedMatrix[j][i] !== 0) {
+            [augmentedMatrix[i], augmentedMatrix[j]] = [augmentedMatrix[j], augmentedMatrix[i]];
+            diagonalElement = augmentedMatrix[i][i];
+            break;
+          }
+        }
+        if (diagonalElement === 0) {
+          throw new Error("Matrix is not invertible");
+        }
+      }
+      
+      const divisor = diagonalElement;
+      for (let j = 0; j < size * 2; j++) {
+        augmentedMatrix[i][j] /= divisor;
+      }
+      
+      for (let j = 0; j < size; j++) {
+        if (i !== j) {
+          const factor = augmentedMatrix[j][i];
+          for (let k = 0; k < size * 2; k++) {
+            augmentedMatrix[j][k] -= factor * augmentedMatrix[i][k];
+          }
+        }
+      }
+    }
+    
+    const inverse = [];
+    for (let i = 0; i < size; i++) {
+      inverse[i] = augmentedMatrix[i].slice(size);
+    }
+    return inverse;
+  }
+}
+
+/**
+ * Parámetros predeterminados para PPG
+ */
+export const DEFAULT_PPG_PARAMETERS: OptimizationParameter[] = [
+  {
+    name: 'minRedThreshold',
+    min: 50,
+    max: 150,
+    default: 85,
+    step: 1
+  },
+  {
+    name: 'maxRedThreshold',
+    min: 200,
+    max: 255,
+    default: 245,
+    step: 1
+  },
+  {
+    name: 'stabilityWindow',
+    min: 2,
+    max: 8,
+    default: 4,
+    step: 1
+  },
+  {
+    name: 'minStabilityCount',
+    min: 2,
+    max: 5,
+    default: 3,
+    step: 1
+  }
+];
+
+/**
+ * Parámetros predeterminados para detección de latidos
+ */
+export const DEFAULT_HEARTBEAT_PARAMETERS: OptimizationParameter[] = [
+  {
+    name: 'minPeakDistance',
+    min: 150,
+    max: 450,
+    default: 300,
+    step: 1
+  },
+  {
+    name: 'minPeakHeight',
+    min: 0.1,
+    max: 0.8,
+    default: 0.35,
+    step: 0.01
+  },
+  {
+    name: 'influence',
+    min: 0,
+    max: 1,
+    default: 0.6,
+    step: 0.01
+  },
+  {
+    name: 'threshold',
+    min: 1,
+    max: 8,
+    default: 3,
+    step: 0.1
+  }
+];
+
+/**
+ * Crea un optimizador bayesiano
+ */
+export function createBayesianOptimizer(
+  parameters: OptimizationParameter[],
+  initialParams: Record<string, number> = {},
+  config: BayesianOptimizerConfig = {}
+): BayesianOptimizer {
+  return new DefaultBayesianOptimizer(parameters, initialParams, config);
+}
+
+/**
+ * Crea un optimizador predeterminado para PPG
+ */
+export function createDefaultPPGOptimizer(
+  config: BayesianOptimizerConfig = {}
+): BayesianOptimizer {
+  return new DefaultBayesianOptimizer(DEFAULT_PPG_PARAMETERS, {}, config);
+}
+
+/**
+ * Crea un optimizador para heart beat
+ */
+export function createHeartbeatOptimizer(
+  config: BayesianOptimizerConfig = {}
+): BayesianOptimizer {
+  return new DefaultBayesianOptimizer(DEFAULT_HEARTBEAT_PARAMETERS, {}, config);
 }

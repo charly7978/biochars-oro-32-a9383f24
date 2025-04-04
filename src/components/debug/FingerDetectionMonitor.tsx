@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { toast } from "@/components/ui/use-toast";
+import { toast } from "sonner";
 import {
   unifiedFingerDetector,
   resetFingerDetector,
@@ -59,23 +59,35 @@ interface FingerDetectionMonitorProps {
 const FingerDetectionMonitor: React.FC<FingerDetectionMonitorProps> = ({ className }) => {
   const [detectionState, setDetectionState] = useState<DetectionState>(getFingerDetectionState());
   const [sensitivity, setSensitivity] = useState(0.5);
-  const [diagnosticEvents, setDiagnosticEvents] = useState(fingerDiagnostics.getDiagnosticEvents());
+  const [diagnosticEvents, setDiagnosticEvents] = useState<DiagnosticEvent[]>([]);
   const [isRhythmDetected, setIsRhythmDetected] = useState(isFingerDetectedByRhythm());
   const [isAmplitudeDetected, setIsAmplitudeDetected] = useState(isFingerDetectedByAmplitude());
-  const [calibrationParams, setCalibrationParams] = useState(getCalibrationParameters());
-  const [environmentalState, setEnvironmentalState] = useState(adaptiveCalibration.getEnvironmentalState());
-  const [noiseLevel, setNoiseLevel] = useState(environmentalState.noise || 0);
-  const [lightingLevel, setLightingLevel] = useState(environmentalState.lighting || 50);
-  const [motionLevel, setMotionLevel] = useState(environmentalState.motion || 0);
+  const [calibrationParams, setCalibrationParams] = useState<AdaptiveCalibrationParams>(getCalibrationParameters());
+  const [environmentalState, setEnvironmentalState] = useState<EnvironmentalState>({
+    noise: 0,
+    lighting: 50,
+    motion: 0
+  });
+  const [noiseLevel, setNoiseLevel] = useState(0);
+  const [lightingLevel, setLightingLevel] = useState(50);
+  const [motionLevel, setMotionLevel] = useState(0);
   
   useEffect(() => {
     const intervalId = setInterval(() => {
       setDetectionState(getFingerDetectionState());
-      setDiagnosticEvents(fingerDiagnostics.getDiagnosticEvents());
+      // Get diagnostic events using the appropriate API
+      const events = getDiagnosticStats().events || [];
+      setDiagnosticEvents(events);
       setIsRhythmDetected(isFingerDetectedByRhythm());
       setIsAmplitudeDetected(isFingerDetectedByAmplitude());
       setCalibrationParams(getCalibrationParameters());
-      setEnvironmentalState(adaptiveCalibration.getEnvironmentalState());
+      // Get the current environmental state
+      const currentEnv = getCalibrationParameters().environmentalState || { 
+        noise: 0, 
+        lighting: 50, 
+        motion: 0 
+      };
+      setEnvironmentalState(currentEnv);
     }, 500);
     
     return () => clearInterval(intervalId);
@@ -96,28 +108,20 @@ const FingerDetectionMonitor: React.FC<FingerDetectionMonitorProps> = ({ classNa
   const handleApplySensitivity = (value: number) => {
     if (value === 0.5) return; // No change at middle point
     
-    // Use adaptThresholds instead of updateThresholds
-    unifiedFingerDetector.adaptThresholds({
-      amplitudeSensitivity: value < 0.5 ? 0.8 : 1.2,
-      rhythmSensitivity: value < 0.5 ? 0.8 : 1.2,
-    });
+    // Apply sensitivity using the adaptDetectionThresholds function
+    adaptDetectionThresholds(value < 0.5 ? 0.8 : 1.2);
     
-    toast({
-      title: "Sensitivity Applied",
+    toast.success("Sensitivity Applied", {
       description: `Detection sensitivity set to ${value < 0.5 ? "less" : "more"} sensitive`,
     });
   };
   
   const handleResetSensitivity = () => {
-    // Use adaptThresholds instead of updateThresholds
-    unifiedFingerDetector.adaptThresholds({
-      amplitudeSensitivity: 1.0,
-      rhythmSensitivity: 1.0,
-    });
+    // Reset sensitivity using the adaptDetectionThresholds function
+    adaptDetectionThresholds(1.0);
     
     setSensitivity(0.5);
-    toast({
-      title: "Sensitivity Reset",
+    toast.success("Sensitivity Reset", {
       description: "Detection sensitivity returned to default",
     });
   };
@@ -142,8 +146,7 @@ const FingerDetectionMonitor: React.FC<FingerDetectionMonitorProps> = ({ classNa
   
   const handleResetCalibration = () => {
     resetCalibration();
-    toast({
-      title: "Calibration Reset",
+    toast.success("Calibration Reset", {
       description: "Adaptive calibration has been reset to default values.",
     });
   };

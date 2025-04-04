@@ -5,7 +5,8 @@
  * Se encarga del procesamiento especializado de picos/latidos
  */
 import { ProcessedHeartbeatSignal, SignalProcessor, SignalProcessingOptions } from './types';
-import { AdaptivePredictor, getAdaptivePredictor } from './utils/adaptive-predictor';
+import { getAdaptivePredictor } from './utils/adaptive-predictor';
+import type { AdaptivePredictor } from './utils/adaptive-predictor';
 
 /**
  * Clase para el procesamiento avanzado de señales cardíacas
@@ -47,10 +48,10 @@ export class HeartbeatProcessor implements SignalProcessor<ProcessedHeartbeatSig
     
     if (this.useAdaptiveControl) {
       // Update the adaptive predictor with the current value
-      this.adaptivePredictor.update(timestamp, value, 1.0);
+      this.adaptivePredictor.addValue(value);
       
       // Get prediction for the current time
-      const prediction = this.adaptivePredictor.predict(timestamp);
+      const prediction = this.adaptivePredictor.predict();
       predictionQuality = prediction.confidence * 100;
       
       // Use filtered value from predictor for enhanced peak detection
@@ -262,9 +263,6 @@ export class HeartbeatProcessor implements SignalProcessor<ProcessedHeartbeatSig
     if (options.qualityEnhancedByPrediction !== undefined) {
       this.qualityEnhancedByPrediction = options.qualityEnhancedByPrediction;
     }
-    
-    // Also configure the adaptive predictor
-    this.adaptivePredictor.configure(options);
   }
   
   /**

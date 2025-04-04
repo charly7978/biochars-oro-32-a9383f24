@@ -3,7 +3,7 @@ import React, { useRef, useEffect, useState } from 'react';
 import { Fingerprint } from 'lucide-react';
 import { logError, ErrorLevel } from '@/utils/debugUtils';
 import { CameraState, setCameraState } from '@/utils/deviceErrorTracker';
-import { unifiedFingerDetector } from '@/modules/signal-processing/utils/unified-finger-detector';
+import { updateDetectionSource } from '@/modules/signal-processing';
 
 interface CameraViewProps {
   onStreamReady?: (stream: MediaStream) => void;
@@ -248,135 +248,88 @@ const CameraView: React.FC<CameraViewProps> = ({
         setAvgBrightness(avgBrightness);
         
         // Actualizar detector unificado con información de brillo
-        unifiedFingerDetector.updateSource(
-          'brightness', 
-          avgBrightness < 60, // Oscuro sugiere presencia de dedo
-          Math.min(1.0, Math.max(0.0, (120 - avgBrightness) / 120))
+        updateDetectionSource(
+          'camera-analysis',
+          avgBrightness > 50, // Indicar presencia potencial de dedo si brillo adecuado
+          Math.min(1, avgBrightness / 200) // Confianza normalizada
         );
-        
-        // Verificar si el video sigue reproduciéndose correctamente
-        if (videoRef.current && (videoRef.current.paused || videoRef.current.ended)) {
-          logError("Video pausado o terminado inesperadamente", ErrorLevel.WARNING, "CameraView");
-          streamErrorRef.current = true;
-          handleCameraError("Video pausado o terminado");
-        }
-      } catch (err) {
-        logError(`Error al verificar brillo: ${err instanceof Error ? err.message : String(err)}`, 
-          ErrorLevel.ERROR, "CameraView");
-        streamErrorRef.current = true;
+      } catch (error) {
+        logError(`Error checking brightness: ${error}`, ErrorLevel.ERROR, "CameraView");
       }
     };
 
     const interval = setInterval(checkBrightness, 500);
-    
-    // Health check para el stream
-    const healthCheck = setInterval(() => {
-      // Verificar que el stream sigue activo
-      if (stream) {
-        const videoTracks = stream.getVideoTracks();
-        if (videoTracks.length === 0 || videoTracks[0].readyState !== 'live') {
-          logError("Estado de video track no válido", ErrorLevel.WARNING, "CameraView");
-          streamErrorRef.current = true;
-          handleCameraError("Video track no válido");
-        }
-      }
-      
-      // Si hay error de stream pero no se ha reiniciado, intentar reiniciar
-      if (streamErrorRef.current && isMonitoring) {
-        logError("Reiniciando cámara tras error detectado por health check", 
-          ErrorLevel.WARNING, "CameraView");
-        
-        stopCamera().then(() => startCamera());
-        streamErrorRef.current = false;
-      }
-    }, 3000);
-    
-    return () => {
-      clearInterval(interval);
-      clearInterval(healthCheck);
-    };
-  }, [stream, isMonitoring, isFingerDetected, signalQuality, brightnessSamples, retryCount]);
+    return () => clearInterval(interval);
+  }, [stream, isMonitoring, brightnessSamples]);
 
-  // Gestión principal de la cámara
   useEffect(() => {
-    if (isMonitoring && !stream) {
+    if (isMonitoring) {
       startCamera();
-    } else if (!isMonitoring && stream) {
+    } else {
       stopCamera();
     }
-    
     return () => {
-      logError("CameraView component unmounting, stopping camera", ErrorLevel.INFO, "CameraView");
       stopCamera();
     };
   }, [isMonitoring]);
 
-  // Determine actual finger status using both provided detection and brightness
-  const actualFingerStatus = isFingerDetected && (
-    avgBrightness < 60 || // Dark means finger is likely present
-    signalQuality > 50    // Good quality signal confirms finger
-  );
-  
-  // Actualizar detector unificado con nuestra conclusión sobre el dedo
-  useEffect(() => {
-    if (isMonitoring) {
-      unifiedFingerDetector.updateSource(
-        'camera-analysis', 
-        actualFingerStatus,
-        signalQuality ? (signalQuality / 100) : 0.5
-      );
-    }
-  }, [actualFingerStatus, signalQuality, isMonitoring]);
-
   return (
-    <>
-      <video
+    <div className="relative rounded-lg overflow-hidden bg-black w-full h-full flex items-center justify-center">
+      {cameraError ? (
+        <div className="absolute inset-0 flex flex-col items-center justify-center text-white bg-black/80 p-4 z-20">
+          <div className="bg-red-800/70 rounded-lg p-3 mb-2">
+            <Fingerprint size={32} className="text-white" />
+          </div>
+          <p className="text-center font-medium">Error de cámara</p>
+          <p className="text-center text-xs mt-1 max-w-[250px]">{cameraError}</p>
+          {retryCount < maxRetryAttempts && (
+            <p className="text-xs mt-2 text-gray-300">Reintentando automáticamente...</p>
+          )}
+        </div>
+      ) : null}
+      
+      <video 
         ref={videoRef}
-        autoPlay
+        autoPlay 
         playsInline
         muted
-        className="absolute top-0 left-0 min-w-full min-h-full w-auto h-auto z-0 object-cover"
-        style={{
-          willChange: 'transform',
-          transform: 'translateZ(0)',
-          backfaceVisibility: 'hidden'
-        }}
+        className="min-w-full min-h-full object-cover"
       />
       
-      {/* Error de cámara */}
-      {cameraError && (
-        <div className="absolute inset-0 bg-black/70 flex items-center justify-center z-30 p-4">
-          <div className="bg-red-900/80 p-4 rounded-lg text-white max-w-md text-center">
-            <h3 className="text-lg font-semibold mb-2">Error de cámara</h3>
-            <p className="mb-4">{cameraError}</p>
-            <p className="text-sm opacity-80">
-              {retryCount < maxRetryAttempts 
-                ? `Reintentando (${retryCount}/${maxRetryAttempts})...` 
-                : "Reintento fallido, compruebe los permisos de la cámara."}
-            </p>
-          </div>
+      {isMonitoring && (
+        <div className="absolute bottom-2 left-2 bg-black/30 backdrop-blur-sm rounded px-2 py-1 text-xs text-white flex items-center">
+          <div 
+            className={`w-2 h-2 rounded-full mr-1.5 ${
+              isFingerDetected ? 'bg-green-500' : 'bg-red-500'
+            }`}
+          />
+          {isFingerDetected ? 'Dedo detectado' : 'Coloque su dedo'}
+          {isFingerDetected && signalQuality && (
+            <span className="ml-1.5">
+              · Calidad: {Math.round(signalQuality)}%
+            </span>
+          )}
         </div>
       )}
       
-      {isMonitoring && buttonPosition && (
-        <div className="absolute bottom-24 left-1/2 transform -translate-x-1/2 z-20 flex flex-col items-center">
-          <Fingerprint
-            size={48}
-            className={`transition-colors duration-300 ${
-              !actualFingerStatus ? 'text-gray-400' :
-              signalQuality > 75 ? 'text-green-500' :
-              signalQuality > 50 ? 'text-yellow-500' :
-              'text-red-500'
-            }`}
-          />
-          <span className={`text-xs mt-2 transition-colors duration-300 ${
-            actualFingerStatus ? 'text-green-500' : 'text-gray-400'
-          }`}>
-            {actualFingerStatus ? "dedo detectado" : "ubique su dedo en el lente"}
-          </span>
+      {buttonPosition && (
+        <div 
+          className="absolute w-16 h-16 rounded-full border-2 border-white/60 pointer-events-none"
+          style={{
+            top: buttonPosition.y - 32,
+            left: buttonPosition.x - 32,
+            boxShadow: '0 0 0 2px rgba(0,0,0,0.2)'
+          }}
+        />
+      )}
+      
+      {/* Brightness indicator - only for development debugging */}
+      {process.env.NODE_ENV === 'development' && (
+        <div className="absolute top-2 right-2 bg-black/50 text-white text-xs p-1 rounded">
+          Brillo: {Math.round(avgBrightness)}
         </div>
       )}
-    </>
+    </div>
   );
 };
 
