@@ -12,15 +12,7 @@ export interface HeartBeatResult {
   rrData: {
     intervals: number[];
     lastPeakTime: number | null;
-  };
-  // Datos de diagnóstico para visualización mejorada
-  diagnosticData?: {
-    amplifiedValue: number;
-    timestamp: number;
-    signalQuality: number;
-    thresholdValue: number;
-    isPeakRealTime: boolean;
-  };
+  }
 }
 
 export interface HeartBeatProcessor {
@@ -40,7 +32,6 @@ export interface UseHeartBeatReturn {
   requestBeep: (value: number) => boolean;
   startMonitoring: () => void;
   stopMonitoring: () => void;
-  lastHeartBeatResult: HeartBeatResult | null; // Added missing property
 }
 
 export interface UseArrhythmiaDetectorReturn {
@@ -76,9 +67,6 @@ export interface SignalProcessorOptions {
   filterStrength?: number;
   useAdaptiveControl?: boolean;
   qualityEnhancedByPrediction?: boolean;
-  // Nuevas opciones para visualización mejorada
-  visualizationAmplification?: number;
-  showDiagnosticOverlay?: boolean;
 }
 
 export interface SignalProcessorReturn {
@@ -101,21 +89,4 @@ export interface SignalProcessorReturn {
   signalDistributor: any;
   visualizationBuffer?: number[];
   amplificationFactor?: React.MutableRefObject<number>;
-}
-
-export interface CardiacVisualizationData {
-  timestamp: number;
-  value: number;
-  amplifiedValue: number;
-  isPeak: boolean;
-  bpm: number;
-  isArrhythmia: boolean;
-  signalQuality: number;
-}
-
-export interface ArrhythmiaVisualizationConfig {
-  showDetails: boolean;
-  colorMode: 'standard' | 'enhanced';
-  indicatorSize: 'small' | 'medium' | 'large';
-  showLabels: boolean;
 }
