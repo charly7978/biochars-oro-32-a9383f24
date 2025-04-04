@@ -1,3 +1,4 @@
+
 import { useCallback, useRef, useEffect } from 'react';
 import { HeartBeatResult } from './types';
 import { HeartBeatConfig } from '../../modules/heart-beat/config';
@@ -308,3 +309,5 @@ export function useSignalProcessor() {
     amplificationFactor: amplificationFactorRef
   };
 }
+
+// Local function removed to avoid conflict with imported function
