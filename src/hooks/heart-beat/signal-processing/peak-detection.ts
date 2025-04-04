@@ -21,23 +21,6 @@ let diagnosticsData: DiagnosticData = {
   }
 };
 
-// Additional diagnostic tracking for quality metrics
-let qualityStatsHistory: Array<{
-  timestamp: number;
-  quality: number;
-  signalStrength: number;
-  processingTime: number;
-}> = [];
-
-// Performance metrics tracking
-let processingMetrics = {
-  avgProcessTime: 0,
-  avgSignalStrength: 0,
-  peakRegularity: 0,
-  anomalyPercentage: 0,
-  highPriorityPercentage: 0
-};
-
 /**
  * Handle peak detection with arrhythmia visualization
  */
@@ -56,17 +39,22 @@ export function handlePeakDetection(
     
     // Check if arrhythmia was detected
     if (result.isArrhythmia) {
-      // Dispatch custom event for arrhythmia visualization - EXPLICITLY CALL THIS FUNCTION
-      dispatchArrhythmiaVisualizationEvent(true, now);
+      // Dispatch custom event for arrhythmia visualization
+      const event = new CustomEvent('arrhythmia-window-detected', {
+        detail: {
+          start: now,
+          end: now + 2000, // 2 second window
+          strength: result.confidence || 0.5
+        }
+      });
+      
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(event);
+      }
       
       // Update diagnostics
       diagnosticsData.isArrhythmia = true;
       diagnosticsData.arrhythmiaCount = (diagnosticsData.arrhythmiaCount || 0) + 1;
-      
-      console.log("Peak-detection: ARRITMIA DETECTADA - enviando evento de visualización", {
-        timestamp: now,
-        count: diagnosticsData.arrhythmiaCount
-      });
     }
     
     // If monitoring is active and we have a value, trigger beep
@@ -130,14 +118,18 @@ export function detectArrhythmia(intervals: number[]): boolean {
     };
     diagnosticsData.isArrhythmia = true;
     
-    // Dispatch arrhythmia visualization event - ALWAYS DISPATCH ON DETECTION
-    dispatchArrhythmiaVisualizationEvent(true, Date.now(), variability);
-    
-    console.log("detectArrhythmia: Arritmia detectada", { 
-      variability, 
-      threshold: 0.2, 
-      intervals: recentIntervals 
+    // Dispatch arrhythmia visualization event
+    const event = new CustomEvent('arrhythmia-window-detected', {
+      detail: {
+        start: Date.now(),
+        end: Date.now() + 2000, // 2 second window
+        strength: variability
+      }
     });
+    
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(event);
+    }
   }
   
   return isArrhythmia;
@@ -165,11 +157,6 @@ export function calculateArrhythmiaRisk(intervals: number[]): number {
     variability: riskScore
   };
   
-  // If high risk, also trigger visualization
-  if (riskScore > 0.4) {
-    dispatchArrhythmiaVisualizationEvent(true, Date.now(), riskScore);
-  }
-  
   return riskScore;
 }
 
@@ -178,8 +165,8 @@ export function calculateArrhythmiaRisk(intervals: number[]): number {
  */
 export function getArrhythmiaStatusMessage(isArrhythmia: boolean, count: number): string {
   return isArrhythmia 
-    ? `ARRITMIA DETECTADA|${count}`
-    : `RITMO NORMAL|${count}`;
+    ? `ARRHYTHMIA DETECTED|${count}`
+    : `NORMAL RHYTHM|${count}`;
 }
 
 /**
@@ -206,182 +193,4 @@ export function clearDiagnosticsData(): void {
       variability: 0
     }
   };
-  
-  // Also clear quality stats history
-  qualityStatsHistory = [];
-  
-  // Reset performance metrics
-  processingMetrics = {
-    avgProcessTime: 0,
-    avgSignalStrength: 0,
-    peakRegularity: 0,
-    anomalyPercentage: 0,
-    highPriorityPercentage: 0
-  };
-}
-
-/**
- * Track signal quality metrics
- * @param quality Signal quality value (0-1)
- * @param signalStrength Signal strength value
- * @param processingTime Processing time in ms
- */
-export function trackQualityMetrics(
-  quality: number,
-  signalStrength: number,
-  processingTime: number
-): void {
-  qualityStatsHistory.push({
-    timestamp: Date.now(),
-    quality: quality * 100, // Convert to percentage
-    signalStrength,
-    processingTime
-  });
-  
-  // Keep history limited to reasonable size
-  if (qualityStatsHistory.length > 300) {
-    qualityStatsHistory = qualityStatsHistory.slice(-300);
-  }
-  
-  // Update processing metrics
-  updateProcessingMetrics(quality, signalStrength, processingTime);
-}
-
-/**
- * Update processing metrics based on recent data
- */
-function updateProcessingMetrics(
-  quality: number,
-  signalStrength: number,
-  processingTime: number
-): void {
-  // Simple moving average for metrics
-  processingMetrics.avgProcessTime = processingMetrics.avgProcessTime * 0.9 + processingTime * 0.1;
-  processingMetrics.avgSignalStrength = processingMetrics.avgSignalStrength * 0.9 + signalStrength * 0.1;
-  
-  // Count high priority processing
-  if (processingTime < 10) {
-    processingMetrics.highPriorityPercentage = processingMetrics.highPriorityPercentage * 0.95 + 5;
-  } else {
-    processingMetrics.highPriorityPercentage = processingMetrics.highPriorityPercentage * 0.95;
-  }
-  
-  // Cap percentage values
-  processingMetrics.highPriorityPercentage = Math.min(100, processingMetrics.highPriorityPercentage);
-}
-
-/**
- * Get average diagnostics data
- */
-export function getAverageDiagnostics(): {
-  avgProcessTime: number;
-  avgSignalStrength: number;
-  peakRegularity: number;
-  anomalyPercentage: number;
-  highPriorityPercentage: number;
-} {
-  // Add real-time calculations based on history if needed
-  if (qualityStatsHistory.length > 0) {
-    const recentStats = qualityStatsHistory.slice(-20);
-    
-    if (recentStats.length > 0) {
-      processingMetrics.avgProcessTime = recentStats.reduce((sum, item) => sum + item.processingTime, 0) / recentStats.length;
-      processingMetrics.avgSignalStrength = recentStats.reduce((sum, item) => sum + item.signalStrength, 0) / recentStats.length;
-    }
-  }
-  
-  return { ...processingMetrics };
-}
-
-/**
- * Get detailed quality stats
- */
-export function getDetailedQualityStats(): {
-  qualityDistribution: {
-    excellent: number;
-    good: number;
-    moderate: number;
-    weak: number;
-  };
-  qualityTrend: string;
-  lastQualityScore?: number;
-} {
-  // Default values
-  const distribution = {
-    excellent: 0,
-    good: 0,
-    moderate: 0,
-    weak: 0
-  };
-  
-  // Calculate distribution from history
-  if (qualityStatsHistory.length > 0) {
-    let excellent = 0, good = 0, moderate = 0, weak = 0;
-    const total = qualityStatsHistory.length;
-    
-    for (const stat of qualityStatsHistory) {
-      if (stat.quality >= 75) excellent++;
-      else if (stat.quality >= 50) good++;
-      else if (stat.quality >= 30) moderate++;
-      else weak++;
-    }
-    
-    distribution.excellent = (excellent / total) * 100;
-    distribution.good = (good / total) * 100;
-    distribution.moderate = (moderate / total) * 100;
-    distribution.weak = (weak / total) * 100;
-  }
-  
-  // Determine quality trend
-  let trend = "stable";
-  let lastQualityScore = 0;
-  
-  if (qualityStatsHistory.length >= 10) {
-    const recentAvg = qualityStatsHistory.slice(-5).reduce((sum, item) => sum + item.quality, 0) / 5;
-    const previousAvg = qualityStatsHistory.slice(-10, -5).reduce((sum, item) => sum + item.quality, 0) / 5;
-    
-    if (recentAvg > previousAvg * 1.1) trend = "improving";
-    else if (recentAvg < previousAvg * 0.9) trend = "degrading";
-    
-    if (qualityStatsHistory.length > 0) {
-      lastQualityScore = qualityStatsHistory[qualityStatsHistory.length - 1].quality;
-    }
-  }
-  
-  return {
-    qualityDistribution: distribution,
-    qualityTrend: trend,
-    lastQualityScore
-  };
-}
-
-/**
- * Dispatch arrhythmia visualization event
- * Exported function for triggering visualization events
- */
-export function dispatchArrhythmiaVisualizationEvent(
-  isArrhythmia: boolean, 
-  timestamp: number = Date.now(), 
-  strength: number = 1.0
-): void {
-  if (!isArrhythmia) return;
-  
-  // Create event for visualization with correct event name
-  const event = new CustomEvent('arrhythmia-window-detected', {
-    detail: {
-      start: timestamp,
-      end: timestamp + 2000, // 2 second window
-      strength: strength
-    }
-  });
-  
-  // Dispatch event for visualization components to catch
-  if (typeof window !== 'undefined') {
-    window.dispatchEvent(event);
-    console.log("EVENTO ARRITMIA DISPATCH: Evento de visualización enviado", { 
-      timestamp, 
-      endTime: timestamp + 2000,
-      strength 
-    });
-  }
 }

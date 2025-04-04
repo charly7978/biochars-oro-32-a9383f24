@@ -132,18 +132,10 @@ const PPGSignalMeter = memo(({
   useEffect(() => {
     const handleArrhythmiaWindow = (event: CustomEvent) => {
       const { start, end } = event.detail;
-      console.log('PPGSignalMeter: Received arrhythmia window event', { start, end });
-      
       arrhythmiaSegmentsRef.current.push({
         startTime: start,
         endTime: end
       });
-      
-      // Force immediate arrhythmia highlight
-      setShowArrhythmiaAlert(true);
-      
-      // Increment arrhythmia count for better tracking
-      arrhythmiaCountRef.current++;
       
       // Keep only most recent segments
       if (arrhythmiaSegmentsRef.current.length > 5) {
@@ -151,7 +143,6 @@ const PPGSignalMeter = memo(({
       }
     };
     
-    // Use the correct event name - make sure it matches what's used in peak-detection.ts
     window.addEventListener('arrhythmia-window-detected', 
       handleArrhythmiaWindow as EventListener);
     
@@ -160,25 +151,6 @@ const PPGSignalMeter = memo(({
         handleArrhythmiaWindow as EventListener);
     };
   }, []);
-  
-  // Direct response to arrhythmia prop changes
-  useEffect(() => {
-    if (isArrhythmia) {
-      const now = Date.now();
-      // Create immediate visual indicators when isArrhythmia is true
-      arrhythmiaSegmentsRef.current.push({
-        startTime: now,
-        endTime: now + 2000  // 2-second window
-      });
-      
-      // Ensure visual feedback
-      setShowArrhythmiaAlert(true);
-      arrhythmiaCountRef.current++;
-      lastArrhythmiaTime.current = now;
-      
-      console.log("PPGSignalMeter: Arrhythmia detected via props", { now, count: arrhythmiaCountRef.current });
-    }
-  }, [isArrhythmia]);
 
   // Update diagnostic data when rawArrhythmiaData changes
   useEffect(() => {
@@ -578,7 +550,6 @@ const PPGSignalMeter = memo(({
     }
   }, []);
 
-  // Enhanced peak detection with better arrhythmia marking
   const detectPeaks = useCallback((points: PPGDataPointExtended[], now: number) => {
     if (points.length < PEAK_DETECTION_WINDOW) return;
     
@@ -587,17 +558,14 @@ const PPGSignalMeter = memo(({
     for (let i = PEAK_DETECTION_WINDOW; i < points.length - PEAK_DETECTION_WINDOW; i++) {
       const currentPoint = points[i];
       
-      // Check if this peak has already been processed recently
       const recentlyProcessed = peaksRef.current.some(
         peak => Math.abs(peak.time - currentPoint.time) < MIN_PEAK_DISTANCE_MS
       );
       
       if (recentlyProcessed) continue;
       
-      // Check if this is a peak (higher than surrounding points)
       let isPeak = true;
       
-      // Check points before
       for (let j = i - PEAK_DETECTION_WINDOW; j < i; j++) {
         if (points[j].value >= currentPoint.value) {
           isPeak = false;
@@ -605,7 +573,6 @@ const PPGSignalMeter = memo(({
         }
       }
       
-      // Check points after
       if (isPeak) {
         for (let j = i + 1; j <= i + PEAK_DETECTION_WINDOW; j++) {
           if (j < points.length && points[j].value > currentPoint.value) {
@@ -615,24 +582,16 @@ const PPGSignalMeter = memo(({
         }
       }
       
-      // If confirmed peak and meets threshold
       if (isPeak && Math.abs(currentPoint.value) > PEAK_THRESHOLD) {
-        // Check if this point is within an arrhythmia window
-        const isInArrhythmiaWindow = arrhythmiaSegmentsRef.current.some(segment => 
-          currentPoint.time >= segment.startTime && 
-          (!segment.endTime || currentPoint.time <= segment.endTime)
-        );
-        
         potentialPeaks.push({
           index: i,
           value: currentPoint.value,
           time: currentPoint.time,
-          isArrhythmia: currentPoint.isArrhythmia || isInArrhythmiaWindow || false
+          isArrhythmia: currentPoint.isArrhythmia || false
         });
       }
     }
     
-    // Add new peaks that aren't too close to existing ones
     for (const peak of potentialPeaks) {
       const tooClose = peaksRef.current.some(
         existingPeak => Math.abs(existingPeak.time - peak.time) < MIN_PEAK_DISTANCE_MS
@@ -645,15 +604,9 @@ const PPGSignalMeter = memo(({
           isArrhythmia: peak.isArrhythmia,
           beepPlayed: false
         });
-        
-        // If this is an arrhythmic peak, ensure it's visible
-        if (peak.isArrhythmia) {
-          console.log("PPGSignalMeter: Arrhythmic peak detected", { time: peak.time, value: peak.value });
-        }
       }
     }
     
-    // Sort and limit peaks
     peaksRef.current.sort((a, b) => a.time - b.time);
     
     peaksRef.current = peaksRef.current
@@ -661,7 +614,7 @@ const PPGSignalMeter = memo(({
       .slice(-MAX_PEAKS_TO_DISPLAY);
   }, []);
 
-  // Enhanced renderSignal function with improved arrhythmia visualization
+  // Enhanced signal rendering with arrhythmia visualization
   const renderSignal = useCallback(() => {
     if (!canvasRef.current || !dataBufferRef.current) {
       animationFrameRef.current = requestAnimationFrame(renderSignal);
@@ -720,21 +673,14 @@ const PPGSignalMeter = memo(({
     const scaledValue = normalizedValue * verticalScale;
     
     let currentIsArrhythmia = false;
-    // Check for active arrhythmia from multiple sources
-    if ((rawArrhythmiaData && 
+    if (rawArrhythmiaData && 
         arrhythmiaStatus?.includes("ARRITMIA") && 
-        now - rawArrhythmiaData.timestamp < 2000) ||  // Extended window to 2000ms
-        isArrhythmia ||  // Direct prop
-        arrhythmiaSegmentsRef.current.some(segment => now >= segment.startTime && (!segment.endTime || now <= segment.endTime))) { // Segments
-      
+        now - rawArrhythmiaData.timestamp < 1000) {
       currentIsArrhythmia = true;
       lastArrhythmiaTime.current = now;
-      
-      // Visual feedback for active arrhythmia
-      if (!showArrhythmiaAlert) {
-        setShowArrhythmiaAlert(true);
-        console.log("PPGSignalMeter: Arrhythmia visual alert activated");
-      }
+    } else if (isArrhythmia) {
+      currentIsArrhythmia = true;
+      lastArrhythmiaTime.current = now;
     }
     
     const dataPoint: PPGDataPointExtended = {
@@ -748,12 +694,12 @@ const PPGSignalMeter = memo(({
     const points = dataBufferRef.current.getPoints();
     detectPeaks(points, now);
     
-    // Enhanced arrhythmia segment visualization
+    // Draw arrhythmia segments
     arrhythmiaSegmentsRef.current.forEach(segment => {
       if (segment.endTime && segment.endTime > now - WINDOW_WIDTH_MS) {
         // Calculate position on canvas
         const segmentStartX = canvas.width - ((now - segment.startTime) * canvas.width / WINDOW_WIDTH_MS);
-        const segmentEndX = canvas.width - ((now - (segment.endTime || now)) * canvas.width / WINDOW_WIDTH_MS);
+        const segmentEndX = canvas.width - ((now - segment.endTime) * canvas.width / WINDOW_WIDTH_MS);
         
         // Don't draw segments that are completely off-screen
         if (segmentEndX >= 0 && segmentStartX <= canvas.width) {
@@ -761,12 +707,12 @@ const PPGSignalMeter = memo(({
           const visibleEndX = Math.min(canvas.width, segmentEndX);
           const width = visibleEndX - visibleStartX;
           
-          // Improved arrhythmia window styling
-          renderCtx.fillStyle = 'rgba(239, 68, 68, 0.20)';  // More visible red background
+          // Draw arrhythmia segment background
+          renderCtx.fillStyle = ARRHYTHMIA_WINDOW_COLOR;
           renderCtx.fillRect(visibleStartX, 0, width, canvas.height);
           
-          // Enhanced border styling
-          renderCtx.strokeStyle = 'rgba(239, 68, 68, 0.5)';  // More visible border
+          // Draw vertical borders
+          renderCtx.strokeStyle = ARRHYTHMIA_WINDOW_BORDER_COLOR;
           renderCtx.lineWidth = 2;
           
           if (segmentStartX >= 0 && segmentStartX <= canvas.width) {
@@ -783,24 +729,11 @@ const PPGSignalMeter = memo(({
             renderCtx.stroke();
           }
           
-          // Large, centered arrhythmia label
+          // Label the segment
           renderCtx.fillStyle = '#DC2626';
-          renderCtx.font = 'bold 24px Inter';  // Larger font
-          renderCtx.textAlign = 'center';
-          renderCtx.fillText('ARRITMIA', (visibleStartX + visibleEndX) / 2, 40);  // Higher position
-          
-          // Add warning icon or additional visual cue
-          renderCtx.beginPath();
-          renderCtx.moveTo((visibleStartX + visibleEndX) / 2 - 80, 40);
-          renderCtx.lineTo((visibleStartX + visibleEndX) / 2 - 60, 20);
-          renderCtx.lineTo((visibleStartX + visibleEndX) / 2 - 40, 40);
-          renderCtx.closePath();
-          renderCtx.fillStyle = '#FFCC00';
-          renderCtx.fill();
-          
-          renderCtx.fillStyle = '#000000';
           renderCtx.font = 'bold 16px Inter';
-          renderCtx.fillText('!', (visibleStartX + visibleEndX) / 2 - 60, 35);
+          renderCtx.textAlign = 'center';
+          renderCtx.fillText('ARRITMIA', (visibleStartX + visibleEndX) / 2, 30);
         }
       }
     });
@@ -855,54 +788,32 @@ const PPGSignalMeter = memo(({
         renderCtx.stroke();
       }
       
-      // Enhanced peak visualization with better arrhythmia indicators
       peaksRef.current.forEach(peak => {
         const x = canvas.width - ((now - peak.time) * canvas.width / WINDOW_WIDTH_MS);
         const y = canvas.height / 2 - peak.value;
         
         if (x >= 0 && x <= canvas.width) {
-          // Basic peak circle
           renderCtx.beginPath();
-          renderCtx.arc(x, y, peak.isArrhythmia ? 7 : 5, 0, Math.PI * 2);  // Larger circles for arrhythmias
+          renderCtx.arc(x, y, 5, 0, Math.PI * 2);
           renderCtx.fillStyle = peak.isArrhythmia ? '#DC2626' : '#0EA5E9';
           renderCtx.fill();
           
-          // Enhanced arrhythmia visualization
           if (peak.isArrhythmia) {
-            // Outer glow effect
             renderCtx.beginPath();
-            renderCtx.arc(x, y, 12, 0, Math.PI * 2);
+            renderCtx.arc(x, y, 10, 0, Math.PI * 2);
             renderCtx.strokeStyle = '#FEF7CD';
             renderCtx.lineWidth = 3;
             renderCtx.stroke();
             
-            // Second outer ring with animation effect
-            renderCtx.beginPath();
-            const pulseSize = 16 + (Math.sin(Date.now() / 200) * 4);
-            renderCtx.arc(x, y, pulseSize, 0, Math.PI * 2);
-            renderCtx.strokeStyle = 'rgba(220, 38, 38, 0.5)';
-            renderCtx.lineWidth = 2;
-            renderCtx.stroke();
-            
-            // Bold arrhythmia label
-            renderCtx.font = 'bold 20px Inter';  // Increased font size
+            renderCtx.font = 'bold 18px Inter'; // Increased from 14px to 18px
             renderCtx.fillStyle = '#F97316';
             renderCtx.textAlign = 'center';
             renderCtx.fillText('ARRITMIA', x, y - 25);
           }
           
-          // Value display
-          renderCtx.font = 'bold 16px Inter';
-          renderCtx.fillStyle = peak.isArrhythmia ? '#FFFFFF' : '#000000';
+          renderCtx.font = 'bold 16px Inter'; // Increased from 14px to 16px
+          renderCtx.fillStyle = '#000000';
           renderCtx.textAlign = 'center';
-          
-          // Create contrast background for text if arrhythmic
-          if (peak.isArrhythmia) {
-            renderCtx.fillStyle = 'rgba(0,0,0,0.7)';
-            renderCtx.fillRect(x - 25, y - 30, 50, 20);
-            renderCtx.fillStyle = '#FFFFFF';
-          }
-          
           renderCtx.fillText(Math.abs(peak.value / verticalScale).toFixed(2), x, y - 15);
           
           if (!peak.beepPlayed) {
@@ -986,19 +897,6 @@ const PPGSignalMeter = memo(({
           imageRendering: 'crisp-edges'
         }}
       />
-
-      {/* Enhanced arrhythmia alert indicator */}
-      {showArrhythmiaAlert && (
-        <div className="absolute top-20 left-0 right-0 flex justify-center z-20">
-          <div className="bg-red-500/90 text-white px-6 py-2 rounded-full flex items-center gap-2 animate-pulse">
-            <AlertCircle className="h-5 w-5" />
-            <span className="font-bold">¡ARRITMIA DETECTADA!</span>
-            <span className="bg-white/20 px-2 py-0.5 rounded-full text-sm">
-              {arrhythmiaCountRef.current}
-            </span>
-          </div>
-        </div>
-      )}
 
       <div className="absolute top-0 left-0 right-0 p-1 flex justify-between items-center bg-transparent z-10 pt-3">
         <div className="flex items-center gap-2 ml-2">
