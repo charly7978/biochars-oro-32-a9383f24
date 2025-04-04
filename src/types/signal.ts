@@ -24,6 +24,18 @@ export interface SignalValidationResult {
   diagnosticInfo?: any; // Added for compatibility with existing code
 }
 
+// Add ProcessedSignal type for compatibility with other files
+export interface ProcessedSignal {
+  timestamp: number;
+  value: number;
+  filteredValue: number;
+  quality: number;
+  isPeak?: boolean;
+  bpm?: number;
+  fingerDetected?: boolean;
+  signalStrength?: number;
+}
+
 // Vital sign types
 export enum VitalSignType {
   CARDIAC = 'CARDIAC',
@@ -76,4 +88,17 @@ export interface SignalDiagnosticInfo {
   errorMessage?: string;
   processingTimeMs?: number;
   timestamp?: number;
+  // Add missing properties
+  signalQualityMetrics?: {
+    snr?: number;
+    variance?: number;
+  };
+  fingerDetectionConfidence?: number;
+}
+
+// Add SignalProcessor interface for compatibility
+export interface SignalProcessor<T = any> {
+  processSignal(value: number): T;
+  configure(options: any): void;
+  reset(): void;
 }

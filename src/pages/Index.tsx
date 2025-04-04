@@ -6,11 +6,11 @@ import { useHeartBeatProcessor } from "@/hooks/useHeartBeatProcessor";
 import { useVitalSignsProcessor } from "@/hooks/useVitalSignsProcessor";
 import PPGSignalMeter from "@/components/PPGSignalMeter";
 import MeasurementConfirmationDialog from "@/components/MeasurementConfirmationDialog";
-import { toast } from "sonner";
+import { toast } from "@/components/ui/use-toast";
+import { RRIntervalData } from "@/hooks/heart-beat/types";
 
 // Import both types to ensure compatibility
 import type { VitalSignsResult as ModuleVitalSignsResult } from "@/modules/vital-signs/types";
-import type { VitalSignsResult as TypeVitalSignsResult } from "@/types/vital-signs";
 
 // Create compatible type for state
 type CompatibleVitalSignsResult = {
@@ -20,6 +20,16 @@ type CompatibleVitalSignsResult = {
   lastArrhythmiaData?: any | null;
   [key: string]: any;
 };
+
+// Define ImageCapture for TypeScript
+declare global {
+  interface Window {
+    ImageCapture: any;
+    AndroidFullScreen?: {
+      immersiveMode(success: () => void, error: () => void): void;
+    };
+  }
+}
 
 const Index = () => {
   const [isMonitoring, setIsMonitoring] = useState(false);
@@ -34,7 +44,7 @@ const Index = () => {
   const [arrhythmiaCount, setArrhythmiaCount] = useState("--");
   const [elapsedTime, setElapsedTime] = useState(0);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
-  const measurementTimerRef = useRef(null);
+  const measurementTimerRef = useRef<any>(null);
   
   const { startProcessing, stopProcessing, lastSignal, processFrame } = useSignalProcessor();
   const { processSignal: processHeartBeat } = useHeartBeatProcessor();
@@ -44,13 +54,13 @@ const Index = () => {
     const elem = document.documentElement;
     try {
       if (elem.requestFullscreen) {
-        await elem.requestFullscreen({ navigationUI: "hide" });
-      } else if (elem.webkitRequestFullscreen) {
-        await elem.webkitRequestFullscreen({ navigationUI: "hide" });
-      } else if (elem.mozRequestFullScreen) {
-        await elem.mozRequestFullScreen({ navigationUI: "hide" });
-      } else if (elem.msRequestFullscreen) {
-        await elem.msRequestFullscreen({ navigationUI: "hide" });
+        await elem.requestFullscreen();
+      } else if ((elem as any).webkitRequestFullscreen) {
+        await (elem as any).webkitRequestFullscreen();
+      } else if ((elem as any).mozRequestFullScreen) {
+        await (elem as any).mozRequestFullScreen();
+      } else if ((elem as any).msRequestFullscreen) {
+        await (elem as any).msRequestFullscreen();
       }
       
       if (window.navigator.userAgent.match(/Android/i)) {
@@ -67,7 +77,7 @@ const Index = () => {
   };
 
   useEffect(() => {
-    const preventScroll = (e) => e.preventDefault();
+    const preventScroll = (e: Event) => e.preventDefault();
     
     const lockOrientation = async () => {
       try {
@@ -81,7 +91,7 @@ const Index = () => {
     
     const setMaxResolution = () => {
       if ('devicePixelRatio' in window && window.devicePixelRatio !== 1) {
-        document.body.style.zoom = 1 / window.devicePixelRatio;
+        document.body.style.zoom = (1 / window.devicePixelRatio).toString();
       }
     };
     
@@ -89,12 +99,12 @@ const Index = () => {
     setMaxResolution();
     enterFullScreen();
     
-    document.body.addEventListener('touchmove', preventScroll, { passive: false });
-    document.body.addEventListener('scroll', preventScroll, { passive: false });
-    document.body.addEventListener('touchstart', preventScroll, { passive: false });
-    document.body.addEventListener('gesturestart', preventScroll, { passive: false });
-    document.body.addEventListener('gesturechange', preventScroll, { passive: false });
-    document.body.addEventListener('gestureend', preventScroll, { passive: false });
+    document.body.addEventListener('touchmove', preventScroll as EventListener, { passive: false });
+    document.body.addEventListener('scroll', preventScroll as EventListener, { passive: false });
+    document.body.addEventListener('touchstart', preventScroll as EventListener, { passive: false });
+    document.body.addEventListener('gesturestart', preventScroll as EventListener, { passive: false });
+    document.body.addEventListener('gesturechange', preventScroll as EventListener, { passive: false });
+    document.body.addEventListener('gestureend', preventScroll as EventListener, { passive: false });
     
     window.addEventListener('orientationchange', enterFullScreen);
     
@@ -105,12 +115,12 @@ const Index = () => {
     });
 
     return () => {
-      document.body.removeEventListener('touchmove', preventScroll);
-      document.body.removeEventListener('scroll', preventScroll);
-      document.body.removeEventListener('touchstart', preventScroll);
-      document.body.removeEventListener('gesturestart', preventScroll);
-      document.body.removeEventListener('gesturechange', preventScroll);
-      document.body.removeEventListener('gestureend', preventScroll);
+      document.body.removeEventListener('touchmove', preventScroll as EventListener);
+      document.body.removeEventListener('scroll', preventScroll as EventListener);
+      document.body.removeEventListener('touchstart', preventScroll as EventListener);
+      document.body.removeEventListener('gesturestart', preventScroll as EventListener);
+      document.body.removeEventListener('gesturechange', preventScroll as EventListener);
+      document.body.removeEventListener('gestureend', preventScroll as EventListener);
       window.removeEventListener('orientationchange', enterFullScreen);
       document.removeEventListener('fullscreenchange', enterFullScreen);
     };
@@ -194,11 +204,11 @@ const Index = () => {
     }
   };
 
-  const handleStreamReady = (stream) => {
+  const handleStreamReady = (stream: MediaStream) => {
     if (!isMonitoring) return;
     
     const videoTrack = stream.getVideoTracks()[0];
-    const imageCapture = new ImageCapture(videoTrack);
+    const imageCapture = new window.ImageCapture(videoTrack);
     
     const capabilities = videoTrack.getCapabilities();
     if (capabilities.width && capabilities.height) {
@@ -209,11 +219,11 @@ const Index = () => {
         width: { ideal: maxWidth },
         height: { ideal: maxHeight },
         torch: true
-      }).catch(err => console.error("Error aplicando configuración de alta resolución:", err));
+      }).catch((err: Error) => console.error("Error aplicando configuración de alta resolución:", err));
     } else if (videoTrack.getCapabilities()?.torch) {
       videoTrack.applyConstraints({
         advanced: [{ torch: true }]
-      }).catch(err => console.error("Error activando linterna:", err));
+      }).catch((err: Error) => console.error("Error activando linterna:", err));
     }
     
     const tempCanvas = document.createElement('canvas');
@@ -253,12 +263,19 @@ const Index = () => {
       const heartBeatResult = processHeartBeat(lastSignal.filteredValue);
       setHeartRate(heartBeatResult.bpm);
       
-      const vitals = processVitalSigns(lastSignal.filteredValue, heartBeatResult.rrData);
+      const rrData: RRIntervalData = {
+        intervals: Array.isArray(heartBeatResult.rrData.intervals) 
+          ? heartBeatResult.rrData.intervals.map(item => 
+              typeof item === 'number' ? item : item.rrInterval
+            ) 
+          : [],
+        lastPeakTime: heartBeatResult.rrData.lastPeakTime
+      };
+      
+      const vitals = processVitalSigns(lastSignal.filteredValue, rrData);
       if (vitals) {
-        // Here we need to adapt the result to be compatible with both types
         const compatibleVitals: CompatibleVitalSignsResult = {
           ...vitals,
-          // Ensure any transformation needed happens here
         };
         setVitalSigns(compatibleVitals);
         setArrhythmiaCount(compatibleVitals.arrhythmiaStatus.split('|')[1] || "--");

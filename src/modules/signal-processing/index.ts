@@ -25,3 +25,4 @@ export { OptimizedSignalChannel } from './channels/SpecializedChannel';
 
 // Export the resetFingerDetector function separately to avoid ambiguity
 export { resetFingerDetector } from './utils/finger-detector';
+export { resetFingerDetector as resetFingerDetectorFunc } from './types';

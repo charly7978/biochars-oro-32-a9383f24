@@ -1,3 +1,4 @@
+
 /**
  * Signal processing types
  */
@@ -24,6 +25,11 @@ export interface SignalProcessingOptions {
   filterStrength?: number;
   qualityThreshold?: number;
   fingerDetectionSensitivity?: number;
+  // Add missing properties used in other files
+  useAdaptiveControl?: boolean;
+  qualityEnhancedByPrediction?: boolean;
+  adaptationRate?: number;
+  predictionHorizon?: number;
 }
 
 export interface HeartbeatProcessor {
@@ -39,6 +45,8 @@ export interface ProcessedHeartbeatSignal {
   bpm: number | null;
   rrInterval: number | null;
   heartRateVariability: number | null;
+  // Add timestamp for compatibility
+  timestamp?: number;
 }
 
 export interface HeartbeatProcessingOptions {
@@ -56,8 +64,20 @@ export interface HeartbeatProcessingOptions {
 export interface OptimizedChannel {
   processValue(value: number): number;
   reset(): void;
+  // Add missing methods
+  configure?(options: any): void;
+  type?: string;
 }
 
 export const resetFingerDetector = () => {
   console.log('Finger detector reset');
 };
+
+// Add ChannelConfig interface for components that need it
+export interface ChannelConfig {
+  amplificationFactor: number;
+  filterStrength: number;
+  qualityThreshold: number;
+  enableFeedback?: boolean;
+  signalQuality?: number;
+}

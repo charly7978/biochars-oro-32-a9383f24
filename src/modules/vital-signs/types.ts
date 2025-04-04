@@ -12,7 +12,17 @@ export interface VitalSignsResult {
     isArrhythmia: boolean;
     confidence: number;
     timestamp: number;
+    rmssd?: number;
+    rrVariation?: number;
   } | null;
+  calibration?: {
+    progress: {
+      heartRate?: number;
+      spo2?: number;
+      pressure?: number;
+      arrhythmia?: number;
+    }
+  };
 }
 
 // Using the VitalSignType enum from the central signal.ts file
@@ -24,4 +34,5 @@ export interface ChannelFeedback {
   quality: number;
   channelId?: string;
   suggestedAdjustments?: any;
+  signalQuality?: number;
 }
