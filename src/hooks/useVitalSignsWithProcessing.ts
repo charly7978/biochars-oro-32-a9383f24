@@ -9,7 +9,6 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 import { usePPGExtraction } from './usePPGExtraction';
 import { useSignalProcessing } from './useSignalProcessing';
 import { useVitalSignsProcessor } from './useVitalSignsProcessor';
-import { AlgorithmFeedback, SignalQualityMetrics } from '../modules/signal-processing/utils/signal-quality-monitor';
 import { logError, ErrorLevel } from '@/utils/debugUtils';
 
 /**
@@ -36,12 +35,6 @@ export interface IntegratedVitalsResult {
   pressure: string;
   arrhythmiaStatus: string;
   arrhythmiaCount: number;
-  
-  // Información de calidad avanzada
-  qualityMetrics: SignalQualityMetrics | null;
-  qualityAlertActive: boolean;
-  problemAlgorithms: {algorithm: string, issues: string[], quality: number}[];
-  showDetailedDiagnostics: boolean;
 }
 
 /**
@@ -83,28 +76,6 @@ export function useVitalSignsWithProcessing() {
   }, [isMonitoring, extraction]);
   
   /**
-   * Envía retroalimentación al monitor de calidad desde cada algoritmo de signos vitales
-   */
-  const sendVitalSignsFeedback = useCallback((
-    vitalType: string,
-    qualityScore: number,
-    issues: string[] = [],
-    recommendations: Record<string, any> = {}
-  ) => {
-    if (!processing.sendAlgorithmFeedback) return;
-    
-    const feedback: AlgorithmFeedback = {
-      algorithm: `VitalSignsProcessor:${vitalType}`,
-      qualityScore,
-      issues,
-      timestamp: Date.now(),
-      recommendations
-    };
-    
-    processing.sendAlgorithmFeedback(feedback);
-  }, [processing]);
-  
-  /**
    * Realiza el procesamiento cuando hay un nuevo resultado de extracción
    */
   useEffect(() => {
@@ -133,79 +104,7 @@ export function useVitalSignsWithProcessing() {
           }
         );
         
-        // NUEVO: Enviar retroalimentación de cada módulo de signos vitales
-        if (processedFramesRef.current % 30 === 0 || processedSignal.isPeak) {
-          // Retroalimentación de SpO2
-          if (vitalsResult.spo2 > 0) {
-            const spo2Issues = [];
-            let spo2Quality = 80; // Valor base
-            
-            if (vitalsResult.spo2 < 90) {
-              spo2Issues.push("Valor de SpO2 bajo");
-              spo2Quality = 50;
-            } else if (vitalsResult.spo2 > 100) {
-              spo2Issues.push("Valor de SpO2 fuera de rango");
-              spo2Quality = 30;
-            }
-            
-            sendVitalSignsFeedback("SpO2", spo2Quality, spo2Issues, {
-              perfusionIndex: Math.min(1, Math.max(0.1, vitalsResult.spo2 / 100 - 0.5)),
-              signalToNoise: spo2Quality
-            });
-          }
-          
-          // Retroalimentación de presión arterial
-          if (vitalsResult.pressure !== "--/--") {
-            const pressureIssues = [];
-            let pressureQuality = 75; // Valor base
-            
-            const systolic = parseInt(vitalsResult.pressure.split('/')[0], 10);
-            const diastolic = parseInt(vitalsResult.pressure.split('/')[1], 10);
-            
-            if (isNaN(systolic) || isNaN(diastolic)) {
-              pressureIssues.push("Formato de presión inválido");
-              pressureQuality = 20;
-            } else {
-              if (systolic > 180 || systolic < 90) {
-                pressureIssues.push(`Presión sistólica anormal: ${systolic}`);
-                pressureQuality -= 30;
-              }
-              
-              if (diastolic > 120 || diastolic < 60) {
-                pressureIssues.push(`Presión diastólica anormal: ${diastolic}`);
-                pressureQuality -= 30;
-              }
-            }
-            
-            sendVitalSignsFeedback("BloodPressure", pressureQuality, pressureIssues, {
-              waveformQuality: pressureQuality
-            });
-          }
-          
-          // Retroalimentación de arritmias
-          const arrhythmiaCount = parseInt(vitalsResult.arrhythmiaStatus.split('|')[1] || '0', 10);
-          if (arrhythmiaCount > 0 || vitalsResult.arrhythmiaStatus.includes("Arr")) {
-            const arrhythmiaIssues = [];
-            let arrhythmiaQuality = 70; // Valor base
-            
-            if (arrhythmiaCount > 3) {
-              arrhythmiaIssues.push(`Múltiples arritmias detectadas: ${arrhythmiaCount}`);
-              arrhythmiaQuality = 40;
-            } else if (arrhythmiaCount > 0) {
-              arrhythmiaIssues.push(`Arritmias detectadas: ${arrhythmiaCount}`);
-              arrhythmiaQuality = 60;
-            }
-            
-            if (vitalsResult.arrhythmiaStatus.includes("Grave")) {
-              arrhythmiaIssues.push("Arritmia grave detectada");
-              arrhythmiaQuality = 30;
-            }
-            
-            sendVitalSignsFeedback("Arrhythmia", arrhythmiaQuality, arrhythmiaIssues);
-          }
-        }
-        
-        // 4. Crear resultado integrado con métricas de calidad avanzadas
+        // 4. Crear resultado integrado
         const integratedResult: IntegratedVitalsResult = {
           timestamp: processedSignal.timestamp,
           quality: processedSignal.quality,
@@ -222,13 +121,7 @@ export function useVitalSignsWithProcessing() {
           spo2: vitalsResult.spo2,
           pressure: vitalsResult.pressure,
           arrhythmiaStatus: vitalsResult.arrhythmiaStatus.split('|')[0] || '--',
-          arrhythmiaCount: parseInt(vitalsResult.arrhythmiaStatus.split('|')[1] || '0', 10),
-          
-          // Agregar información de calidad avanzada
-          qualityMetrics: processedSignal.qualityMetrics,
-          qualityAlertActive: processedSignal.qualityAlertActive,
-          problemAlgorithms: processedSignal.problemAlgorithms,
-          showDetailedDiagnostics: processedSignal.detailedDiagnostics
+          arrhythmiaCount: parseInt(vitalsResult.arrhythmiaStatus.split('|')[1] || '0', 10)
         };
         
         // Actualizar resultado
@@ -241,7 +134,7 @@ export function useVitalSignsWithProcessing() {
     } catch (error) {
       console.error("Error en procesamiento integrado:", error);
     }
-  }, [isMonitoring, extraction.lastResult, processing, vitalSigns, sendVitalSignsFeedback]);
+  }, [isMonitoring, extraction.lastResult, processing, vitalSigns]);
   
   /**
    * Inicia el monitoreo completo
@@ -272,6 +165,7 @@ export function useVitalSignsWithProcessing() {
     vitalSigns.reset();
     
     setIsMonitoring(false);
+    setLastResult(null);
   }, [extraction, processing, vitalSigns]);
   
   /**
@@ -300,12 +194,6 @@ export function useVitalSignsWithProcessing() {
     signalQuality: processing.signalQuality,
     fingerDetected: processing.fingerDetected,
     heartRate: processing.heartRate,
-    
-    // Nuevas métricas de calidad avanzada
-    qualityMetrics: processing.qualityMetrics,
-    isQualityAlertActive: processing.isQualityAlertActive,
-    problemAlgorithms: processing.problemAlgorithms,
-    showDetailedDiagnostics: processing.showDetailedDiagnostics,
     
     // Acciones
     processFrame,
