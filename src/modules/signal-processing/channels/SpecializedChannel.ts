@@ -1,77 +1,72 @@
 
-import { VitalSignType, ChannelFeedback } from '../../../types/signal';
+/**
+ * Specialized signal processing channel implementations
+ */
+import { OptimizedChannel, ChannelConfig } from '../types-unified';
 
 /**
- * Abstract class for specialized signal processing channels
- * Provides a base for optimizing signals for specific vital signs
+ * Optimized signal channel with improved processing capabilities
  */
-export abstract class SpecializedChannel {
-  protected vitalSignType: VitalSignType;
-  protected config: ChannelConfig;
-  
-  constructor(vitalSignType: VitalSignType, config: ChannelConfig) {
-    this.vitalSignType = vitalSignType;
-    this.config = config;
-  }
-  
-  /**
-   * Process the signal with channel-specific optimizations
-   */
-  public processSignal(value: number): number {
-    let optimizedValue = this.applyChannelSpecificOptimization(value);
-    
-    // Apply any common signal processing steps here
-    optimizedValue = this.applyCommonSignalProcessing(optimizedValue);
-    
-    return optimizedValue;
-  }
-  
-  /**
-   * Apply channel-specific optimization to the signal
-   * This method must be implemented by subclasses
-   */
-  protected abstract applyChannelSpecificOptimization(value: number): number;
-  
-  /**
-   * Apply common signal processing steps
-   * This method can be overridden by subclasses
-   */
-  protected applyCommonSignalProcessing(value: number): number {
-    // Apply any common signal processing steps here
-    return value * this.config.amplificationFactor;
-  }
-  
-  /**
-   * Get feedback from the channel
-   */
-  public getFeedback(value: number, timestamp: number): ChannelFeedback {
-    return {
-      value: value,
-      timestamp: timestamp,
-      quality: this.config.qualityThreshold,
-      channelId: this.vitalSignType
+export class OptimizedSignalChannel implements OptimizedChannel {
+  private config: ChannelConfig;
+  private lastValues: number[] = [];
+  private readonly MAX_BUFFER_SIZE = 50;
+
+  constructor(config: Partial<ChannelConfig> = {}) {
+    // Default configuration with sensible defaults
+    this.config = {
+      amplificationFactor: config.amplificationFactor || 1.5,
+      filterStrength: config.filterStrength || 0.3,
+      qualityThreshold: config.qualityThreshold || 0.5,
+      enableFeedback: config.enableFeedback || false,
+      signalQuality: config.signalQuality || 1.0
     };
   }
-  
+
   /**
-   * Process value method for OptimizedChannel compatibility
+   * Process a single value through the channel
    */
-  public processValue(value: number): number {
-    return this.processSignal(value);
+  processValue(value: number): number {
+    // Apply filter based on filter strength
+    const filteredValue = this.applyFilter(value);
+    
+    // Apply amplification
+    const amplifiedValue = filteredValue * this.config.amplificationFactor;
+    
+    // Store in buffer
+    this.lastValues.push(amplifiedValue);
+    if (this.lastValues.length > this.MAX_BUFFER_SIZE) {
+      this.lastValues.shift();
+    }
+    
+    return amplifiedValue;
   }
   
   /**
-   * Reset method for OptimizedChannel compatibility
+   * Apply filtering to smooth the signal
    */
-  public reset(): void {
-    // Implementation can be provided by subclasses
-    console.log(`Reset ${this.vitalSignType} channel`);
+  private applyFilter(value: number): number {
+    if (this.lastValues.length === 0) {
+      return value;
+    }
+    
+    // Simple exponential moving average filter
+    const lastValue = this.lastValues[this.lastValues.length - 1];
+    return value * this.config.filterStrength + lastValue * (1 - this.config.filterStrength);
   }
   
   /**
-   * Configure method for OptimizedChannel compatibility
+   * Reset the channel
    */
-  public configure(options: any): void {
+  reset(): void {
+    this.lastValues = [];
+  }
+  
+  /**
+   * Configure the channel
+   */
+  configure(options: Partial<ChannelConfig>): void {
+    // Update only provided options
     if (options.amplificationFactor !== undefined) {
       this.config.amplificationFactor = options.amplificationFactor;
     }
@@ -83,118 +78,27 @@ export abstract class SpecializedChannel {
     if (options.qualityThreshold !== undefined) {
       this.config.qualityThreshold = options.qualityThreshold;
     }
-  }
-  
-  /**
-   * Get channel type for OptimizedChannel compatibility
-   */
-  get type(): string {
-    return this.vitalSignType;
-  }
-}
-
-/**
- * Configuration interface for specialized channels
- */
-export interface ChannelConfig {
-  amplificationFactor: number;
-  filterStrength: number;
-  qualityThreshold: number;
-}
-
-/**
- * Optimized signal channel with configurable parameters
- */
-export class OptimizedSignalChannel {
-  // Instead of readonly properties, make them private with getters/setters
-  private _sampleRate: number = 30;
-  private _bufferSize: number = 128;
-  private _type: string = 'generic';
-  
-  constructor(sampleRate: number = 30, bufferSize: number = 128) {
-    this._sampleRate = sampleRate;
-    this._bufferSize = bufferSize;
-  }
-
-  /**
-   * Process the signal with channel-specific optimizations
-   */
-  public processSignal(value: number): number {
-    // Apply signal processing steps here
-    let optimizedValue = this.applySignalOptimization(value);
     
-    // Apply any common signal processing steps here
-    optimizedValue = this.applyCommonSignalProcessing(optimizedValue);
-    
-    return optimizedValue;
-  }
-
-  /**
-   * Process value method for OptimizedChannel compatibility
-   */
-  public processValue(value: number): number {
-    return this.processSignal(value);
-  }
-
-  /**
-   * Apply signal-specific optimization to the signal
-   */
-  protected applySignalOptimization(value: number): number {
-    // Apply signal-specific processing here
-    return value * 1.05;
-  }
-
-  /**
-   * Apply common signal processing steps
-   */
-  protected applyCommonSignalProcessing(value: number): number {
-    // Apply any common signal processing steps here
-    return value * 1.1;
-  }
-  
-  /**
-   * Reset method for OptimizedChannel compatibility
-   */
-  public reset(): void {
-    console.log(`Reset ${this._type} channel`);
-  }
-  
-  /**
-   * Configure method for OptimizedChannel compatibility
-   */
-  public configure(options: any): void {
-    if (options.sampleRate !== undefined) {
-      this._sampleRate = options.sampleRate;
+    if (options.enableFeedback !== undefined) {
+      this.config.enableFeedback = options.enableFeedback;
     }
     
-    if (options.bufferSize !== undefined) {
-      this._bufferSize = options.bufferSize;
+    if (options.signalQuality !== undefined) {
+      this.config.signalQuality = options.signalQuality;
     }
   }
-
-  // Create getters
-  get sampleRate(): number {
-    return this._sampleRate;
-  }
-
-  get bufferSize(): number {
-    return this._bufferSize;
+  
+  /**
+   * Get the current configuration
+   */
+  getConfig(): ChannelConfig {
+    return { ...this.config };
   }
   
-  get type(): string {
-    return this._type;
-  }
-
-  // Create setters that will be used instead of direct assignment
-  set sampleRate(value: number) {
-    this._sampleRate = value;
-  }
-
-  set bufferSize(value: number) {
-    this._bufferSize = value;
-  }
-  
-  set type(value: string) {
-    this._type = value;
+  /**
+   * Get last processed values
+   */
+  getLastValues(): number[] {
+    return [...this.lastValues];
   }
 }

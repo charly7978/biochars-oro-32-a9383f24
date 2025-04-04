@@ -1,31 +1,33 @@
 
-// Export all signal processing utilities
-export * from './types';
+/**
+ * Signal Processing Module
+ * Central export point for all signal processing utilities
+ */
+
+// Export unified types
+export * from './types-unified';
+
+// Export core processors
 export * from './ppg-processor';
 
-export * from './utils/signal-normalizer';
+// Export utilities
+export * from '../utils/signal-normalizer';
 export * from './utils/finger-detector';
 export * from './utils/quality-detector';
 export * from './utils/mixed-model';
 
+// Export validation and error handling
 export * from './signal-validator';
 export * from './error-handler';
 export * from './diagnostics';
+
+// Export channels
 export * from './channels/SpecializedChannel';
 
-// Export specific types for external use
-export type {
-  ProcessedPPGSignal,
-  SignalProcessor,
-  SignalProcessingOptions,
-  VitalSignsResult,
-  RRIntervalData,
-  ArrhythmiaProcessingResult
-} from './types';
+// Export specific reset functions
+export { resetFingerDetector } from './utils/finger-detector';
+export { resetFingerDetectorFunc } from './types-unified';
 
-// Re-export from channels
+// Re-export the OptimizedSignalChannel for convenience
 export { OptimizedSignalChannel } from './channels/SpecializedChannel';
 
-// Export the resetFingerDetector function separately to avoid ambiguity
-export { resetFingerDetector } from './utils/finger-detector';
-export { resetFingerDetector as resetFingerDetectorFunc } from './types';

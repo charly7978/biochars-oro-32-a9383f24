@@ -2,13 +2,25 @@
 /**
  * Signal validation utilities
  */
-import { SignalValidationResult, SignalValidationConfig } from '../types/signal';
+import { 
+  SignalValidationResult, 
+  SignalValidationConfig, 
+  PPGDataPoint 
+} from './types-unified';
 
 export class SignalValidator {
   private config: SignalValidationConfig;
 
-  constructor(config: SignalValidationConfig) {
-    this.config = config;
+  constructor(config: Partial<SignalValidationConfig> = {}) {
+    const defaultConfig: SignalValidationConfig = {
+      validateTimestamp: true,
+      validateQuality: true,
+      minQuality: 0.5,
+      maxDataAge: 5000,
+      enforcePositiveValues: true
+    };
+    
+    this.config = { ...defaultConfig, ...config };
   }
 
   validate(data: any): SignalValidationResult {
@@ -60,8 +72,21 @@ export class SignalValidator {
     if (!data) return false;
     
     // Timestamp validation if needed
-    if (this.config.validateTimestamp && (!data.timestamp || typeof data.timestamp !== 'number')) {
-      return false;
+    if (this.config.validateTimestamp) {
+      // Check for timestamp or time property
+      if (!(data.timestamp || data.time) || 
+          (data.timestamp && typeof data.timestamp !== 'number') ||
+          (data.time && typeof data.time !== 'number')) {
+        return false;
+      }
+      
+      // Check data age if timestamp exists
+      if (data.timestamp && this.config.maxDataAge > 0) {
+        const now = Date.now();
+        if (now - data.timestamp > this.config.maxDataAge) {
+          return false;
+        }
+      }
     }
     
     // Quality validation if needed
@@ -76,21 +101,41 @@ export class SignalValidator {
     
     return true;
   }
+
+  // Add utility methods for specific validations
+  isValidSignal(value: number): boolean {
+    return value !== undefined && value !== null && (!this.config.enforcePositiveValues || value >= 0);
+  }
+
+  hasEnoughData(values: number[]): boolean {
+    return values.length >= 5; // Minimum data points needed
+  }
+
+  hasValidAmplitude(values: number[]): boolean {
+    if (values.length < 2) return false;
+    
+    const min = Math.min(...values);
+    const max = Math.max(...values);
+    const amplitude = max - min;
+    
+    // Require minimum amplitude for valid signal
+    return amplitude > 0.05;
+  }
+
+  logValidationResults(isValid: boolean, amplitude: number, values: number[]): void {
+    if (!isValid) {
+      console.log('Signal validation failed:', {
+        amplitude,
+        valuesCount: values.length,
+        min: Math.min(...values),
+        max: Math.max(...values)
+      });
+    }
+  }
 }
 
 export function createSignalValidator(config: Partial<SignalValidationConfig> = {}): SignalValidator {
-  const defaultConfig: SignalValidationConfig = {
-    validateTimestamp: true,
-    validateQuality: true,
-    minQuality: 0.5,
-    maxDataAge: 5000,
-    enforcePositiveValues: true
-  };
-  
-  return new SignalValidator({
-    ...defaultConfig,
-    ...config
-  });
+  return new SignalValidator(config);
 }
 
 export default SignalValidator;

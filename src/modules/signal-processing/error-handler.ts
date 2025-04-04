@@ -1,99 +1,154 @@
-
 /**
  * Error handling for signal processing
  */
-import { ProcessingError, ErrorHandlerConfig } from '../../types/signal';
+import { ProcessingError, ErrorHandlerConfig } from './types-unified';
 
-export class SignalProcessingErrorHandler {
+/**
+ * Default error handler configuration
+ */
+const DEFAULT_CONFIG: ErrorHandlerConfig = {
+  logErrors: true,
+  retryOnError: true,
+  maxRetries: 3,
+  notifyUser: true,
+  fallbackToLastGoodValue: true
+};
+
+/**
+ * Error handler for signal processing
+ */
+export class ErrorHandler {
   private config: ErrorHandlerConfig;
-  private errors: ProcessingError[] = [];
-  private lastGoodValues: Map<string, any> = new Map();
-  private retryCount: Map<string, number> = new Map();
-
+  private retryCount: Record<string, number> = {}; // Track retries by error code
+  private lastGoodValues: Record<string, any> = {}; // Store last good values by component
+  private errorLog: ProcessingError[] = [];
+  
   constructor(config: Partial<ErrorHandlerConfig> = {}) {
-    const defaultConfig: ErrorHandlerConfig = {
-      logErrors: true,
-      retryOnError: true,
-      maxRetries: 3,
-      notifyUser: false,
-      fallbackToLastGoodValue: true
+    this.config = {...DEFAULT_CONFIG, ...config};
+  }
+  
+  /**
+   * Handle an error during signal processing
+   */
+  handleError(
+    error: Partial<ProcessingError> & {code: string, message: string}, 
+    componentName?: string
+  ): {
+    shouldRetry: boolean,
+    fallbackValue?: any
+  } {
+    const errorWithDefaults: ProcessingError = {
+      code: error.code,
+      message: error.message,
+      timestamp: error.timestamp || Date.now(),
+      severity: error.severity || 'medium',
+      recoverable: error.recoverable !== undefined ? error.recoverable : true,
+      component: componentName || error.component,
+      suggestions: error.suggestions || []
     };
     
-    this.config = { ...defaultConfig, ...config };
-  }
-
-  handleError(error: ProcessingError, component?: string, fallbackValue?: any): { 
-    shouldRetry: boolean, 
-    fallbackValue: any | null 
-  } {
-    // Add component information if provided
-    if (component) {
-      error.component = component;
-    }
-    
-    // Log error if enabled
+    // Log error if configured to do so
     if (this.config.logErrors) {
-      console.error(`Signal Processing Error [${error.code}]: ${error.message}`, error);
+      console.error(`Signal Processing Error [${errorWithDefaults.code}]: ${errorWithDefaults.message}`, errorWithDefaults);
+      this.errorLog.push(errorWithDefaults);
+      
+      // Keep error log size reasonable
+      if (this.errorLog.length > 100) {
+        this.errorLog = this.errorLog.slice(-100);
+      }
     }
     
-    // Store error
-    this.errors.push(error);
+    // Initialize retry count if needed
+    const errorKey = `${errorWithDefaults.component || 'unknown'}-${errorWithDefaults.code}`;
+    if (this.retryCount[errorKey] === undefined) {
+      this.retryCount[errorKey] = 0;
+    }
     
     // Check if we should retry
     let shouldRetry = false;
-    if (this.config.retryOnError && error.recoverable !== false) {
-      const currentRetryCount = this.retryCount.get(error.code) || 0;
-      if (currentRetryCount < this.config.maxRetries) {
-        this.retryCount.set(error.code, currentRetryCount + 1);
+    if (this.config.retryOnError && errorWithDefaults.recoverable) {
+      if (this.retryCount[errorKey] < this.config.maxRetries) {
         shouldRetry = true;
+        this.retryCount[errorKey]++;
       }
     }
     
-    // Get fallback value
-    let returnFallbackValue = null;
-    if (this.config.fallbackToLastGoodValue) {
-      // Use provided fallback value first
-      if (fallbackValue !== undefined) {
-        returnFallbackValue = fallbackValue;
-      } 
-      // Then try component-specific last good value
-      else if (component && this.lastGoodValues.has(component)) {
-        returnFallbackValue = this.lastGoodValues.get(component);
-      }
+    // Return result with fallback value if available
+    const result: { shouldRetry: boolean, fallbackValue?: any } = { shouldRetry };
+    
+    if (this.config.fallbackToLastGoodValue && errorWithDefaults.component && 
+        this.lastGoodValues[errorWithDefaults.component] !== undefined) {
+      result.fallbackValue = this.lastGoodValues[errorWithDefaults.component];
     }
     
-    return { shouldRetry, fallbackValue: returnFallbackValue };
+    return result;
   }
-
-  registerGoodValue(component: string, value: any): void {
-    this.lastGoodValues.set(component, value);
-    // Reset retry count for this component since we have a good value
-    this.retryCount.set(component, 0);
+  
+  /**
+   * Store a good value that can be used as fallback
+   */
+  storeGoodValue(componentName: string, value: any): void {
+    this.lastGoodValues[componentName] = value;
   }
-
-  getErrors(): ProcessingError[] {
-    return [...this.errors];
+  
+  /**
+   * Reset retry counts
+   */
+  resetRetries(componentName?: string): void {
+    if (componentName) {
+      // Reset retries only for specific component
+      Object.keys(this.retryCount).forEach(key => {
+        if (key.startsWith(`${componentName}-`)) {
+          this.retryCount[key] = 0;
+        }
+      });
+    } else {
+      // Reset all retries
+      this.retryCount = {};
+    }
   }
-
-  clearErrors(): void {
-    this.errors = [];
+  
+  /**
+   * Get error log
+   */
+  getErrorLog(): ProcessingError[] {
+    return [...this.errorLog];
   }
-
-  getLastError(): ProcessingError | null {
-    return this.errors.length > 0 ? this.errors[this.errors.length - 1] : null;
+  
+  /**
+   * Clear error log
+   */
+  clearErrorLog(): void {
+    this.errorLog = [];
+  }
+  
+  /**
+   * Update configuration
+   */
+  updateConfig(config: Partial<ErrorHandlerConfig>): void {
+    this.config = {...this.config, ...config};
   }
 }
 
-// Singleton instance for app-wide use
-let errorHandlerInstance: SignalProcessingErrorHandler | null = null;
+/**
+ * Singleton instance for app-wide use
+ */
+let errorHandlerInstance: ErrorHandler | null = null;
 
-export function getErrorHandler(config?: Partial<ErrorHandlerConfig>): SignalProcessingErrorHandler {
+/**
+ * Get the singleton error handler instance
+ */
+export function getErrorHandler(): ErrorHandler {
   if (!errorHandlerInstance) {
-    errorHandlerInstance = new SignalProcessingErrorHandler(config);
-  } else if (config) {
-    // Update config if provided
-    errorHandlerInstance = new SignalProcessingErrorHandler(config);
+    errorHandlerInstance = new ErrorHandler();
   }
   
   return errorHandlerInstance;
+}
+
+/**
+ * Create a new error handler with custom configuration
+ */
+export function createErrorHandler(config: Partial<ErrorHandlerConfig> = {}): ErrorHandler {
+  return new ErrorHandler(config);
 }

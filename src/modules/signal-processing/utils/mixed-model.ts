@@ -1,95 +1,208 @@
 
 /**
- * Mixed model utility for signal processing
- * Provides utility functions for working with mixed models
+ * Mixed model utility for signal processing and prediction
  */
 
-export interface MixedModel {
-  predict: (input: number) => number;
-  update: (input: number, target: number) => void;
-  reset: () => void;
-  getConfidence: () => number;
+// Configuration
+const modelConfig = {
+  historySize: 20,
+  predictionHorizon: 3,
+  adaptationRate: 0.1,
+  useAdaptiveFiltering: true
+};
+
+// State
+let signalHistory: number[] = [];
+const coefficients = {
+  ar: [0.8, -0.2, 0.1],  // AR(3) coefficients
+  ma: [0.6, 0.3, 0.1]    // MA(3) coefficients
+};
+let noiseVariance = 0.01;
+let predictionErrors: number[] = [];
+const maxErrorsTracked = 10;
+
+/**
+ * Process signal and make prediction using mixed model
+ */
+export function processMixedModel(value: number): {
+  filtered: number;
+  predicted: number;
+  confidence: number;
+} {
+  // Add to history
+  signalHistory.push(value);
+  if (signalHistory.length > modelConfig.historySize) {
+    signalHistory.shift();
+  }
+  
+  // Not enough data
+  if (signalHistory.length < 5) {
+    return {
+      filtered: value,
+      predicted: value,
+      confidence: 0
+    };
+  }
+  
+  // Apply filtering
+  const filtered = applyFilter(value);
+  
+  // Make prediction
+  const predicted = makePrediction();
+  
+  // Update model parameters adaptively
+  if (modelConfig.useAdaptiveFiltering) {
+    updateModel(value, predicted);
+  }
+  
+  // Calculate prediction confidence
+  const confidence = calculateConfidence();
+  
+  return {
+    filtered,
+    predicted,
+    confidence
+  };
 }
 
-class SimpleMixedModel implements MixedModel {
-  private readonly HISTORY_SIZE = 50;
-  private inputs: number[] = [];
-  private targets: number[] = [];
-  private learningRate: number = 0.01;
-  private lastConfidence: number = 0.5;
-  
-  constructor() {
-    this.reset();
+/**
+ * Apply filtering to signal
+ */
+function applyFilter(value: number): number {
+  if (signalHistory.length < 3) {
+    return value;
   }
   
-  predict(input: number): number {
-    if (this.inputs.length < 5) {
-      return input;
-    }
-    
-    // Very simple prediction for now
-    const predictionSum = this.inputs.reduce((sum, val, i) => {
-      const weight = Math.exp(-(this.inputs.length - i) * 0.1);
-      return sum + (val * weight);
-    }, 0);
-    
-    const weightSum = this.inputs.reduce((sum, _, i) => {
-      return sum + Math.exp(-(this.inputs.length - i) * 0.1);
-    }, 0);
-    
-    return predictionSum / weightSum;
+  // AR component
+  let arComponent = 0;
+  for (let i = 0; i < Math.min(coefficients.ar.length, signalHistory.length - 1); i++) {
+    arComponent += coefficients.ar[i] * signalHistory[signalHistory.length - 2 - i];
   }
   
-  update(input: number, target: number): void {
-    // Store values
-    this.inputs.push(input);
-    this.targets.push(target);
-    
-    // Maintain history size
-    if (this.inputs.length > this.HISTORY_SIZE) {
-      this.inputs.shift();
-      this.targets.shift();
-    }
-    
-    // Update confidence based on prediction accuracy
-    if (this.inputs.length > 10) {
-      const predictions = this.inputs.slice(0, -1).map(this.predict.bind(this));
-      const targetValues = this.targets.slice(1);
-      
-      // Calculate mean squared error
-      let mse = 0;
-      for (let i = 0; i < predictions.length; i++) {
-        mse += Math.pow(predictions[i] - targetValues[i], 2);
-      }
-      mse /= predictions.length;
-      
-      // Convert MSE to confidence (lower MSE = higher confidence)
-      this.lastConfidence = Math.max(0.1, Math.min(0.9, 1 - (mse * 10)));
-    }
+  // MA component (simplified)
+  const error = value - arComponent;
+  let maComponent = 0;
+  for (let i = 0; i < Math.min(coefficients.ma.length, predictionErrors.length); i++) {
+    maComponent += coefficients.ma[i] * predictionErrors[i];
   }
   
-  reset(): void {
-    this.inputs = [];
-    this.targets = [];
-    this.lastConfidence = 0.5;
+  // Update errors
+  predictionErrors.unshift(error);
+  if (predictionErrors.length > maxErrorsTracked) {
+    predictionErrors.pop();
   }
   
-  getConfidence(): number {
-    return this.lastConfidence;
-  }
+  // Combine components
+  return arComponent + maComponent;
 }
 
-let mixedModelInstance: MixedModel | null = null;
-
-export function getMixedModel(): MixedModel {
-  if (!mixedModelInstance) {
-    mixedModelInstance = new SimpleMixedModel();
+/**
+ * Make prediction for future values
+ */
+function makePrediction(): number {
+  if (signalHistory.length < 3) {
+    return signalHistory[signalHistory.length - 1];
   }
-  return mixedModelInstance;
+  
+  // AR component for prediction
+  let prediction = 0;
+  for (let i = 0; i < Math.min(coefficients.ar.length, signalHistory.length); i++) {
+    prediction += coefficients.ar[i] * signalHistory[signalHistory.length - 1 - i];
+  }
+  
+  // MA component for prediction
+  for (let i = 0; i < Math.min(coefficients.ma.length, predictionErrors.length); i++) {
+    prediction += coefficients.ma[i] * predictionErrors[i];
+  }
+  
+  return prediction;
 }
 
+/**
+ * Update model parameters based on prediction error
+ */
+function updateModel(actual: number, predicted: number): void {
+  const error = actual - predicted;
+  const adaptationRate = modelConfig.adaptationRate;
+  
+  // Update AR coefficients
+  for (let i = 0; i < coefficients.ar.length; i++) {
+    if (i < signalHistory.length - 1) {
+      const x = signalHistory[signalHistory.length - 2 - i];
+      coefficients.ar[i] += adaptationRate * error * x;
+    }
+  }
+  
+  // Update MA coefficients
+  for (let i = 0; i < coefficients.ma.length; i++) {
+    if (i < predictionErrors.length) {
+      coefficients.ma[i] += adaptationRate * error * predictionErrors[i] * 0.1;
+    }
+  }
+  
+  // Update noise variance estimate
+  noiseVariance = (1 - adaptationRate) * noiseVariance + adaptationRate * error * error;
+}
+
+/**
+ * Calculate prediction confidence
+ */
+function calculateConfidence(): number {
+  if (predictionErrors.length < 3) {
+    return 0;
+  }
+  
+  // Calculate normalized RMSE of recent predictions
+  const squaredErrors = predictionErrors.slice(0, 5).map(e => e * e);
+  const mse = squaredErrors.reduce((sum, val) => sum + val, 0) / squaredErrors.length;
+  const rmse = Math.sqrt(mse);
+  
+  // Calculate signal strength
+  const recent = signalHistory.slice(-5);
+  const range = Math.max(...recent) - Math.min(...recent);
+  
+  // Normalize RMSE by signal range
+  const normalizedRmse = range > 0.001 ? rmse / range : 100;
+  
+  // Convert to confidence score (0-1)
+  const confidence = Math.max(0, Math.min(1, 1 - normalizedRmse));
+  
+  return confidence;
+}
+
+/**
+ * Reset mixed model
+ */
 export function resetMixedModel(): void {
-  if (mixedModelInstance) {
-    mixedModelInstance.reset();
-  }
+  signalHistory = [];
+  predictionErrors = [];
+  noiseVariance = 0.01;
+  
+  // Reset coefficients to defaults
+  coefficients.ar = [0.8, -0.2, 0.1];
+  coefficients.ma = [0.6, 0.3, 0.1];
+}
+
+/**
+ * Configure mixed model
+ */
+export function configureMixedModel(config: Partial<typeof modelConfig>): void {
+  Object.assign(modelConfig, config);
+}
+
+/**
+ * Get model state
+ */
+export function getMixedModelState(): {
+  coefficients: typeof coefficients;
+  noiseVariance: number;
+  historySize: number;
+  predictionErrorCount: number;
+} {
+  return {
+    coefficients: {...coefficients},
+    noiseVariance,
+    historySize: signalHistory.length,
+    predictionErrorCount: predictionErrors.length
+  };
 }
