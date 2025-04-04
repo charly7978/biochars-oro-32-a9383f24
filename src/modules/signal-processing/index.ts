@@ -1,24 +1,24 @@
 
-/**
- * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
- * 
- * Signal processing module
- * Central export for all signal processing utilities
- */
+// Export all signal processing utilities
+export * from './types';
+export * from './ppg-processor';
 
-// Export signal distributor
-export { OptimizedSignalDistributor } from './OptimizedSignalDistributor';
+export * from './utils/signal-normalizer';
+export * from './utils/finger-detector';
+export * from './utils/quality-detector';
+export * from './utils/mixed-model';
 
-// Export channel types
-export { VitalSignType, type ChannelFeedback } from '../../types/signal';
+export * from './signal-validator';
+export * from './error-handler';
+export * from './diagnostics';
+export * from './channels/SpecializedChannel';
 
-// Export specialized channels
-export { SpecializedChannel } from './channels/SpecializedChannel';
-export { GlucoseChannel } from './channels/GlucoseChannel';
-export { LipidsChannel } from './channels/LipidsChannel';
-export { BloodPressureChannel } from './channels/BloodPressureChannel';
-export { SpO2Channel } from './channels/SpO2Channel';
-export { CardiacChannel } from './channels/CardiacChannel';
+// Export specific types for external use
+export type {
+  ProcessedPPGSignal,
+  SignalProcessor,
+  SignalProcessingOptions
+} from './types';
 
-// Re-export utility types
-export type { SignalDistributorConfig } from '../../types/signal';
+// Re-export from channels
+export { OptimizedSignalChannel } from './channels/SpecializedChannel';
