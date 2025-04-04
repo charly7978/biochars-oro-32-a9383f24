@@ -1,9 +1,10 @@
-
 /**
  * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
  * 
  * Utilidades para detección de presencia de dedo
+ * Versión mejorada que se integra con el detector unificado
  */
+import { unifiedFingerDetector } from './unified-finger-detector';
 
 // Almacenamiento para detección de patrones rítmicos
 let rhythmDetectionHistory: Array<{time: number, value: number}> = [];
@@ -20,6 +21,7 @@ const MAX_CONSISTENT_PATTERNS = 10; // Máximo contador de patrones para evitar 
 
 /**
  * Detecta la presencia de un dedo basado en análisis de patrones de la señal PPG
+ * Ahora integrado con el detector unificado
  * @param signalBuffer Buffer de señal filtrada
  * @param sensitivity Factor de sensibilidad (0-1)
  * @returns true si se detecta presencia de dedo
@@ -42,8 +44,6 @@ export function detectFingerPresence(
         confirmedFingerPresence = false;
       }
     }
-    
-    return confirmedFingerPresence;
   }
   
   // Agregar nuevo valor al historial
@@ -72,14 +72,21 @@ export function detectFingerPresence(
     // Si tenemos suficientes patrones consecutivos, confirmar presencia
     if (consistentPatternsCount >= REQUIRED_CONSISTENT_PATTERNS) {
       confirmedFingerPresence = true;
-      console.log("Dedo detectado por patrón rítmico consistente");
     }
   } else {
     // Reducir contador si no hay patrón
     consistentPatternsCount = Math.max(0, consistentPatternsCount - 0.5);
   }
   
-  return confirmedFingerPresence;
+  // Actualizar detector unificado con resultado de este método
+  unifiedFingerDetector.updateSource(
+    'rhythm-pattern', 
+    confirmedFingerPresence,
+    Math.min(1.0, consistentPatternsCount / REQUIRED_CONSISTENT_PATTERNS)
+  );
+  
+  // Retornar estado basado en detector unificado para consistencia global
+  return unifiedFingerDetector.getDetectionState().isFingerDetected;
 }
 
 /**
@@ -199,10 +206,14 @@ function validateOngoingPattern(signalBuffer: number[]): boolean {
 
 /**
  * Reinicia el detector de dedo
+ * Ahora también reinicia el detector unificado
  */
 export function resetFingerDetector(): void {
   rhythmDetectionHistory = [];
   confirmedFingerPresence = false;
   lastPeakTimes = [];
   consistentPatternsCount = 0;
+  
+  // Reiniciar también el detector unificado
+  unifiedFingerDetector.reset();
 }
