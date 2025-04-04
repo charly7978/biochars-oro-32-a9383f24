@@ -99,7 +99,7 @@ export function useFingerDetection(): FingerDetectionResult {
     // Actualizar brillo si se proporciona
     if (data.brightness !== undefined) {
       updateEnvironmentalState({
-        brightness: data.brightness
+        lighting: data.brightness
       });
       
       // Actualizar fuente de detección basada en brillo
@@ -114,7 +114,7 @@ export function useFingerDetection(): FingerDetectionResult {
     // Actualizar movimiento si se proporciona
     if (data.movement !== undefined) {
       updateEnvironmentalState({
-        movement: data.movement
+        motion: data.movement
       });
     }
     

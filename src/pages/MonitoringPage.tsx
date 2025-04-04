@@ -11,6 +11,7 @@ import FingerDetectionMonitor from '@/components/debug/FingerDetectionMonitor';
 import OptimizerMonitor from '@/components/debug/OptimizerMonitor';
 import { SystemPerformanceMonitor } from '@/components/monitoring/SystemPerformanceMonitor';
 import { CalibrationMonitor } from '@/components/monitoring/CalibrationMonitor';
+import { OptimizationState } from '@/modules/signal-processing/utils/parameter-optimization';
 
 const MonitoringPage: React.FC = () => {
   const navigate = useNavigate();
@@ -92,7 +93,7 @@ const MonitoringPage: React.FC = () => {
                   lastOptimizationTime: null,
                   paramsHistory: []
                 }}
-                state="IDLE"
+                state={OptimizationState.IDLE}
                 isReady={true}
                 onStartOptimization={() => {}}
                 onReset={() => {}}

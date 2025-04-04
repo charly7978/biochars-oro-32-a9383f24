@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Slider } from "@/components/ui/slider";
@@ -112,8 +111,7 @@ const FingerDetectionMonitor: React.FC<FingerDetectionMonitorProps> = ({ classNa
     // Apply sensitivity using the adaptDetectionThresholds function
     adaptDetectionThresholds(value < 0.5 ? 0.8 : 1.2);
     
-    toast({
-      title: "Sensitivity Applied",
+    toast.success("Sensitivity Applied", {
       description: `Detection sensitivity set to ${value < 0.5 ? "less" : "more"} sensitive`,
     });
   };
@@ -123,8 +121,7 @@ const FingerDetectionMonitor: React.FC<FingerDetectionMonitorProps> = ({ classNa
     adaptDetectionThresholds(1.0);
     
     setSensitivity(0.5);
-    toast({
-      title: "Sensitivity Reset",
+    toast.success("Sensitivity Reset", {
       description: "Detection sensitivity returned to default",
     });
   };
@@ -149,8 +146,7 @@ const FingerDetectionMonitor: React.FC<FingerDetectionMonitorProps> = ({ classNa
   
   const handleResetCalibration = () => {
     resetCalibration();
-    toast({
-      title: "Calibration Reset",
+    toast.success("Calibration Reset", {
       description: "Adaptive calibration has been reset to default values.",
     });
   };
