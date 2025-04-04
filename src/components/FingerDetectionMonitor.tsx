@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Slider } from "@/components/ui/slider";
@@ -56,47 +57,85 @@ interface FingerDetectionMonitorProps {
   className?: string;
 }
 
+// Default empty states to prevent undefined errors
+const DEFAULT_DETECTION_STATE: DetectionState = {
+  detected: false,
+  confidence: 0,
+  isFingerDetected: false,
+  amplitude: { detected: false, confidence: 0 },
+  rhythm: { detected: false, confidence: 0 },
+  sources: {},
+  lastUpdate: Date.now()
+};
+
+const DEFAULT_ENVIRONMENTAL_STATE: EnvironmentalState = {
+  noise: 0,
+  lighting: 50,
+  motion: 0
+};
+
+const DEFAULT_CALIBRATION_PARAMS: AdaptiveCalibrationParams = {
+  baseThreshold: 0.5,
+  noiseMultiplier: 1.0,
+  lightingCompensation: 1.0,
+  motionCompensation: 1.0,
+  adaptationRate: 0.1,
+  stabilityFactor: 1.0
+};
+
 const FingerDetectionMonitor: React.FC<FingerDetectionMonitorProps> = ({ className }) => {
-  const [detectionState, setDetectionState] = useState<DetectionState>(getFingerDetectionState());
+  const [detectionState, setDetectionState] = useState<DetectionState>(DEFAULT_DETECTION_STATE);
   const [sensitivity, setSensitivity] = useState(0.5);
   const [diagnosticEvents, setDiagnosticEvents] = useState<DiagnosticEvent[]>([]);
-  const [isRhythmDetected, setIsRhythmDetected] = useState(isFingerDetectedByRhythm());
-  const [isAmplitudeDetected, setIsAmplitudeDetected] = useState(isFingerDetectedByAmplitude());
-  const [calibrationParams, setCalibrationParams] = useState(getCalibrationParameters());
-  const [environmentalState, setEnvironmentalState] = useState<EnvironmentalState>({
-    noise: 0,
-    lighting: 50,
-    motion: 0
-  });
+  const [isRhythmDetected, setIsRhythmDetected] = useState(false);
+  const [isAmplitudeDetected, setIsAmplitudeDetected] = useState(false);
+  const [calibrationParams, setCalibrationParams] = useState<AdaptiveCalibrationParams>(DEFAULT_CALIBRATION_PARAMS);
+  const [environmentalState, setEnvironmentalState] = useState<EnvironmentalState>(DEFAULT_ENVIRONMENTAL_STATE);
   const [noiseLevel, setNoiseLevel] = useState(0);
   const [lightingLevel, setLightingLevel] = useState(50);
   const [motionLevel, setMotionLevel] = useState(0);
   
   useEffect(() => {
     const intervalId = setInterval(() => {
-      setDetectionState(getFingerDetectionState());
-      const stats = getDiagnosticStats();
-      setDiagnosticEvents(stats.events || []);
-      setIsRhythmDetected(isFingerDetectedByRhythm());
-      setIsAmplitudeDetected(isFingerDetectedByAmplitude());
-      setCalibrationParams(getCalibrationParameters());
-      setEnvironmentalState(getCalibrationParameters().environmentalState);
+      try {
+        const newState = getFingerDetectionState();
+        setDetectionState(newState || DEFAULT_DETECTION_STATE);
+        
+        const stats = getDiagnosticStats();
+        setDiagnosticEvents(stats.events || []);
+        
+        // Safely fetch detection status with defensive checks
+        setIsRhythmDetected(isFingerDetectedByRhythm ? isFingerDetectedByRhythm() : false);
+        setIsAmplitudeDetected(isFingerDetectedByAmplitude ? isFingerDetectedByAmplitude() : false);
+        
+        // Get calibration parameters with fallback to defaults
+        const params = getCalibrationParameters();
+        setCalibrationParams(params || DEFAULT_CALIBRATION_PARAMS);
+        
+        // Get environmental state with fallback
+        const envState = params?.environmentalState || DEFAULT_ENVIRONMENTAL_STATE;
+        setEnvironmentalState(envState);
+      } catch (err) {
+        console.error("Error updating monitor state:", err);
+        // If there's an error, use default values
+        setDetectionState(DEFAULT_DETECTION_STATE);
+      }
     }, 500);
     
     return () => clearInterval(intervalId);
   }, []);
   
   useEffect(() => {
-    setNoiseLevel(environmentalState.noise || 0);
-  }, [environmentalState.noise]);
+    setNoiseLevel(environmentalState?.noise || 0);
+  }, [environmentalState?.noise]);
   
   useEffect(() => {
-    setLightingLevel(environmentalState.lighting || 50);
-  }, [environmentalState.lighting]);
+    setLightingLevel(environmentalState?.lighting || 50);
+  }, [environmentalState?.lighting]);
   
   useEffect(() => {
-    setMotionLevel(environmentalState.motion || 0);
-  }, [environmentalState.motion]);
+    setMotionLevel(environmentalState?.motion || 0);
+  }, [environmentalState?.motion]);
   
   const handleApplySensitivity = (value: number) => {
     if (value === 0.5) return; // No change at middle point
@@ -152,8 +191,8 @@ const FingerDetectionMonitor: React.FC<FingerDetectionMonitorProps> = ({ classNa
       <CardHeader>
         <CardTitle className="flex justify-between items-center">
           <span>Finger Detection Monitor</span>
-          <Badge variant={detectionState.detected ? 'default' : 'outline'}>
-            {detectionState.detected ? 'Detected' : 'Not Detected'}
+          <Badge variant={detectionState?.detected ? 'default' : 'outline'}>
+            {detectionState?.detected ? 'Detected' : 'Not Detected'}
           </Badge>
         </CardTitle>
         <CardDescription>
@@ -166,16 +205,16 @@ const FingerDetectionMonitor: React.FC<FingerDetectionMonitorProps> = ({ classNa
           <h4 className="text-sm font-medium">Detection Sources</h4>
           <div className="grid grid-cols-2 gap-2">
             <div className="flex items-center space-x-2">
-              <Badge variant={detectionState.amplitude.detected ? 'default' : 'outline'}>
+              <Badge variant={detectionState?.amplitude?.detected ? 'default' : 'outline'}>
                 Amplitude
               </Badge>
-              <span>Confidence: {detectionState.amplitude.confidence.toFixed(2)}</span>
+              <span>Confidence: {detectionState?.amplitude?.confidence.toFixed(2) || "0.00"}</span>
             </div>
             <div className="flex items-center space-x-2">
-              <Badge variant={detectionState.rhythm.detected ? 'default' : 'outline'}>
+              <Badge variant={detectionState?.rhythm?.detected ? 'default' : 'outline'}>
                 Rhythm
               </Badge>
-              <span>Confidence: {detectionState.rhythm.confidence.toFixed(2)}</span>
+              <span>Confidence: {detectionState?.rhythm?.confidence.toFixed(2) || "0.00"}</span>
             </div>
           </div>
         </div>
@@ -184,7 +223,7 @@ const FingerDetectionMonitor: React.FC<FingerDetectionMonitorProps> = ({ classNa
           <h4 className="text-sm font-medium">Unified Detection</h4>
           <div className="grid grid-cols-1 gap-2">
             <div className="flex items-center space-x-2">
-              <span>Confidence: {getDetectionConfidence().toFixed(2)}</span>
+              <span>Confidence: {detectionState?.confidence?.toFixed(2) || "0.00"}</span>
             </div>
             <div className="flex items-center space-x-2">
               <span>Is Finger Detected by Rhythm: {isRhythmDetected ? 'Yes' : 'No'}</span>
@@ -254,22 +293,22 @@ const FingerDetectionMonitor: React.FC<FingerDetectionMonitorProps> = ({ classNa
           <h4 className="text-sm font-medium">Calibration Parameters</h4>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
             <div>
-              <Label>Base Threshold: {calibrationParams.baseThreshold.toFixed(3)}</Label>
+              <Label>Base Threshold: {calibrationParams?.baseThreshold?.toFixed(3) || "0.000"}</Label>
             </div>
             <div>
-              <Label>Noise Multiplier: {calibrationParams.noiseMultiplier.toFixed(3)}</Label>
+              <Label>Noise Multiplier: {calibrationParams?.noiseMultiplier?.toFixed(3) || "0.000"}</Label>
             </div>
             <div>
-              <Label>Lighting Compensation: {calibrationParams.lightingCompensation.toFixed(3)}</Label>
+              <Label>Lighting Compensation: {calibrationParams?.lightingCompensation?.toFixed(3) || "0.000"}</Label>
             </div>
             <div>
-              <Label>Motion Compensation: {calibrationParams.motionCompensation.toFixed(3)}</Label>
+              <Label>Motion Compensation: {calibrationParams?.motionCompensation?.toFixed(3) || "0.000"}</Label>
             </div>
             <div>
-              <Label>Adaptation Rate: {calibrationParams.adaptationRate.toFixed(3)}</Label>
+              <Label>Adaptation Rate: {calibrationParams?.adaptationRate?.toFixed(3) || "0.000"}</Label>
             </div>
             <div>
-              <Label>Stability Factor: {calibrationParams.stabilityFactor.toFixed(3)}</Label>
+              <Label>Stability Factor: {calibrationParams?.stabilityFactor?.toFixed(3) || "0.000"}</Label>
             </div>
           </div>
         </div>
@@ -278,7 +317,7 @@ const FingerDetectionMonitor: React.FC<FingerDetectionMonitorProps> = ({ classNa
           <h4 className="text-sm font-medium">Diagnostic Events</h4>
           <ScrollArea className="h-[200px] w-full">
             <div className="space-y-1">
-              {diagnosticEvents.slice().reverse().map((event, index) => (
+              {(diagnosticEvents || []).slice().reverse().map((event, index) => (
                 <div key={index} className="text-xs border-l-2 pl-2 py-1 border-gray-300">
                   <div className="flex justify-between">
                     <span className="text-gray-500">
@@ -291,6 +330,12 @@ const FingerDetectionMonitor: React.FC<FingerDetectionMonitorProps> = ({ classNa
                   <p className="mt-1">{event.message}</p>
                 </div>
               ))}
+              
+              {(diagnosticEvents || []).length === 0 && (
+                <div className="flex justify-center items-center h-32 text-muted-foreground">
+                  No diagnostic events to display
+                </div>
+              )}
             </div>
           </ScrollArea>
           <Button variant="outline" size="sm" onClick={() => {

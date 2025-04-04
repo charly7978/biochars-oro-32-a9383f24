@@ -111,5 +111,6 @@ export interface AdaptiveCalibrationParams {
   falsePositiveReduction?: number;
   falseNegativeReduction?: number;
   rhythmDetectionThreshold?: number;
-  [key: string]: number | undefined;
+  environmentalState?: EnvironmentalState;
+  [key: string]: number | EnvironmentalState | undefined;
 }
