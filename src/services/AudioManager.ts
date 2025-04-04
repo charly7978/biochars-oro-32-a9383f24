@@ -11,7 +11,7 @@
 let audioContext: AudioContext | null = null;
 
 // State
-let audioEnabled: boolean = true;
+let audioEnabled: boolean = true; // Renamed from isAudioEnabled to avoid conflict
 let beepVolume: number = 0.3; // Default volume
 let lastBeepTime: number = 0;
 const MIN_BEEP_INTERVAL_MS = 500; // Minimum time between beeps
@@ -50,7 +50,7 @@ function initializeAudioContextOnUserInteraction(): void {
  * Handle cardiac peak events from the OptimizedSignalDistributor
  */
 function handleCardiacPeakEvent(event: CustomEvent): void {
-  if (!audioEnabled || !audioContext) return;
+  if (!audioEnabled || !audioContext) return; // Updated variable name
   
   const now = Date.now();
   
@@ -88,7 +88,7 @@ function handleCardiacPeakEvent(event: CustomEvent): void {
  * Play a beep sound with the specified type
  */
 export function playBeep(type: BeepType = 'normal'): boolean {
-  if (!audioEnabled || !audioContext) {
+  if (!audioEnabled || !audioContext) { // Updated variable name
     return false;
   }
   
@@ -141,7 +141,7 @@ export function playBeep(type: BeepType = 'normal'): boolean {
  * Set audio enabled state
  */
 export function setAudioEnabled(enabled: boolean): void {
-  audioEnabled = enabled;
+  audioEnabled = enabled; // Updated variable name
   console.log(`AudioManager: Audio ${enabled ? 'enabled' : 'disabled'}`);
 }
 
@@ -157,7 +157,7 @@ export function setBeepVolume(volume: number): void {
  * Check if audio is enabled
  */
 export function isAudioEnabled(): boolean {
-  return audioEnabled;
+  return audioEnabled; // Updated variable name
 }
 
 /**

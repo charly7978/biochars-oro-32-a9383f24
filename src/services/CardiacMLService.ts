@@ -81,7 +81,7 @@ export function processCardiacSignal(signal: CardiacSignalInput): CardiacMLResul
   return {
     enhancedValue: mlResult.enhancedValue,
     confidence: mlResult.confidence,
-    isArrhythmiaSuspected: mlResult.predictions?.arrhythmiaProb || 0 > 0.6,
+    isArrhythmiaSuspected: (mlResult.predictions?.arrhythmiaProb || 0) > 0.6,
     quality: (mlResult.predictions?.quality || 0.5) * 100,
     estimatedHeartRate: estimateHeartRateFromBuffer()
   };
