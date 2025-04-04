@@ -1,6 +1,5 @@
 
 import React, { useState, useEffect } from 'react';
-import { Button } from "@/components/ui/button";
 import { 
   Card, 
   CardContent, 
@@ -9,292 +8,280 @@ import {
   CardHeader, 
   CardTitle 
 } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
-import { 
-  useErrorPrevention, 
-  getAvailableRecoveryActions, 
-  getSystemHealth, 
-  SystemHealthState,
-  PreventionMode,
-  getDiagnosticChannelState
-} from '@/utils/errorPrevention';
-import { AlertTriangle, CheckCircle, RefreshCw, Shield, Activity, Settings } from 'lucide-react';
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { 
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useErrorPrevention, PreventionMode, SystemHealthState, getAvailableRecoveryActions, getSystemHealth, getDiagnosticChannelState } from "@/utils/errorPrevention/integration";
+import { ErrorLevel } from "@/utils/debugUtils";
 
-const ErrorPreventionPanel = () => {
-  const [activeTab, setActiveTab] = useState('overview');
+export function ErrorPreventionPanel() {
+  const errorPrevention = useErrorPrevention();
+  const [activeTab, setActiveTab] = useState<string>("status");
   const [recoveryActions, setRecoveryActions] = useState<any[]>([]);
-  const [healthState, setHealthState] = useState<SystemHealthState>(SystemHealthState.HEALTHY);
-  const [diagnosticState, setDiagnosticState] = useState(getDiagnosticChannelState());
+  const [selectedAction, setSelectedAction] = useState<string | null>(null);
+  const [recoveryInProgress, setRecoveryInProgress] = useState(false);
   
-  const errorPrevention = useErrorPrevention({
-    autoRecover: true,
-    notifyOnRecovery: true
-  });
-  
-  // Poll for updates
+  // Get available recovery actions
   useEffect(() => {
-    const intervalId = setInterval(() => {
-      setRecoveryActions(getAvailableRecoveryActions());
-      setHealthState(getSystemHealth());
-      setDiagnosticState(getDiagnosticChannelState());
-    }, 1000);
-    
-    return () => clearInterval(intervalId);
+    setRecoveryActions(getAvailableRecoveryActions());
   }, []);
   
-  // Get color for health state
-  const getHealthColor = (state: SystemHealthState) => {
-    switch (state) {
-      case SystemHealthState.CRITICAL:
-        return 'text-red-500 bg-red-50';
-      case SystemHealthState.DEGRADED:
-        return 'text-amber-500 bg-amber-50';
-      case SystemHealthState.WARNING:
-        return 'text-yellow-500 bg-yellow-50';
-      case SystemHealthState.HEALTHY:
-      default:
-        return 'text-emerald-500 bg-emerald-50';
+  // Run recovery action
+  const handleRunRecovery = async () => {
+    if (!selectedAction) return;
+    
+    setRecoveryInProgress(true);
+    
+    try {
+      await errorPrevention.runRecovery(selectedAction);
+      setSelectedAction(null);
+    } catch (error) {
+      console.error("Error running recovery action:", error);
+    } finally {
+      setRecoveryInProgress(false);
     }
   };
   
-  const handleModeChange = (value: string) => {
-    errorPrevention.setMode(value as PreventionMode);
+  // Change prevention mode
+  const handleModeChange = (mode: PreventionMode) => {
+    errorPrevention.setMode(mode);
   };
   
-  const handleRunRecovery = async (name: string) => {
-    await errorPrevention.runRecovery(name);
-    setRecoveryActions(getAvailableRecoveryActions());
+  const getHealthColorClass = (health: string) => {
+    switch (health) {
+      case 'optimal': return 'bg-green-500';
+      case 'good': return 'bg-emerald-500';
+      case 'degraded': return 'bg-yellow-500';
+      case 'poor': return 'bg-orange-500';
+      case 'critical': return 'bg-red-500';
+      default: return 'bg-gray-500';
+    }
   };
+  
+  const getHealthPercentage = (health: string) => {
+    switch (health) {
+      case 'optimal': return 100;
+      case 'good': return 80;
+      case 'degraded': return 60;
+      case 'poor': return 30;
+      case 'critical': return 10;
+      default: return 50;
+    }
+  };
+  
+  const diagnostics = errorPrevention.getDiagnostics();
   
   return (
     <Card className="w-full">
-      <CardHeader className="pb-2">
-        <div className="flex justify-between items-center">
-          <div className="flex items-center gap-2">
-            <Shield className="h-5 w-5 text-primary" />
-            <CardTitle>Error Prevention System</CardTitle>
-          </div>
-          <Badge variant="outline" className={getHealthColor(healthState)}>
-            {healthState}
+      <CardHeader>
+        <CardTitle className="flex justify-between items-center">
+          <span>Error Prevention System</span>
+          <Badge
+            variant={errorPrevention.healthStatus === 'critical' ? 'destructive' : 'default'}
+            className="ml-2"
+          >
+            {errorPrevention.healthStatus.toUpperCase()}
           </Badge>
-        </div>
+        </CardTitle>
         <CardDescription>
-          Comprehensive monitoring and prevention of avoidable errors
+          Monitor and control the error prevention system
         </CardDescription>
       </CardHeader>
-      
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <div className="px-6">
-          <TabsList className="grid grid-cols-3 my-2">
-            <TabsTrigger value="overview" className="flex items-center gap-1">
-              <Activity className="h-4 w-4" />
-              <span>Status</span>
-            </TabsTrigger>
-            <TabsTrigger value="recovery" className="flex items-center gap-1">
-              <RefreshCw className="h-4 w-4" />
-              <span>Recovery</span>
-            </TabsTrigger>
-            <TabsTrigger value="settings" className="flex items-center gap-1">
-              <Settings className="h-4 w-4" />
-              <span>Settings</span>
-            </TabsTrigger>
-          </TabsList>
-        </div>
+      <Tabs defaultValue="status" value={activeTab} onValueChange={setActiveTab}>
+        <TabsList className="grid grid-cols-3 mx-4">
+          <TabsTrigger value="status">Status</TabsTrigger>
+          <TabsTrigger value="recovery">Recovery</TabsTrigger>
+          <TabsTrigger value="diagnostics">Diagnostics</TabsTrigger>
+        </TabsList>
         
-        <TabsContent value="overview" className="px-6 pb-6">
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="border rounded-lg p-3">
-                <div className="text-sm font-medium text-gray-500 mb-1">Signal Quality</div>
-                <div className="text-2xl font-bold">
-                  {diagnosticState.signalQuality.toFixed(1)}%
+        <CardContent>
+          <TabsContent value="status" className="mt-4 space-y-4">
+            <div className="space-y-4">
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-medium">System Health</span>
+                  <span className="text-sm">{errorPrevention.healthStatus}</span>
                 </div>
-                <Progress
-                  value={diagnosticState.signalQuality}
-                  className="h-2 mt-2"
+                <Progress 
+                  value={getHealthPercentage(errorPrevention.healthStatus)} 
+                  className={`h-2 ${getHealthColorClass(errorPrevention.healthStatus)}`} 
                 />
               </div>
               
-              <div className="border rounded-lg p-3">
-                <div className="text-sm font-medium text-gray-500 mb-1">Error Rate</div>
-                <div className="text-2xl font-bold">
-                  {diagnosticState.errorRate.toFixed(1)}%
-                </div>
-                <Progress
-                  value={Math.min(100, diagnosticState.errorRate * 2)} // Scale for visibility
-                  className="h-2 mt-2 bg-gray-100"
-                  indicatorClassName={diagnosticState.errorRate > 30 ? "bg-red-500" : 
-                                       diagnosticState.errorRate > 10 ? "bg-amber-500" : "bg-emerald-500"}
-                />
-              </div>
-            </div>
-            
-            <div className="border rounded-lg p-4">
-              <h3 className="text-sm font-medium mb-2">Diagnostic Channel Status</h3>
-              <div className="grid grid-cols-2 gap-2 text-sm">
-                <div className="flex items-center justify-between">
-                  <span className="text-gray-500">Connection:</span>
-                  <Badge variant={diagnosticState.connected ? "success" : "destructive"} className="ml-2">
-                    {diagnosticState.connected ? "Connected" : "Disconnected"}
-                  </Badge>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-gray-500">Processing:</span>
-                  <span className="font-medium">{(diagnosticState.processingLoad * 100).toFixed(0)}%</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-gray-500">Last Update:</span>
-                  <span className="font-medium">
-                    {diagnosticState.lastReceived ? 
-                      Math.floor((Date.now() - diagnosticState.lastReceived) / 1000) + 's ago' : 
-                      'Never'}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-gray-500">Prevention Mode:</span>
-                  <Badge variant="outline" className="font-medium">
-                    {errorPrevention.currentMode()}
-                  </Badge>
-                </div>
-              </div>
-            </div>
-            
-            {healthState !== SystemHealthState.HEALTHY && (
-              <Alert variant={healthState === SystemHealthState.CRITICAL ? "destructive" : "default"}>
-                <AlertTriangle className="h-4 w-4" />
-                <AlertTitle>System Health Alert</AlertTitle>
-                <AlertDescription>
-                  {healthState === SystemHealthState.CRITICAL ? 
-                    "Critical issues detected that require immediate attention." :
-                    healthState === SystemHealthState.DEGRADED ?
-                    "System performance is degraded. Consider running recovery actions." :
-                    "Possible issues detected. Monitor system performance."}
+              <Alert variant={errorPrevention.healthStatus === 'critical' ? 'destructive' : 'default'}>
+                <AlertTitle>Prevention Mode</AlertTitle>
+                <AlertDescription className="flex items-center justify-between">
+                  <span>{errorPrevention.currentMode || PreventionMode.STANDARD}</span>
+                  <div className="space-x-2 mt-2">
+                    <Button 
+                      size="sm" 
+                      variant={errorPrevention.currentMode === PreventionMode.MINIMAL ? 'default' : 'outline'}
+                      onClick={() => handleModeChange(PreventionMode.MINIMAL)}
+                    >
+                      Minimal
+                    </Button>
+                    <Button 
+                      size="sm" 
+                      variant={errorPrevention.currentMode === PreventionMode.STANDARD ? 'default' : 'outline'}
+                      onClick={() => handleModeChange(PreventionMode.STANDARD)}
+                    >
+                      Standard
+                    </Button>
+                    <Button 
+                      size="sm" 
+                      variant={errorPrevention.currentMode === PreventionMode.AGGRESSIVE ? 'default' : 'outline'}
+                      onClick={() => handleModeChange(PreventionMode.AGGRESSIVE)}
+                    >
+                      Aggressive
+                    </Button>
+                  </div>
                 </AlertDescription>
               </Alert>
-            )}
-          </div>
-        </TabsContent>
-        
-        <TabsContent value="recovery" className="px-6 pb-6">
-          <div className="space-y-4">
-            <div className="rounded-lg border">
-              <ScrollArea className="h-[300px] w-full">
-                <div className="p-4 space-y-4">
-                  {recoveryActions.length === 0 ? (
-                    <p className="text-center text-gray-500 py-8">No recovery actions available</p>
-                  ) : (
-                    recoveryActions.map((action) => (
-                      <div key={action.name} className="border rounded-lg p-3">
-                        <div className="flex justify-between items-start">
-                          <div>
-                            <h3 className="font-medium">{action.name}</h3>
-                            <p className="text-sm text-gray-500 mt-1">{action.description}</p>
-                          </div>
-                          <Button 
-                            variant="outline" 
-                            size="sm" 
-                            onClick={() => handleRunRecovery(action.name)}
-                          >
-                            <RefreshCw className="h-3.5 w-3.5 mr-1" />
-                            Run
-                          </Button>
-                        </div>
-                        <div className="mt-3 flex flex-wrap gap-x-6 gap-y-2 text-xs text-gray-500">
-                          <div>
-                            Last executed: {action.lastExecuted ? 
-                              new Date(action.lastExecuted).toLocaleTimeString() : 
-                              'Never'}
-                          </div>
-                          <div className="flex items-center gap-1">
-                            <CheckCircle className="h-3.5 w-3.5 text-green-500" />
-                            Success: {action.successCount}
-                          </div>
-                          <div className="flex items-center gap-1">
-                            <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
-                            Failures: {action.failureCount}
-                          </div>
+              
+              <div className="border rounded-md p-4">
+                <h4 className="text-sm font-medium mb-2">Recent Errors</h4>
+                <ScrollArea className="h-[200px]">
+                  <div className="space-y-2">
+                    {diagnostics.recentErrors.slice().reverse().map((error, index) => (
+                      <div 
+                        key={index} 
+                        className={`p-2 rounded-md text-xs ${
+                          error.severity === ErrorLevel.CRITICAL 
+                            ? 'bg-red-100 dark:bg-red-900/30' 
+                            : error.severity === ErrorLevel.ERROR 
+                            ? 'bg-orange-100 dark:bg-orange-900/30' 
+                            : 'bg-yellow-100 dark:bg-yellow-900/30'
+                        }`}
+                      >
+                        <div className="font-medium">{error.message}</div>
+                        <div className="text-xs text-gray-500 dark:text-gray-400">
+                          {new Date(error.timestamp).toLocaleTimeString()}
                         </div>
                       </div>
-                    ))
-                  )}
-                </div>
-              </ScrollArea>
-            </div>
-          </div>
-        </TabsContent>
-        
-        <TabsContent value="settings" className="px-6 pb-6">
-          <div className="space-y-6">
-            <div className="border rounded-lg p-4">
-              <h3 className="font-medium mb-3">Prevention Mode</h3>
-              <Select
-                defaultValue={errorPrevention.currentMode()}
-                onValueChange={handleModeChange}
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Select prevention mode" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="passive">Passive (Monitor only)</SelectItem>
-                  <SelectItem value="active">Active (Default)</SelectItem>
-                  <SelectItem value="aggressive">Aggressive (Maximum prevention)</SelectItem>
-                </SelectContent>
-              </Select>
-              <p className="text-sm text-gray-500 mt-2">
-                {errorPrevention.currentMode() === PreventionMode.PASSIVE ? 
-                  "Only monitors and logs issues without taking preventive actions." :
-                  errorPrevention.currentMode() === PreventionMode.ACTIVE ?
-                  "Applies preventive measures when issues are detected." :
-                  "Maximum prevention with aggressive intervention (may affect performance)."}
-              </p>
-            </div>
-            
-            <div className="border rounded-lg p-4">
-              <h3 className="font-medium mb-2">System Information</h3>
-              <div className="grid grid-cols-2 gap-2 text-sm">
-                <div className="flex items-center justify-between">
-                  <span className="text-gray-500">Browser:</span>
-                  <span className="font-medium">{navigator.userAgent.split(' ').slice(-1)[0]}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-gray-500">Platform:</span>
-                  <span className="font-medium">{navigator.platform}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-gray-500">Session ID:</span>
-                  <span className="font-medium">
-                    {`${Date.now().toString(36).slice(-6)}`}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-gray-500">Uptime:</span>
-                  <span className="font-medium">
-                    {`${Math.floor(performance.now() / 60000)}m`}
-                  </span>
-                </div>
+                    ))}
+                    {diagnostics.recentErrors.length === 0 && (
+                      <div className="text-sm text-gray-500 dark:text-gray-400">
+                        No recent errors
+                      </div>
+                    )}
+                  </div>
+                </ScrollArea>
               </div>
             </div>
-          </div>
-        </TabsContent>
+          </TabsContent>
+          
+          <TabsContent value="recovery" className="mt-4">
+            <div className="space-y-4">
+              <div className="text-sm">
+                Select a recovery action to run in case of issues:
+              </div>
+              
+              <div className="space-y-2">
+                {recoveryActions.map((action) => (
+                  <div 
+                    key={action.id}
+                    className={`border p-3 rounded-md cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 ${
+                      selectedAction === action.id ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30' : ''
+                    }`}
+                    onClick={() => setSelectedAction(action.id)}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="font-medium">{action.name}</span>
+                      <Badge 
+                        variant={
+                          action.severity === 'high' 
+                            ? 'destructive' 
+                            : action.severity === 'medium' 
+                            ? 'default' 
+                            : 'outline'
+                        }
+                      >
+                        {action.severity}
+                      </Badge>
+                    </div>
+                    <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                      {action.description}
+                    </p>
+                  </div>
+                ))}
+                
+                {recoveryActions.length === 0 && (
+                  <div className="text-center p-4 text-gray-500 dark:text-gray-400">
+                    No recovery actions available
+                  </div>
+                )}
+              </div>
+              
+              <div className="flex justify-end">
+                <Button 
+                  disabled={!selectedAction || recoveryInProgress}
+                  onClick={handleRunRecovery}
+                >
+                  {recoveryInProgress ? 'Running...' : 'Run Recovery Action'}
+                </Button>
+              </div>
+            </div>
+          </TabsContent>
+          
+          <TabsContent value="diagnostics" className="mt-4">
+            <div className="space-y-4">
+              <div className="border rounded-md p-4">
+                <h4 className="text-sm font-medium mb-2">System Information</h4>
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-gray-500 dark:text-gray-400">Prevention Mode</span>
+                    <span>{errorPrevention.currentMode}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-500 dark:text-gray-400">Health Status</span>
+                    <span>{errorPrevention.healthStatus}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-500 dark:text-gray-400">Recent Errors</span>
+                    <span>{diagnostics.recentErrors.length}</span>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="border rounded-md p-4">
+                <h4 className="text-sm font-medium mb-2">Diagnostic Events</h4>
+                <ScrollArea className="h-[200px]">
+                  <div className="space-y-2">
+                    {diagnostics.diagnosticEvents.slice().reverse().map((event, index) => (
+                      <div key={index} className="p-2 rounded-md text-xs bg-gray-100 dark:bg-gray-800">
+                        <div className="font-medium">{event.component}: {event.event}</div>
+                        <div className="text-xs text-gray-500 dark:text-gray-400">
+                          {new Date(event.timestamp).toLocaleTimeString()}
+                        </div>
+                      </div>
+                    ))}
+                    {diagnostics.diagnosticEvents.length === 0 && (
+                      <div className="text-sm text-gray-500 dark:text-gray-400">
+                        No diagnostic events
+                      </div>
+                    )}
+                  </div>
+                </ScrollArea>
+              </div>
+            </div>
+          </TabsContent>
+        </CardContent>
       </Tabs>
-      
-      <CardFooter className="pt-0 flex justify-between text-xs text-gray-500">
-        <div>Error Prevention System v1.0</div>
-        <div>Diagnostic Channel: {diagnosticState.connected ? 'Online' : 'Offline'}</div>
+      <CardFooter className="flex justify-between">
+        <div className="text-xs text-gray-500 dark:text-gray-400">
+          {errorPrevention.currentMode === PreventionMode.AGGRESSIVE ? 
+            'Aggressive mode: Maximum protection with potential performance impact' :
+            errorPrevention.currentMode === PreventionMode.MINIMAL ?
+            'Minimal mode: Basic protection with no performance impact' :
+            'Standard mode: Balanced protection and performance'
+          }
+        </div>
       </CardFooter>
     </Card>
   );
-};
+}
 
 export default ErrorPreventionPanel;

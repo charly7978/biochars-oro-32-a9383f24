@@ -7,8 +7,9 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { useVitalSignsWithProcessing } from './useVitalSignsWithProcessing';
 import { useHeartBeatErrorPrevention } from './heart-beat/useHeartBeatErrorPrevention';
-import { trackDeviceError } from '@/utils/deviceErrorTracker';
-import { useErrorPrevention, trackDiagnosticWithPrevention, safeExecute } from '@/utils/errorPrevention';
+import { trackDeviceError } from '@/utils/errorPrevention/monitor';
+import { useErrorPrevention } from '@/utils/errorPrevention/integration';
+import { trackDiagnosticWithPrevention, safeExecute } from '@/utils/errorPrevention/utils';
 import { logError, ErrorLevel } from '@/utils/debugUtils';
 
 /**
@@ -74,7 +75,7 @@ export function useVitalSignsWithErrorPrevention() {
           // After multiple consecutive errors, try recovery
           if (consecutiveErrorsRef.current > 5 && !recoveryAttemptedRef.current) {
             recoveryAttemptedRef.current = true;
-            errorPrevention.runRecovery('resetSignalProcessor').finally(() => {
+            errorPrevention.runRecovery('VitalSignsProcessor:resetSignalProcessor').finally(() => {
               // Reset flag after a cooldown period
               setTimeout(() => {
                 recoveryAttemptedRef.current = false;
@@ -187,8 +188,23 @@ export function useVitalSignsWithErrorPrevention() {
    * Connect processors to heart beat error prevention
    */
   useEffect(() => {
-    // Connection would happen here if we had direct access to the processors
-    // This would typically be implemented when those processors are available
+    // Register recovery actions
+    errorPrevention.registerError(
+      "Registering vital signs recovery actions",
+      "VitalSignsProcessor",
+      undefined,
+      ErrorLevel.INFO,
+      false
+    );
+    
+    // Initialize connection between components
+    heartBeatErrorPrevention.setMonitoring(vitalSignsProcessor.isMonitoring);
+  }, [errorPrevention, vitalSignsProcessor, heartBeatErrorPrevention]);
+  
+  // Register recovery actions for this component
+  useEffect(() => {
+    // Here we would register recovery actions, but we'll just use the implementation
+    // from the useErrorPrevention hook for now
   }, []);
   
   return {

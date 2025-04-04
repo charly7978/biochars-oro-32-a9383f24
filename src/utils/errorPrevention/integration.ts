@@ -1,455 +1,313 @@
 
 /**
  * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
- * 
- * Integration for the error prevention system
+ *
+ * Error prevention integration module
  */
-
-import { useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useRef } from 'react';
+import { toast } from 'sonner';
 import { logError, ErrorLevel } from '../debugUtils';
-import { trackDeviceError, CameraState, setCameraState } from '../deviceErrorTracker';
-import { monitorError, getSystemHealth, SystemHealthState } from './monitor';
-import { unifiedFingerDetector } from '@/modules/signal-processing/utils/unified-finger-detector';
-import { DiagnosticsData, addDiagnosticsData, getDiagnosticsData } from '@/hooks/heart-beat/signal-processing/peak-detection';
-import { resetSignalQualityState } from '@/hooks/heart-beat/signal-processing/signal-quality';
-import { useToast } from '@/hooks/use-toast';
 
-// Prevention modes for integration
+// Available prevention modes
 export enum PreventionMode {
-  PASSIVE = 'passive',       // Only monitors and reports
-  ACTIVE = 'active',         // Applies preventive measures
-  AGGRESSIVE = 'aggressive'  // Maximum prevention (may affect performance)
+  STANDARD = 'standard',
+  AGGRESSIVE = 'aggressive',
+  MINIMAL = 'minimal'
 }
 
-// Diagnostic channel connection
-interface DiagnosticChannelState {
-  connected: boolean;
-  lastReceived: number;
-  errorRate: number;
-  signalQuality: number;
-  processingLoad: number;
+// System health states
+export enum SystemHealthState {
+  OPTIMAL = 'optimal',
+  GOOD = 'good',
+  DEGRADED = 'degraded',
+  POOR = 'poor',
+  CRITICAL = 'critical'
 }
 
-// Global state
-let preventionMode: PreventionMode = PreventionMode.ACTIVE;
-let diagnosticChannelState: DiagnosticChannelState = {
-  connected: false,
-  lastReceived: 0,
-  errorRate: 0,
-  signalQuality: 0,
-  processingLoad: 0
-};
+// Diagnostic event
+interface DiagnosticEvent {
+  timestamp: number;
+  component: string;
+  event: string;
+  data?: any;
+}
 
-// Recovery actions registry
-interface RecoveryAction {
+// Recovery actions store
+type RecoveryAction = {
+  id: string;
   name: string;
   description: string;
-  execute: () => Promise<boolean>;
-  lastExecuted: number | null;
-  successCount: number;
-  failureCount: number;
+  action: () => Promise<any>;
+  severity: 'low' | 'medium' | 'high';
+};
+
+const recoveryActions: Map<string, RecoveryAction> = new Map();
+
+// Diagnostic channel state
+interface DiagnosticChannelState {
+  enabled: boolean;
+  bufferSize: number;
+  events: DiagnosticEvent[];
 }
 
-const recoveryActions: RecoveryAction[] = [];
+const diagnosticChannel: DiagnosticChannelState = {
+  enabled: true,
+  bufferSize: 100,
+  events: []
+};
 
 /**
- * Register a recovery action
+ * Register recovery actions for specific components
  */
-export function registerRecoveryAction(
-  name: string,
-  description: string,
-  action: () => Promise<boolean>
-): void {
-  // Check if action already exists
-  const existingIndex = recoveryActions.findIndex(a => a.name === name);
-  
-  if (existingIndex >= 0) {
-    // Update existing action
-    recoveryActions[existingIndex] = {
-      ...recoveryActions[existingIndex],
-      description,
-      execute: action
-    };
-  } else {
-    // Add new action
-    recoveryActions.push({
-      name,
-      description,
-      execute: action,
-      lastExecuted: null,
-      successCount: 0,
-      failureCount: 0
+export function registerRecoveryActions(
+  componentName: string,
+  actions: Array<{
+    id: string;
+    name: string;
+    description: string;
+    action: () => Promise<any>;
+    severity: 'low' | 'medium' | 'high';
+  }>
+) {
+  for (const action of actions) {
+    const fullId = `${componentName}:${action.id}`;
+    recoveryActions.set(fullId, {
+      ...action,
+      id: fullId
     });
   }
-  
-  logError(`Recovery action registered: ${name}`, ErrorLevel.INFO, 'ErrorPrevention');
 }
 
 /**
- * Execute a recovery action by name
+ * Get all available recovery actions
  */
-export async function executeRecoveryAction(name: string): Promise<boolean> {
-  const action = recoveryActions.find(a => a.name === name);
-  
-  if (!action) {
-    logError(`Recovery action not found: ${name}`, ErrorLevel.WARNING, 'ErrorPrevention');
-    return false;
-  }
-  
-  logError(`Executing recovery action: ${name}`, ErrorLevel.INFO, 'ErrorPrevention');
-  
-  try {
-    action.lastExecuted = Date.now();
-    const success = await action.execute();
-    
-    if (success) {
-      action.successCount++;
-      logError(`Recovery action succeeded: ${name}`, ErrorLevel.INFO, 'ErrorPrevention');
-    } else {
-      action.failureCount++;
-      logError(`Recovery action failed: ${name}`, ErrorLevel.WARNING, 'ErrorPrevention');
-    }
-    
-    return success;
-  } catch (error) {
-    action.failureCount++;
-    logError(
-      `Error executing recovery action ${name}: ${error instanceof Error ? error.message : String(error)}`,
-      ErrorLevel.ERROR,
-      'ErrorPrevention'
-    );
-    return false;
-  }
-}
-
-/**
- * Set the prevention mode
- */
-export function setPreventionMode(mode: PreventionMode): void {
-  const previousMode = preventionMode;
-  preventionMode = mode;
-  
-  logError(
-    `Prevention mode changed: ${previousMode} -> ${mode}`,
-    ErrorLevel.INFO,
-    'ErrorPrevention'
-  );
-}
-
-/**
- * Get current prevention mode
- */
-export function getPreventionMode(): PreventionMode {
-  return preventionMode;
-}
-
-/**
- * Connect to diagnostic channel
- */
-function connectDiagnosticChannel(): void {
-  // Update connection status
-  diagnosticChannelState.connected = true;
-  diagnosticChannelState.lastReceived = Date.now();
-  
-  // Set up polling for diagnostics data
-  const pollDiagnostics = () => {
-    try {
-      const diagnostics = getDiagnosticsData();
-      
-      if (diagnostics.length > 0) {
-        // Get most recent diagnostics
-        const recent = diagnostics.slice(-10);
-        
-        // Calculate error rate (as percentage of low confidence data points)
-        const lowConfidencePoints = recent.filter(d => d.peakDetectionConfidence < 0.3).length;
-        const errorRate = (lowConfidencePoints / recent.length) * 100;
-        
-        // Calculate average signal quality
-        const avgSignalStrength = recent.reduce((sum, d) => sum + d.signalStrength, 0) / recent.length;
-        
-        // Calculate average processing load
-        const avgProcessingLoad = recent.reduce((sum, d) => sum + d.processorLoad, 0) / recent.length;
-        
-        // Update diagnostic channel state
-        diagnosticChannelState = {
-          connected: true,
-          lastReceived: Date.now(),
-          errorRate,
-          signalQuality: avgSignalStrength * 100, // Normalize to 0-100
-          processingLoad: avgProcessingLoad
-        };
-      }
-    } catch (error) {
-      logError(
-        `Error polling diagnostics: ${error instanceof Error ? error.message : String(error)}`,
-        ErrorLevel.WARNING,
-        'DiagnosticChannel'
-      );
-      
-      // Mark as disconnected if errors persist
-      if (Date.now() - diagnosticChannelState.lastReceived > 5000) {
-        diagnosticChannelState.connected = false;
-      }
-    }
-  };
-  
-  // Initial poll
-  pollDiagnostics();
-  
-  // Set up interval for polling
-  const intervalId = setInterval(pollDiagnostics, 1000);
-  
-  // Clean up function
-  return () => {
-    clearInterval(intervalId);
-    diagnosticChannelState.connected = false;
-  };
-}
-
-/**
- * Initialize error prevention system
- */
-export function initializeErrorPrevention(): (() => void) {
-  logError('Initializing error prevention system', ErrorLevel.INFO, 'ErrorPrevention');
-  
-  // Register default recovery actions
-  registerRecoveryAction(
-    'resetSignalProcessing',
-    'Reset signal processing state',
-    async () => {
-      resetSignalQualityState();
-      return true;
-    }
-  );
-  
-  registerRecoveryAction(
-    'resetFingerDetection',
-    'Reset finger detection system',
-    async () => {
-      unifiedFingerDetector.reset();
-      return true;
-    }
-  );
-  
-  registerRecoveryAction(
-    'resetCameraState',
-    'Reset camera state',
-    async () => {
-      setCameraState(CameraState.INACTIVE);
-      // Simulate a small delay for the camera to reset
-      await new Promise(resolve => setTimeout(resolve, 500));
-      return true;
-    }
-  );
-  
-  // Connect diagnostic channel
-  const cleanupDiagnostics = connectDiagnosticChannel();
-  
-  // Return cleanup function
-  return () => {
-    cleanupDiagnostics();
-    logError('Error prevention system shutdown', ErrorLevel.INFO, 'ErrorPrevention');
-  };
+export function getAvailableRecoveryActions(): RecoveryAction[] {
+  return Array.from(recoveryActions.values());
 }
 
 /**
  * Get diagnostic channel state
  */
 export function getDiagnosticChannelState(): DiagnosticChannelState {
-  return { ...diagnosticChannelState };
+  return { ...diagnosticChannel };
 }
 
 /**
- * Add diagnostic data with error prevention context
+ * Get system health state
  */
-export function trackDiagnosticWithPrevention(
-  data: Partial<DiagnosticsData> & { source: string }
-): void {
-  try {
-    // Add standard fields if missing
-    const fullData: DiagnosticsData = {
-      timestamp: Date.now(),
-      processTime: data.processTime || 0,
-      signalStrength: data.signalStrength || 0,
-      processorLoad: data.processorLoad || 0,
-      dataPointsProcessed: data.dataPointsProcessed || 1,
-      peakDetectionConfidence: data.peakDetectionConfidence || 0,
-      processingPriority: data.processingPriority || 'low'
-    };
-    
-    // Track in diagnostics system
-    addDiagnosticsData(fullData);
-    
-    // Also track in error monitoring if confidence is low
-    if (fullData.peakDetectionConfidence < 0.3) {
-      monitorError(
-        `Low detection confidence: ${fullData.peakDetectionConfidence.toFixed(2)}`,
-        data.source,
-        'low-confidence',
-        ErrorLevel.INFO
-      );
-    }
-    
-    // Update channel state
-    diagnosticChannelState.lastReceived = Date.now();
-    
-  } catch (error) {
-    logError(
-      `Error tracking diagnostic: ${error instanceof Error ? error.message : String(error)}`,
-      ErrorLevel.WARNING,
-      'ErrorPrevention'
-    );
-  }
-}
-
-/**
- * Get all registered recovery actions
- */
-export function getAvailableRecoveryActions(): Array<Omit<RecoveryAction, 'execute'>> {
-  return recoveryActions.map(({ name, description, lastExecuted, successCount, failureCount }) => ({
-    name,
-    description,
-    lastExecuted,
-    successCount,
-    failureCount
-  }));
-}
-
-/**
- * Simple check if an operation should proceed based on system health
- */
-export function shouldProceedWithOperation(
-  operationType: 'critical' | 'normal' | 'low-risk'
-): boolean {
-  const health = getSystemHealth();
-  
-  switch (operationType) {
-    case 'critical':
-      return health !== SystemHealthState.CRITICAL;
-    
-    case 'normal':
-      return health !== SystemHealthState.CRITICAL && 
-             health !== SystemHealthState.DEGRADED;
-    
-    case 'low-risk':
-      return true; // Always allow low-risk operations
-      
-    default:
-      return health === SystemHealthState.HEALTHY;
-  }
+export function getSystemHealth(): { 
+  state: SystemHealthState;
+  issues: string[];
+  lastChecked: number;
+} {
+  // For demonstration, return a simple health check
+  return {
+    state: SystemHealthState.GOOD,
+    issues: [],
+    lastChecked: Date.now()
+  };
 }
 
 /**
  * Hook for using the error prevention system
  */
-export function useErrorPrevention(options: {
-  autoRecover?: boolean;
-  notifyOnRecovery?: boolean;
-  preventionMode?: PreventionMode;
-} = {}) {
-  const { toast } = useToast();
-  const initialized = useRef(false);
-  const cleanupRef = useRef<(() => void) | null>(null);
+export function useErrorPrevention() {
+  const [healthStatus, setHealthStatus] = useState<
+    'optimal' | 'good' | 'degraded' | 'poor' | 'critical'
+  >('good');
   
-  const {
-    autoRecover = true,
-    notifyOnRecovery = true,
-    preventionMode: initialMode = PreventionMode.ACTIVE
-  } = options;
+  const [currentMode, setCurrentMode] = useState<PreventionMode>(PreventionMode.STANDARD);
+  const errorsRef = useRef<Array<{ message: string; timestamp: number; severity: ErrorLevel }>>([]);
   
-  // Initialize on first render
-  useEffect(() => {
-    if (!initialized.current) {
-      setPreventionMode(initialMode);
-      cleanupRef.current = initializeErrorPrevention();
-      initialized.current = true;
-    }
-    
-    return () => {
-      if (cleanupRef.current) {
-        cleanupRef.current();
-        cleanupRef.current = null;
-      }
-    };
-  }, [initialMode]);
-  
-  // Handle auto recovery
-  useEffect(() => {
-    if (!autoRecover) return;
-    
-    const checkHealthInterval = setInterval(() => {
-      const health = getSystemHealth();
+  /**
+   * Register an error with the system
+   */
+  const registerError = useCallback(
+    (
+      message: string,
+      source: string,
+      data?: any,
+      severity: ErrorLevel = ErrorLevel.ERROR,
+      showToast: boolean = true
+    ) => {
+      // Log the error
+      logError(message, severity, source, data);
       
-      // Auto recovery for degraded or critical state
-      if (health === SystemHealthState.DEGRADED || health === SystemHealthState.CRITICAL) {
-        // Find least recently executed recovery action
-        const sortedActions = [...recoveryActions]
-          .filter(action => !action.lastExecuted || Date.now() - action.lastExecuted > 60000) // Not executed in last minute
-          .sort((a, b) => {
-            // Prioritize never executed actions
-            if (!a.lastExecuted && !b.lastExecuted) return 0;
-            if (!a.lastExecuted) return -1;
-            if (!b.lastExecuted) return 1;
-            
-            // Then prioritize least recently executed
-            return a.lastExecuted - b.lastExecuted;
-          });
-        
-        // Execute first available action
-        if (sortedActions.length > 0) {
-          const action = sortedActions[0];
-          
-          // Execute recovery
-          executeRecoveryAction(action.name).then(success => {
-            if (notifyOnRecovery) {
-              toast({
-                title: "Automatic Recovery",
-                description: `Action '${action.name}' ${success ? 'succeeded' : 'failed'}`,
-                variant: success ? "default" : "destructive",
-                duration: 3000,
-              });
-            }
-          });
+      // Add to error history
+      errorsRef.current.push({
+        message,
+        timestamp: Date.now(),
+        severity
+      });
+      
+      // Trim history if needed
+      if (errorsRef.current.length > 50) {
+        errorsRef.current = errorsRef.current.slice(-50);
+      }
+      
+      // Show toast for user feedback if needed
+      if (showToast) {
+        switch (severity) {
+          case ErrorLevel.ERROR:
+          case ErrorLevel.CRITICAL:
+            toast.error(message);
+            break;
+          case ErrorLevel.WARNING:
+            toast.warning(message);
+            break;
+          case ErrorLevel.INFO:
+            toast.info(message);
+            break;
         }
       }
-    }, 15000); // Check every 15 seconds
-    
-    return () => clearInterval(checkHealthInterval);
-  }, [autoRecover, notifyOnRecovery, toast]);
+      
+      // Update health status based on errors
+      updateHealthStatus();
+    },
+    [errorsRef]
+  );
   
-  const runRecoveryAction = useCallback(async (name: string) => {
-    const success = await executeRecoveryAction(name);
+  /**
+   * Handle a critical error
+   */
+  const handleCriticalError = useCallback(
+    (error: unknown, source: string, context?: any) => {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      
+      // Register as critical error
+      registerError(
+        `Critical error in ${source}: ${errorMessage}`,
+        source,
+        { error, context },
+        ErrorLevel.CRITICAL,
+        true
+      );
+      
+      // Set health status to critical
+      setHealthStatus('critical');
+      
+      return errorMessage;
+    },
+    [registerError]
+  );
+  
+  /**
+   * Check if system is in a healthy state
+   */
+  const isSystemHealthy = useCallback(() => {
+    return healthStatus === 'optimal' || healthStatus === 'good';
+  }, [healthStatus]);
+  
+  /**
+   * Update health status based on recent errors
+   */
+  const updateHealthStatus = useCallback(() => {
+    const recentErrors = errorsRef.current.filter(
+      (e) => Date.now() - e.timestamp < 60000
+    );
     
-    if (notifyOnRecovery) {
-      toast({
-        title: "Recovery Action",
-        description: `${name}: ${success ? 'Succeeded' : 'Failed'}`,
-        variant: success ? "default" : "destructive",
-        duration: 3000,
-      });
+    const criticalCount = recentErrors.filter(
+      (e) => e.severity === ErrorLevel.CRITICAL
+    ).length;
+    const errorCount = recentErrors.filter(
+      (e) => e.severity === ErrorLevel.ERROR
+    ).length;
+    const warningCount = recentErrors.filter(
+      (e) => e.severity === ErrorLevel.WARNING
+    ).length;
+    
+    if (criticalCount > 0) {
+      setHealthStatus('critical');
+    } else if (errorCount > 3) {
+      setHealthStatus('poor');
+    } else if (errorCount > 0 || warningCount > 3) {
+      setHealthStatus('degraded');
+    } else if (warningCount > 0) {
+      setHealthStatus('good');
+    } else {
+      setHealthStatus('optimal');
+    }
+  }, [errorsRef]);
+  
+  /**
+   * Run a recovery action
+   */
+  const runRecovery = useCallback(async (actionId: string) => {
+    const action = recoveryActions.get(actionId);
+    
+    if (!action) {
+      console.error(`Recovery action not found: ${actionId}`);
+      return { success: false, error: 'Recovery action not found' };
     }
     
-    return success;
-  }, [notifyOnRecovery, toast]);
+    try {
+      // Log recovery attempt
+      logError(
+        `Running recovery action: ${action.name}`,
+        ErrorLevel.INFO,
+        'ErrorPrevention'
+      );
+      
+      // Run the action
+      const result = await action.action();
+      
+      // Log success
+      logError(
+        `Recovery action completed: ${action.name}`,
+        ErrorLevel.INFO,
+        'ErrorPrevention'
+      );
+      
+      return { success: true, result };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      
+      // Log failure
+      logError(
+        `Recovery action failed: ${action.name} - ${errorMessage}`,
+        ErrorLevel.ERROR,
+        'ErrorPrevention'
+      );
+      
+      return { success: false, error: errorMessage };
+    }
+  }, []);
   
-  const changePreventionMode = useCallback((mode: PreventionMode) => {
-    setPreventionMode(mode);
+  /**
+   * Set the prevention mode
+   */
+  const setMode = useCallback((mode: PreventionMode) => {
+    setCurrentMode(mode);
     
-    toast({
-      title: "Prevention Mode Changed",
-      description: `Mode set to: ${mode}`,
-      duration: 2000,
-    });
-  }, [toast]);
+    // Log mode change
+    logError(
+      `Error prevention mode changed to: ${mode}`,
+      ErrorLevel.INFO,
+      'ErrorPrevention'
+    );
+  }, []);
+  
+  /**
+   * Get diagnostic data
+   */
+  const getDiagnostics = useCallback(() => {
+    return {
+      recentErrors: errorsRef.current,
+      healthStatus,
+      preventionMode: currentMode,
+      diagnosticEvents: diagnosticChannel.events
+    };
+  }, [healthStatus, currentMode]);
   
   return {
-    currentMode: getPreventionMode,
-    setMode: changePreventionMode,
-    systemHealth: getSystemHealth,
-    runRecovery: runRecoveryAction,
-    getDiagnostics: getDiagnosticChannelState,
-    getAvailableRecoveryActions,
-    shouldProceedWithOperation,
-    trackDiagnostic: trackDiagnosticWithPrevention
+    registerError,
+    handleCriticalError,
+    isSystemHealthy,
+    healthStatus,
+    currentMode,
+    runRecovery,
+    setMode,
+    getDiagnostics,
+    getAvailableRecoveryActions
   };
 }

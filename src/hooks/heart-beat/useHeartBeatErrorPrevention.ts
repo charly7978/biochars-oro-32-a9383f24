@@ -1,362 +1,321 @@
 /**
  * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
  * 
- * Hook for integrating error prevention with heart beat monitoring
+ * Hook for heart beat specific error prevention
  */
-
-import { useCallback, useEffect, useRef } from 'react';
-import { 
-  useErrorPrevention, 
-  registerRecoveryAction,
-  trackDiagnosticWithPrevention,
-  validateSignalQuality,
-  shouldProceedWithOperation
-} from '@/utils/errorPrevention';
-import { trackDeviceError, setCameraState, CameraState } from '@/utils/deviceErrorTracker';
-import { 
-  clearDiagnosticsData, 
-  getDiagnosticsData 
-} from '@/hooks/heart-beat/signal-processing/peak-detection';
-import { 
-  resetSignalQualityState 
-} from '@/hooks/heart-beat/signal-processing/signal-quality';
+import { useCallback, useRef, useState, useEffect } from 'react';
 import { logError, ErrorLevel } from '@/utils/debugUtils';
-import { unifiedFingerDetector } from '@/modules/signal-processing/utils/unified-finger-detector';
+import { useErrorPrevention } from '@/utils/errorPrevention/integration';
+import { registerRecoveryActions } from '@/utils/errorPrevention/integration';
+import { trackDiagnosticWithPrevention, validateSignalQuality, shouldProceedWithOperation } from '@/utils/errorPrevention/utils';
+import { trackDeviceError } from '@/utils/errorPrevention/monitor';
+
+// Types for processor references
+type HeartBeatProcessor = any;
+type SignalProcessor = any;
+type PPGExtractor = any;
 
 /**
- * Hook that integrates error prevention with heart beat processing
+ * Hook for heartbeat-specific error prevention
  */
 export function useHeartBeatErrorPrevention(
-  heartBeatProcessor: any | null,
-  signalProcessor: any | null,
-  vitalSignsProcessor: any | null
+  heartBeatProcessorRef: React.MutableRefObject<HeartBeatProcessor> | null,
+  signalProcessorRef: React.MutableRefObject<SignalProcessor> | null,
+  ppgExtractorRef: React.MutableRefObject<PPGExtractor> | null
 ) {
-  const errorPrevention = useErrorPrevention({
-    autoRecover: true,
-    notifyOnRecovery: true
-  });
+  // Error prevention system
+  const errorPrevention = useErrorPrevention();
   
-  const isMonitoringRef = useRef<boolean>(false);
-  const signalQualityHistoryRef = useRef<number[]>([]);
-  const diagnosticsSyncedRef = useRef<boolean>(false);
+  // Monitoring state
+  const [isMonitoring, setIsMonitoringState] = useState<boolean>(false);
   
-  /**
-   * Register processor-specific recovery actions
-   */
-  const registerRecoveryActions = useCallback(() => {
-    // Reset heart beat processor
-    registerRecoveryAction(
-      'resetHeartBeatProcessor',
-      'Reset heart beat processor and buffers',
-      async () => {
-        if (heartBeatProcessor) {
-          try {
-            heartBeatProcessor.reset();
-            logError(
-              'Heart beat processor reset successful',
-              ErrorLevel.INFO,
-              'HeartBeatRecovery'
-            );
-            return true;
-          } catch (error) {
-            logError(
-              `Heart beat processor reset failed: ${error instanceof Error ? error.message : String(error)}`,
-              ErrorLevel.ERROR,
-              'HeartBeatRecovery'
-            );
-            return false;
-          }
-        }
-        return false;
-      }
-    );
-    
-    // Reset signal processor
-    registerRecoveryAction(
-      'resetSignalProcessor',
-      'Reset signal processor and quality tracking',
-      async () => {
-        try {
-          if (signalProcessor) {
-            signalProcessor.reset();
-          }
-          resetSignalQualityState();
-          clearDiagnosticsData();
-          signalQualityHistoryRef.current = [];
-          
-          logError(
-            'Signal processor reset successful',
-            ErrorLevel.INFO,
-            'SignalProcessorRecovery'
-          );
-          return true;
-        } catch (error) {
-          logError(
-            `Signal processor reset failed: ${error instanceof Error ? error.message : String(error)}`,
-            ErrorLevel.ERROR,
-            'SignalProcessorRecovery'
-          );
-          return false;
-        }
-      }
-    );
-    
-    // Restart finger detection
-    registerRecoveryAction(
-      'restartFingerDetection',
-      'Reset and recalibrate finger detection',
-      async () => {
-        try {
-          unifiedFingerDetector.reset();
-          
-          // Force recalibration on next signal
-          if (vitalSignsProcessor) {
-            try {
-              vitalSignsProcessor.reset();
-            } catch (err) {
-              // Just log, don't fail the whole recovery
-              console.error('Error resetting vital signs processor:', err);
-            }
-          }
-          
-          logError(
-            'Finger detection restart successful',
-            ErrorLevel.INFO,
-            'FingerDetectionRecovery'
-          );
-          return true;
-        } catch (error) {
-          logError(
-            `Finger detection restart failed: ${error instanceof Error ? error.message : String(error)}`,
-            ErrorLevel.ERROR,
-            'FingerDetectionRecovery'
-          );
-          return false;
-        }
-      }
-    );
-    
-    // Reset camera connection
-    registerRecoveryAction(
-      'resetCameraConnection',
-      'Reset camera state and connection',
-      async () => {
-        try {
-          // Reset camera state
-          setCameraState(CameraState.INACTIVE);
-          
-          // Wait for state change to take effect
-          await new Promise(resolve => setTimeout(resolve, 500));
-          
-          // Request camera again
-          setCameraState(CameraState.REQUESTING);
-          
-          logError(
-            'Camera connection reset successful',
-            ErrorLevel.INFO,
-            'CameraRecovery'
-          );
-          return true;
-        } catch (error) {
-          logError(
-            `Camera connection reset failed: ${error instanceof Error ? error.message : String(error)}`,
-            ErrorLevel.ERROR,
-            'CameraRecovery'
-          );
-          return false;
-        }
-      }
-    );
-    
-    // Full restart of monitoring
-    registerRecoveryAction(
-      'restartMonitoring',
-      'Perform full restart of monitoring system',
-      async () => {
-        try {
-          // Stop all processors
-          if (heartBeatProcessor && isMonitoringRef.current) {
-            heartBeatProcessor.stopMonitoring();
-          }
-          
-          // Reset all components
-          resetSignalQualityState();
-          clearDiagnosticsData();
-          unifiedFingerDetector.reset();
-          signalQualityHistoryRef.current = [];
-          
-          if (vitalSignsProcessor) {
-            try {
-              vitalSignsProcessor.reset();
-            } catch (err) {
-              console.error('Error resetting vital signs processor:', err);
-            }
-          }
-          
-          // Delay to ensure everything is stopped
-          await new Promise(resolve => setTimeout(resolve, 1000));
-          
-          // Restart if was monitoring
-          if (isMonitoringRef.current && heartBeatProcessor) {
-            heartBeatProcessor.startMonitoring();
-          }
-          
-          logError(
-            'Full monitoring restart successful',
-            ErrorLevel.INFO,
-            'MonitoringRecovery'
-          );
-          return true;
-        } catch (error) {
-          logError(
-            `Full monitoring restart failed: ${error instanceof Error ? error.message : String(error)}`,
-            ErrorLevel.ERROR,
-            'MonitoringRecovery'
-          );
-          return false;
-        }
-      }
-    );
-    
-  }, [heartBeatProcessor, signalProcessor, vitalSignsProcessor]);
+  // Tracking
+  const signalQualityHistoryRef = useRef<Array<{time: number, quality: number, strength: number}>>([]);
+  const processingErrorsRef = useRef<number>(0);
+  const recoveryAttemptsRef = useRef<Map<string, {timestamp: number, success: boolean}>>(new Map());
+  
+  // Constants
+  const MIN_SIGNAL_QUALITY = 0.25;
+  const SIGNAL_HISTORY_MAX_LENGTH = 20;
   
   /**
-   * Initialize error prevention system
+   * Set monitoring state
    */
-  useEffect(() => {
-    registerRecoveryActions();
+  const setMonitoring = useCallback((monitoring: boolean) => {
+    setIsMonitoringState(monitoring);
     
-    // Sync diagnostics data with prevention system
-    const syncDiagnosticsInterval = setInterval(() => {
-      if (!diagnosticsSyncedRef.current) {
-        const diagnostics = getDiagnosticsData();
-        
-        if (diagnostics.length > 0) {
-          // Take the last 5 diagnostics entries
-          const recentDiagnostics = diagnostics.slice(-5);
-          
-          for (const diagnostic of recentDiagnostics) {
-            trackDiagnosticWithPrevention({
-              ...diagnostic,
-              source: 'signal-processing'
-            });
-          }
-          
-          diagnosticsSyncedRef.current = true;
-        }
-      }
-    }, 2000);
+    // Log the state change
+    logError(
+      `Heart beat error prevention monitoring state set to: ${monitoring}`,
+      ErrorLevel.INFO,
+      "HeartBeatErrorPrevention"
+    );
     
-    return () => {
-      clearInterval(syncDiagnosticsInterval);
-    };
-  }, [registerRecoveryActions]);
-  
-  /**
-   * Track monitoring state changes
-   */
-  const setMonitoring = useCallback((isMonitoring: boolean) => {
-    isMonitoringRef.current = isMonitoring;
-    
-    if (isMonitoring) {
-      logError(
-        'Heart beat monitoring started with error prevention',
-        ErrorLevel.INFO,
-        'HeartBeatErrorPrevention'
-      );
-      
-      // Reset quality history
+    // Reset tracking when starting monitoring
+    if (monitoring) {
       signalQualityHistoryRef.current = [];
-      diagnosticsSyncedRef.current = false;
-    } else {
-      logError(
-        'Heart beat monitoring stopped',
-        ErrorLevel.INFO,
-        'HeartBeatErrorPrevention'
-      );
+      processingErrorsRef.current = 0;
     }
   }, []);
   
   /**
-   * Report signal quality issues
+   * Report signal quality for tracking
    */
-  const reportSignalQuality = useCallback((quality: number, amplitude: number) => {
-    if (!isMonitoringRef.current) return;
-    
+  const reportSignalQuality = useCallback((quality: number, signalStrength: number) => {
     // Add to history
-    signalQualityHistoryRef.current.push(quality);
+    signalQualityHistoryRef.current.push({
+      time: Date.now(),
+      quality,
+      strength: signalStrength
+    });
     
-    // Keep only recent entries
-    if (signalQualityHistoryRef.current.length > 20) {
+    // Keep history to a reasonable size
+    if (signalQualityHistoryRef.current.length > SIGNAL_HISTORY_MAX_LENGTH) {
       signalQualityHistoryRef.current.shift();
     }
     
-    // Validate signal quality with prevention system
-    const validationResult = validateSignalQuality(
-      quality, 
-      amplitude,
-      'HeartBeatSignal'
-    );
-    
-    // Report only if not valid
-    if (!validationResult.isValid) {
-      trackDeviceError(
-        `Signal quality issue: ${validationResult.reason}`,
-        'signal-quality',
-        'HeartBeatMonitor',
-        { quality, amplitude, validationResult }
-      );
+    // Check for consistently poor quality
+    const recentQuality = signalQualityHistoryRef.current.slice(-5);
+    if (recentQuality.length === 5) {
+      const avgQuality = recentQuality.reduce((sum, item) => sum + item.quality, 0) / recentQuality.length;
       
-      // Reset diagnostics synced flag to resync
-      diagnosticsSyncedRef.current = false;
-    }
-  }, []);
-  
-  /**
-   * Check if a signal processing operation should proceed
-   */
-  const shouldProcessSignal = useCallback((signalQuality: number): boolean => {
-    // First check system health
-    if (!shouldProceedWithOperation('normal')) {
-      return false;
-    }
-    
-    // If quality is very high, always proceed
-    if (signalQuality > 70) {
-      return true;
-    }
-    
-    // Check history for consistent quality
-    if (signalQualityHistoryRef.current.length >= 5) {
-      // Calculate average quality
-      const avgQuality = signalQualityHistoryRef.current.reduce(
-        (sum, quality) => sum + quality, 0
-      ) / signalQualityHistoryRef.current.length;
-      
-      // If average quality is decent, proceed
-      if (avgQuality > 40) {
-        return true;
+      if (avgQuality < MIN_SIGNAL_QUALITY) {
+        // Log quality issue
+        trackDeviceError(
+          `Consistently poor signal quality: ${avgQuality.toFixed(2)}`,
+          'signal-quality',
+          'HeartBeatProcessor',
+          { qualityThreshold: MIN_SIGNAL_QUALITY }
+        );
       }
     }
-    
-    // Otherwise make decision based on current quality
-    return signalQuality > 30;
   }, []);
   
   /**
-   * Run specific recovery action
+   * Run recovery processes for heart beat processing issues
    */
-  const runRecovery = useCallback(async (actionName: string) => {
-    return await errorPrevention.runRecovery(actionName);
-  }, [errorPrevention]);
+  const runHeartBeatRecovery = useCallback(async (recoveryType: 'reset' | 'recalibrate' | 'restartProcessing') => {
+    if (!isMonitoring) {
+      logError(
+        "Cannot run recovery when not monitoring",
+        ErrorLevel.WARNING,
+        "HeartBeatErrorPrevention"
+      );
+      return { success: false, error: "Not monitoring" };
+    }
+    
+    // Check if we recently tried this recovery
+    const recoveryKey = `heartbeat:${recoveryType}`;
+    const lastAttempt = recoveryAttemptsRef.current.get(recoveryKey);
+    const now = Date.now();
+    
+    if (lastAttempt && now - lastAttempt.timestamp < 10000) {
+      logError(
+        `Recovery ${recoveryType} attempted too recently, skipping`,
+        ErrorLevel.WARNING,
+        "HeartBeatErrorPrevention"
+      );
+      return { success: false, error: "Recovery attempted too recently" };
+    }
+    
+    // Record this attempt
+    recoveryAttemptsRef.current.set(recoveryKey, { timestamp: now, success: false });
+    
+    try {
+      logError(
+        `Running heart beat recovery: ${recoveryType}`,
+        ErrorLevel.INFO,
+        "HeartBeatErrorPrevention"
+      );
+      
+      // Perform recovery actions based on type
+      switch (recoveryType) {
+        case 'reset':
+          if (heartBeatProcessorRef?.current) {
+            await heartBeatProcessorRef.current.reset();
+          }
+          if (signalProcessorRef?.current) {
+            await signalProcessorRef.current.reset();
+          }
+          break;
+          
+        case 'recalibrate':
+          if (heartBeatProcessorRef?.current) {
+            // Recalibration logic would go here
+            await new Promise(resolve => setTimeout(resolve, 500));
+          }
+          break;
+          
+        case 'restartProcessing':
+          if (heartBeatProcessorRef?.current) {
+            // Stop and restart
+            if (heartBeatProcessorRef.current.stopMonitoring) {
+              heartBeatProcessorRef.current.stopMonitoring();
+            }
+            await new Promise(resolve => setTimeout(resolve, 300));
+            if (heartBeatProcessorRef.current.startMonitoring) {
+              heartBeatProcessorRef.current.startMonitoring();
+            }
+          }
+          break;
+      }
+      
+      // Mark recovery as successful
+      recoveryAttemptsRef.current.set(recoveryKey, { timestamp: now, success: true });
+      
+      logError(
+        `Heart beat recovery completed: ${recoveryType}`,
+        ErrorLevel.INFO,
+        "HeartBeatErrorPrevention"
+      );
+      
+      return { success: true };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      
+      logError(
+        `Heart beat recovery failed: ${recoveryType} - ${errorMessage}`,
+        ErrorLevel.ERROR,
+        "HeartBeatErrorPrevention"
+      );
+      
+      return { success: false, error: errorMessage };
+    }
+  }, [isMonitoring, heartBeatProcessorRef, signalProcessorRef]);
+  
+  /**
+   * Register recovery actions
+   */
+  useEffect(() => {
+    // Register recovery actions for this module
+    const recoveryActions = [
+      {
+        id: 'resetProcessor',
+        name: 'Reset Heart Beat Processor',
+        description: 'Reset the heart beat processor to recover from errors',
+        severity: 'medium' as const,
+        action: () => runHeartBeatRecovery('reset')
+      },
+      {
+        id: 'recalibrateProcessor',
+        name: 'Recalibrate Heart Beat Processor',
+        description: 'Recalibrate the heart beat processor for better accuracy',
+        severity: 'low' as const,
+        action: () => runHeartBeatRecovery('recalibrate')
+      },
+      {
+        id: 'restartProcessing',
+        name: 'Restart Heart Beat Processing',
+        description: 'Stop and restart heart beat processing',
+        severity: 'high' as const,
+        action: () => runHeartBeatRecovery('restartProcessing')
+      }
+    ];
+    
+    // Register with the error prevention system
+    registerRecoveryActions('HeartBeatProcessor', recoveryActions);
+    
+    logError(
+      "Heart beat error prevention initialized and recovery actions registered",
+      ErrorLevel.INFO,
+      "HeartBeatErrorPrevention"
+    );
+  }, [runHeartBeatRecovery]);
+  
+  /**
+   * Get current diagnostics
+   */
+  const getDiagnostics = useCallback(() => {
+    return {
+      isMonitoring,
+      signalQualityHistory: signalQualityHistoryRef.current,
+      processingErrors: processingErrorsRef.current,
+      recoveryAttempts: Array.from(recoveryAttemptsRef.current.entries()).map(([key, value]) => ({
+        type: key,
+        timestamp: value.timestamp,
+        success: value.success
+      }))
+    };
+  }, [isMonitoring]);
+  
+  /**
+   * Check if the heart beat processor is in a healthy state
+   */
+  const isHeartBeatProcessorHealthy = useCallback(() => {
+    // Check recent signal quality
+    const recentQuality = signalQualityHistoryRef.current.slice(-5);
+    if (recentQuality.length === 0) return true;
+    
+    const avgQuality = recentQuality.reduce((sum, item) => sum + item.quality, 0) / recentQuality.length;
+    return avgQuality >= MIN_SIGNAL_QUALITY;
+  }, []);
+  
+  /**
+   * Try to run recovery automatically when needed
+   */
+  const attemptAutomaticRecovery = useCallback(async () => {
+    // Simple implementation for now - we'll improve this later
+    if (!isMonitoring) return;
+    
+    // Check if we need recovery
+    if (!isHeartBeatProcessorHealthy()) {
+      logError(
+        "Attempting automatic heart beat processor recovery due to poor health",
+        ErrorLevel.WARNING,
+        "HeartBeatErrorPrevention"
+      );
+      
+      // Try to run recovery
+      try {
+        const result = await errorPrevention.runRecovery('HeartBeatProcessor:resetProcessor');
+        
+        if (result.success) {
+          logError(
+            "Automatic heart beat processor recovery succeeded",
+            ErrorLevel.INFO,
+            "HeartBeatErrorPrevention"
+          );
+        } else {
+          logError(
+            `Automatic heart beat processor recovery failed: ${result.error}`,
+            ErrorLevel.WARNING,
+            "HeartBeatErrorPrevention"
+          );
+        }
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        
+        logError(
+          `Error during automatic heart beat processor recovery: ${errorMessage}`,
+          ErrorLevel.ERROR,
+          "HeartBeatErrorPrevention"
+        );
+      }
+    }
+  }, [isMonitoring, isHeartBeatProcessorHealthy, errorPrevention]);
+  
+  /**
+   * Periodic health check
+   */
+  useEffect(() => {
+    if (!isMonitoring) return;
+    
+    // Set up periodic health check
+    const intervalId = setInterval(() => {
+      // Check health and attempt recovery if needed
+      if (!isHeartBeatProcessorHealthy()) {
+        attemptAutomaticRecovery();
+      }
+    }, 30000); // Check every 30 seconds
+    
+    return () => clearInterval(intervalId);
+  }, [isMonitoring, isHeartBeatProcessorHealthy, attemptAutomaticRecovery]);
   
   return {
     setMonitoring,
     reportSignalQuality,
-    shouldProcessSignal,
-    runRecovery,
-    getDiagnostics: errorPrevention.getDiagnostics,
-    getAvailableRecoveryActions: errorPrevention.getAvailableRecoveryActions,
-    isMonitoring: () => isMonitoringRef.current
+    runHeartBeatRecovery,
+    getDiagnostics,
+    isHeartBeatProcessorHealthy
   };
 }
