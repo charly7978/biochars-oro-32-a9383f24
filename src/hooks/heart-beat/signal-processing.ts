@@ -1,4 +1,3 @@
-
 import { HeartBeatResult } from './types';
 
 /**
@@ -24,6 +23,10 @@ interface DiagnosticData {
   processingStatus?: string;
   arrhythmiaTracking?: boolean;
   arrhythmiaCount?: number;
+  rhythmAnalysis?: {
+    regularity: number;
+    variability: number;
+  };
 }
 
 /**
@@ -101,7 +104,7 @@ export function createWeakSignalResult(arrhythmiaCount = 0): HeartBeatResult {
 
 /**
  * Handles peak detection and beep requests
- * Enhanced with arrhythmia detection
+ * Enhanced with arrhythmia detection notification
  */
 export function handlePeakDetection(
   result: HeartBeatResult,
@@ -133,6 +136,11 @@ export function handlePeakDetection(
       
       // Also use direct callback
       requestImmediateBeep(value);
+      
+      // Dispatch arrhythmia visualization event if detected
+      if (result.isArrhythmia) {
+        dispatchArrhythmiaVisualEvent(result.bpm || 0, now);
+      }
     }
     
     // Enhanced diagnostics for peak detection
@@ -143,6 +151,24 @@ export function handlePeakDetection(
       result.diagnosticData.isArrhythmia = result.isArrhythmia || false;
     }
   }
+}
+
+/**
+ * Dispatch an event specifically for arrhythmia visualization
+ */
+function dispatchArrhythmiaVisualEvent(bpm: number, timestamp: number): void {
+  // Create a dedicated event for visual representation of arrhythmias
+  const arrhythmiaEvent = new CustomEvent('arrhythmia-visual', {
+    detail: {
+      timestamp,
+      bpm,
+      duration: 3000, // 3-second visual indicator
+      severity: bpm > 100 ? 'high' : 'medium'
+    }
+  });
+  
+  window.dispatchEvent(arrhythmiaEvent);
+  console.log('Arrhythmia visualization event dispatched', { timestamp, bpm });
 }
 
 /**

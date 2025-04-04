@@ -72,7 +72,7 @@ export function useVitalSignsProcessor() {
       // Obtener datos de diagnóstico del módulo de detección de picos
       const peakDiagnostics = getDiagnosticsData();
       
-      if (peakDiagnostics.length > 0) {
+      if (peakDiagnostics && peakDiagnostics.length > 0) {
         // Calcular métricas de rendimiento
         const totalTime = peakDiagnostics.reduce((sum, data) => sum + data.processTime, 0);
         const highPriorityCount = peakDiagnostics.filter(data => 
