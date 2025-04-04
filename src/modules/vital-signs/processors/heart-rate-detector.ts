@@ -1,4 +1,3 @@
-
 /**
  * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
  */
@@ -14,13 +13,14 @@ export class HeartRateDetector {
   private peakTimes: number[] = [];
   private lastProcessTime: number = 0;
   private recentBPMs: number[] = [];
+  private signalThreshold: number = 0.1;  // Added adaptive threshold
   
   /**
    * Calculate heart rate from real PPG values with enhanced peak detection
    * Optimized for lower latency and more accurate BPM
    */
   public calculateHeartRate(ppgValues: number[], sampleRate: number = 30): number {
-    if (ppgValues.length < sampleRate * 0.8) { // Reduced for faster detection
+    if (ppgValues.length < sampleRate * 0.6) { // Further reduced for faster detection
       return 0;
     }
     
@@ -31,13 +31,16 @@ export class HeartRateDetector {
     this.lastProcessTime = now;
     
     // Get recent real data - using more data for better detection
-    const recentData = ppgValues.slice(-Math.min(ppgValues.length, sampleRate * 3)); // Reduced for lower latency
+    const recentData = ppgValues.slice(-Math.min(ppgValues.length, sampleRate * 2)); // Adjusted for better performance
     
     // Calculate signal statistics for adaptive thresholding
     const mean = recentData.reduce((sum, val) => sum + val, 0) / recentData.length;
     const stdDev = Math.sqrt(
       recentData.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / recentData.length
     );
+    
+    // Update adaptive threshold based on signal characteristics
+    this.updateThreshold(mean, stdDev);
     
     // Find peaks in real data with adaptive threshold
     const peaks = this.findPeaksEnhanced(recentData, mean, stdDev);
@@ -47,11 +50,11 @@ export class HeartRateDetector {
     }
     
     // Convert peak indices to timestamps for natural timing
-    const sampleDuration = timeDiff / recentData.length;
+    const sampleDuration = timeDiff / recentData.length || 33.3; // Default to 30fps if calculation fails
     const peakTimes = peaks.map(idx => now - (recentData.length - idx) * sampleDuration);
     
     // Update stored peak times
-    this.peakTimes = [...this.peakTimes, ...peakTimes].slice(-15); // Increased for better analysis
+    this.peakTimes = [...this.peakTimes, ...peakTimes].slice(-18); // Increased for better analysis
     
     // Calculate intervals between consecutive peaks
     const intervals: number[] = [];
@@ -73,10 +76,13 @@ export class HeartRateDetector {
       const avgInterval = totalInterval / (peaks.length - 1);
       const calculatedBPM = Math.round(60 / (avgInterval / sampleRate));
       
-      // Store for smoothing
-      this.recentBPMs.push(calculatedBPM);
-      if (this.recentBPMs.length > 5) {
-        this.recentBPMs.shift();
+      // Only store physiologically plausible values
+      if (calculatedBPM >= 30 && calculatedBPM <= 240) {
+        // Store for smoothing
+        this.recentBPMs.push(calculatedBPM);
+        if (this.recentBPMs.length > 5) {
+          this.recentBPMs.shift();
+        }
       }
       
       // Apply smoothing for stability
@@ -91,7 +97,7 @@ export class HeartRateDetector {
     );
     
     if (filteredIntervals.length === 0) {
-      return 0;
+      return this.recentBPMs.length > 0 ? this.getSmoothedBPM() : 0;
     }
     
     const avgInterval = filteredIntervals.reduce((sum, val) => sum + val, 0) / filteredIntervals.length;
@@ -99,14 +105,31 @@ export class HeartRateDetector {
     // Convert to beats per minute
     const calculatedBPM = Math.round(60000 / avgInterval);
     
-    // Store for smoothing
-    this.recentBPMs.push(calculatedBPM);
-    if (this.recentBPMs.length > 5) {
-      this.recentBPMs.shift();
+    // Only store physiologically plausible values
+    if (calculatedBPM >= 30 && calculatedBPM <= 240) {
+      // Store for smoothing
+      this.recentBPMs.push(calculatedBPM);
+      if (this.recentBPMs.length > 5) {
+        this.recentBPMs.shift();
+      }
     }
     
     // Apply smoothing for stability
     return this.getSmoothedBPM();
+  }
+  
+  /**
+   * Update the signal threshold based on current signal characteristics
+   */
+  private updateThreshold(mean: number, stdDev: number): void {
+    // Adaptive threshold that responds to signal strength
+    const newThreshold = Math.max(0.05, mean + (stdDev * 0.3)); // More sensitive for weak signals
+    
+    // Smooth threshold changes for stability
+    this.signalThreshold = 0.7 * this.signalThreshold + 0.3 * newThreshold;
+    
+    // Ensure reasonable bounds
+    this.signalThreshold = Math.max(0.05, Math.min(0.3, this.signalThreshold));
   }
   
   /**
@@ -120,6 +143,16 @@ export class HeartRateDetector {
     // Use median for better stability with real data
     const sorted = [...this.recentBPMs].sort((a, b) => a - b);
     const medianIdx = Math.floor(sorted.length / 2);
+    
+    // If we have at least 3 values, get an average centered around median for stability
+    if (sorted.length >= 3) {
+      const midValues = sorted.slice(
+        Math.max(0, medianIdx - 1),
+        Math.min(sorted.length, medianIdx + 2)
+      );
+      return Math.round(midValues.reduce((sum, val) => sum + val, 0) / midValues.length);
+    }
+    
     return sorted[medianIdx];
   }
   
@@ -132,7 +165,7 @@ export class HeartRateDetector {
     const minPeakDistance = 5; // More sensitive for natural peak detection
     
     // Dynamic threshold based on real signal statistics - more sensitive
-    const peakThreshold = mean + (stdDev * 0.2); // More sensitive
+    const peakThreshold = Math.max(0.05, mean + (stdDev * 0.2)); // More sensitive but with minimum
     
     // First pass: identify all potential peaks
     const potentialPeaks: number[] = [];
@@ -179,27 +212,12 @@ export class HeartRateDetector {
   }
   
   /**
-   * Original peak finder with real data
-   */
-  public findPeaks(values: number[]): number[] {
-    const peaks: number[] = [];
-    
-    // Simple peak detector for real data
-    for (let i = 1; i < values.length - 1; i++) {
-      if (values[i] > values[i - 1] && values[i] > values[i + 1]) {
-        peaks.push(i);
-      }
-    }
-    
-    return peaks;
-  }
-  
-  /**
    * Reset the heart rate detector
    */
   public reset(): void {
     this.peakTimes = [];
     this.lastProcessTime = 0;
     this.recentBPMs = [];
+    this.signalThreshold = 0.1;
   }
 }
