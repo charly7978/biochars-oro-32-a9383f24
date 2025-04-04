@@ -1,4 +1,3 @@
-
 import { HeartBeatResult } from './types';
 
 /**
@@ -63,13 +62,12 @@ export function createWeakSignalResult(arrhythmiaCount = 0): HeartBeatResult {
 /**
  * Handles peak detection and beep requests
  * Enhanced for improved visualization and response
- * Fixed function signature to match how it's called in signal-processor.ts
+ * Fixed function signature to match how it's called
  */
 export function handlePeakDetection(
   result: HeartBeatResult,
   lastPeakTimeRef: React.MutableRefObject<number | null>,
-  requestImmediateBeep: (value: number) => boolean,
-  isMonitoringRef: React.MutableRefObject<boolean>
+  requestImmediateBeep: (value: number) => boolean
 ): void {
   if (result.isPeak) {
     const now = Date.now();
@@ -78,10 +76,8 @@ export function handlePeakDetection(
     lastPeakTimeRef.current = now;
     
     // Request beep with amplified value for better audio response
-    if (isMonitoringRef.current) {
-      // Solicitar beep sin amplificar el valor (corregido)
-      requestImmediateBeep(1.0);
-    }
+    // Solicitar beep sin amplificar el valor (corregido)
+    requestImmediateBeep(1.0);
   }
 }
 

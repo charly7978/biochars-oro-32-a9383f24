@@ -28,7 +28,7 @@ const GraphGrid: React.FC<GraphGridProps> = ({ width = 1200, height = 1080, cell
 				
 				// Enhanced background with glassmorphism effect - subtle gradient
 				const gradient = ctx.createLinearGradient(0, 0, 0, displayHeight);
-				// Fixed color stop values to be within 0.0 to 1.0 range
+				// Fix color stop values to be within 0.0 to 1.0 range
 				gradient.addColorStop(0, 'rgba(243, 247, 200, 0.6)');
 				gradient.addColorStop(0.4, 'rgba(7, 174, 239, 0.7)');
 				gradient.addColorStop(0.6, 'rgba(241, 238, 248, 0.7)');
@@ -38,7 +38,7 @@ const GraphGrid: React.FC<GraphGridProps> = ({ width = 1200, height = 1080, cell
 				
 				// Draw grid with improved quality and glassmorphism effect
 				ctx.beginPath();
-				ctx.strokeStyle = 'rgba(70, 9, 130, 0.12)'; // Corrected spacing in RGB values
+				ctx.strokeStyle = 'rgba(70, 9, 130, 0.12)';
 				ctx.lineWidth = 0.6; // Thinner lines for glass effect
 				
 				// Draw vertical grid lines with better precision
@@ -60,7 +60,7 @@ const GraphGrid: React.FC<GraphGridProps> = ({ width = 1200, height = 1080, cell
 				
 				// Add an enhanced grid with major lines - glass effect
 				ctx.beginPath();
-				ctx.strokeStyle = 'rgba(50, 70, 120, 0.15)'; // Corrected spacing in RGB values
+				ctx.strokeStyle = 'rgba(50, 70, 120, 0.15)';
 				ctx.lineWidth = 1;
 				
 				// Major vertical lines every 5 cells
