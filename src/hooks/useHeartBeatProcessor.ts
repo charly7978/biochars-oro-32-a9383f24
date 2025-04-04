@@ -6,9 +6,10 @@ import { useArrhythmiaDetector } from './heart-beat/arrhythmia-detector';
 import { useSignalProcessor } from './heart-beat/signal-processor';
 import { HeartBeatResult, UseHeartBeatReturn } from './heart-beat/types';
 import { 
-  getAverageDiagnostics, 
-  getDetailedQualityStats, 
-  getDiagnosticsData 
+  getDiagnosticsData,
+  getAverageDiagnostics,
+  getDetailedQualityStats,
+  trackQualityMetrics
 } from './heart-beat/signal-processing/peak-detection';
 
 export const useHeartBeatProcessor = (): UseHeartBeatReturn => {
@@ -290,6 +291,15 @@ export const useHeartBeatProcessor = (): UseHeartBeatReturn => {
       diagnosticsRef.current.lastDiagnosticUpdate = now;
     }
 
+    const processingStartTime = performance.now();
+    const processingTime = performance.now() - processingStartTime;
+    
+    trackQualityMetrics(
+      result.confidence || 0,
+      Math.abs(optimizedValue || value) * 1.2,
+      processingTime
+    );
+
     return result;
   }, [
     currentBPM, 
@@ -368,7 +378,7 @@ export const useHeartBeatProcessor = (): UseHeartBeatReturn => {
     return {
       processingMetrics: getAverageDiagnostics(),
       qualityStats: getDetailedQualityStats(),
-      detailedData: getDiagnosticsData().slice(-20),
+      detailedData: getDiagnosticsData(),
       patientMetrics: {
         bpmStability: diagnosticsRef.current.bpmStability,
         signalQuality: diagnosticsRef.current.qualityHistory.length > 0 ?

@@ -1,46 +1,17 @@
+
 /**
- * Type definitions for heart beat processing
+ * Type definitions for heart beat related functionality
  */
 
-export interface DiagnosticData {
-  signalStrength?: number;
-  signalQuality?: 'weak' | 'moderate' | 'good' | 'excellent';
-  detectionStatus?: string;
-  lastProcessedTime?: number;
-  lastPeakDetected?: number;
-  peakStrength?: number;
-  lastValidBpmTime?: number;
-  bpmReliability?: number;
-  confidenceStatus?: 'low' | 'moderate' | 'high';
-  usingHistoricalBPM?: boolean;
-  historyBPM?: number;
-  originalConfidence?: number;
-  adjustedConfidence?: number;
-  bpmStatus?: 'zero' | 'normal' | 'high' | 'low' | 'using_historical';
-  arrhythmiaTracking?: boolean;
-  processingStatus?: string;
-  rhythmAnalysis?: {
-    regularity: number;
-    variability: number;
-  };
-  processPerformance?: {
-    avgProcessTime: number;
-    avgSignalStrength: number;
-    qualityDistribution: any;
-    qualityTrend: string;
-  };
-  rhythmQuality?: string;
-  isFingerDetected?: boolean;
-  isArrhythmia?: boolean;
-  arrhythmiaCount?: number;
-}
-
+/**
+ * Structure representing a heartbeat result
+ */
 export interface HeartBeatResult {
   bpm: number;
   confidence: number;
   isPeak: boolean;
   arrhythmiaCount: number;
-  isArrhythmia?: boolean;
+  isArrhythmia: boolean;
   rrData: {
     intervals: number[];
     lastPeakTime: number | null;
@@ -48,14 +19,44 @@ export interface HeartBeatResult {
   diagnosticData?: DiagnosticData;
 }
 
-export interface HeartBeatProcessor {
-  processSignal: (value: number) => HeartBeatResult;
-  reset: () => void;
-  getRRIntervals: () => { intervals: number[], lastPeakTime: number | null };
-  getArrhythmiaCounter: () => number;
-  setMonitoring: (value: boolean) => void;
+/**
+ * Structure for diagnostic data
+ */
+export interface DiagnosticData {
+  signalStrength?: number;
+  signalQuality?: string;
+  isFingerDetected?: boolean;
+  isArrhythmia?: boolean;
+  arrhythmiaCount?: number;
+  lastProcessedTime?: number;
+  rhythmAnalysis?: {
+    regularity: number;
+    variability: number;
+  };
+  lastPeakDetected?: number;
+  peakStrength?: number;
+  detectionStatus?: string;
+  bpmStatus?: string;
+  processingStatus?: string;
+  lastValidBpmTime?: number;
+  bpmReliability?: number;
+  confidenceStatus?: 'low' | 'high' | 'medium' | 'very_low';
+  usingHistoricalBPM?: boolean;
+  historyBPM?: number;
+  originalConfidence?: number;
+  adjustedConfidence?: number;
+  arrhythmiaTracking?: boolean;
+  processPerformance?: {
+    avgProcessTime?: number;
+    avgSignalStrength?: number;
+    qualityDistribution?: any;
+    qualityTrend?: string;
+  };
 }
 
+/**
+ * Return type for the useHeartBeat hook
+ */
 export interface UseHeartBeatReturn {
   currentBPM: number;
   confidence: number;
@@ -65,62 +66,28 @@ export interface UseHeartBeatReturn {
   requestBeep: (value: number) => boolean;
   startMonitoring: () => void;
   stopMonitoring: () => void;
-  getDiagnostics?: () => any;
+  getDiagnostics: () => any;
 }
 
-export interface UseArrhythmiaDetectorReturn {
-  processRRIntervals: (intervals: number[]) => boolean;
-  reset: () => void;
-  getArrhythmiaState: () => ArrhythmiaState;
-  heartRateVariabilityRef: React.MutableRefObject<number[]>;
-  stabilityCounterRef: React.MutableRefObject<number>;
-  lastRRIntervalsRef: React.MutableRefObject<number[]>;
-  lastIsArrhythmiaRef: React.MutableRefObject<boolean>;
-  currentBeatIsArrhythmiaRef: React.MutableRefObject<boolean>;
-  detectArrhythmia?: (intervals: number[]) => RRAnalysisResult;
-}
-
-export interface ArrhythmiaState {
-  isActive: boolean;
-  lastDetectionTime: number;
-  recoveryTime: number;
-  windows: Array<{start: number, end: number}>;
-}
-
-export interface RRAnalysisResult {
-  rmssd: number;
-  rrVariation: number;
+/**
+ * Structure for heart rate data
+ */
+export interface HeartRateData {
+  bpm: number;
+  confidence: number;
   timestamp: number;
-  isArrhythmia: boolean;
+  isArrhythmia?: boolean;
+  arrhythmiaCount?: number;
 }
 
-export interface SignalProcessorOptions {
-  lowSignalThreshold?: number;
-  maxWeakSignalCount?: number;
-  amplificationFactor?: number;
-  filterStrength?: number;
-  useAdaptiveControl?: boolean;
-  qualityEnhancedByPrediction?: boolean;
-}
-
-export interface SignalProcessorReturn {
-  processSignal: (
-    value: number,
-    currentBPM: number,
-    confidence: number,
-    processor: any,
-    requestImmediateBeep: (value: number) => boolean,
-    isMonitoringRef: React.MutableRefObject<boolean>,
-    lastRRIntervalsRef: React.MutableRefObject<number[]>,
-    currentBeatIsArrhythmiaRef: React.MutableRefObject<boolean>
-  ) => HeartBeatResult;
-  reset: () => void;
-  lastPeakTimeRef: React.MutableRefObject<number | null>;
-  lastValidBpmRef: React.MutableRefObject<number>;
-  lastSignalQualityRef: React.MutableRefObject<number>;
-  consecutiveWeakSignalsRef: React.MutableRefObject<number>;
-  MAX_CONSECUTIVE_WEAK_SIGNALS: number;
-  signalDistributor: any;
-  visualizationBuffer?: number[];
-  amplificationFactor?: React.MutableRefObject<number>;
+/**
+ * Interface for processor state
+ */
+export interface ProcessorState {
+  active: boolean;
+  lastPeakTime: number | null;
+  consecutiveBeatsCount: number;
+  lastValidBpm: number;
+  calibrationCounter: number;
+  lastSignalQuality: number;
 }
