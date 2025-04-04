@@ -1,160 +1,42 @@
 
-import { useState, useCallback, useEffect } from 'react';
-import { 
-  logError, 
-  setVerboseLogging, 
-  ErrorLevel,
-  initializeErrorTracking 
-} from '@/utils/debugUtils';
-import { 
-  initializeErrorPreventionSystem,
-  acknowledgeIssues
-} from '@/utils/errorPrevention';
+import { useState, useEffect } from 'react';
+import { logError, ErrorLevel } from '@/utils/debugUtils';
+import { setVerboseLogging } from '@/utils/debugUtils';
+import { initializeErrorTracking } from '@/utils/debugUtils';
 
-export const useDebugMode = () => {
-  // Check for debug mode in localStorage
-  const initialDebugMode = localStorage.getItem('debugMode') === 'true';
-  const [isDebugMode, setIsDebugMode] = useState<boolean>(initialDebugMode);
-  const [isPanelVisible, setIsPanelVisible] = useState<boolean>(false);
-  const [signalData, setSignalData] = useState<any[]>([]);
-  const [rawValues, setRawValues] = useState<number[]>([]);
-  const [filteredValues, setFilteredValues] = useState<number[]>([]);
-  const [metrics, setMetrics] = useState<any>({});
+export function useDebugMode(initialDebugMode = false) {
+  const [debugMode, setDebugMode] = useState<boolean>(initialDebugMode);
   
-  // Initialize debug mode
   useEffect(() => {
-    let cleanupErrorPrevention: (() => void) | null = null;
-
-    if (isDebugMode) {
-      setVerboseLogging(true);
-      logError("Modo de depuración activado", ErrorLevel.INFO, "DebugMode");
-      
-      // Initialize error tracking and prevention systems
-      initializeErrorTracking({
-        verbose: true,
-        setupGlobalHandlers: true
-      });
-      
-      cleanupErrorPrevention = initializeErrorPreventionSystem();
-      
-      // Set up keyboard shortcut (Ctrl+Shift+D)
-      const handleKeyDown = (e: KeyboardEvent) => {
-        if (e.ctrlKey && e.shiftKey && e.key === 'D') {
-          setIsPanelVisible(prev => !prev);
-        }
-      };
-      
-      window.addEventListener('keydown', handleKeyDown);
-      
-      return () => {
-        window.removeEventListener('keydown', handleKeyDown);
-        if (cleanupErrorPrevention) {
-          cleanupErrorPrevention();
-        }
-      };
-    } else {
-      setVerboseLogging(false);
-      
-      // Initialize with basic error tracking
-      initializeErrorTracking({
-        verbose: false,
-        setupGlobalHandlers: true
-      });
-      
-      cleanupErrorPrevention = initializeErrorPreventionSystem();
-      
-      return () => {
-        if (cleanupErrorPrevention) {
-          cleanupErrorPrevention();
-        }
-      };
-    }
-  }, [isDebugMode]);
-  
-  // Toggle debug mode
-  const toggleDebugMode = useCallback(() => {
-    const newMode = !isDebugMode;
-    setIsDebugMode(newMode);
-    localStorage.setItem('debugMode', newMode.toString());
+    // Initialize error tracking on first load
+    initializeErrorTracking({
+      verbose: debugMode,
+      setupGlobalHandlers: true
+    });
+    
+    // Configure verbose logging based on debug mode
+    setVerboseLogging(debugMode);
     
     logError(
-      `Modo de depuración ${newMode ? 'activado' : 'desactivado'}`, 
-      ErrorLevel.INFO, 
-      "DebugMode"
+      `Debug mode ${debugMode ? 'activated' : 'deactivated'}`,
+      ErrorLevel.INFO,
+      'DebugMode'
     );
-  }, [isDebugMode]);
+    
+    return () => {
+      // Clean up if needed
+    };
+  }, [debugMode]);
   
-  // Show/hide debug panel
-  const toggleDebugPanel = useCallback(() => {
-    setIsPanelVisible(prev => !prev);
-  }, []);
-  
-  // Add signal data for visualization
-  const addSignalData = useCallback((data: any) => {
-    setSignalData(prev => {
-      const newData = [...prev, data];
-      // Keep only the last 300 points
-      if (newData.length > 300) {
-        return newData.slice(-300);
-      }
-      return newData;
-    });
-  }, []);
-  
-  // Add raw value for visualization
-  const addRawValue = useCallback((value: number) => {
-    setRawValues(prev => {
-      const newData = [...prev, value];
-      // Keep only the last 300 points
-      if (newData.length > 300) {
-        return newData.slice(-300);
-      }
-      return newData;
-    });
-  }, []);
-  
-  // Add filtered value for visualization
-  const addFilteredValue = useCallback((value: number) => {
-    setFilteredValues(prev => {
-      const newData = [...prev, value];
-      // Keep only the last 300 points
-      if (newData.length > 300) {
-        return newData.slice(-300);
-      }
-      return newData;
-    });
-  }, []);
-  
-  // Update metrics
-  const updateMetrics = useCallback((newMetrics: any) => {
-    setMetrics(prev => ({
-      ...prev,
-      ...newMetrics
-    }));
-  }, []);
-  
-  // Acknowledge and reset issues
-  const resetIssues = useCallback(() => {
-    acknowledgeIssues();
-    logError("Issues acknowledged and reset", ErrorLevel.INFO, "DebugMode");
-  }, []);
+  const toggleDebugMode = () => {
+    setDebugMode(prev => !prev);
+  };
   
   return {
-    isDebugMode,
-    toggleDebugMode,
-    isPanelVisible,
-    toggleDebugPanel,
-    showDebugPanel: () => setIsPanelVisible(true),
-    hideDebugPanel: () => setIsPanelVisible(false),
-    signalData,
-    addSignalData,
-    rawValues,
-    addRawValue,
-    filteredValues,
-    addFilteredValue,
-    metrics,
-    updateMetrics,
-    resetIssues
+    debugMode,
+    setDebugMode,
+    toggleDebugMode
   };
-};
+}
 
+export default useDebugMode;

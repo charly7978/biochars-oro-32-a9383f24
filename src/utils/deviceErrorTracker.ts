@@ -4,6 +4,8 @@
  */
 import { logError, ErrorLevel, CameraState, setCameraState as setGlobalCameraState } from './debugUtils';
 
+export type DetectionSource = 'camera' | 'brightness' | 'ppg' | 'signal-quality' | 'camera-analysis' | 'environment' | 'user-interaction';
+
 interface DeviceErrorDetails {
   label?: string;
   deviceId?: string;
@@ -28,6 +30,34 @@ export const setCameraState = setGlobalCameraState;
  * Re-exportar enum CameraState
  */
 export { CameraState } from './debugUtils';
+
+/**
+ * Registra un error de dispositivo sin procesamiento adicional
+ */
+export function trackDeviceError(error: unknown, source: string = 'unknown'): void {
+  const errorMessage = error instanceof Error ? error.message : String(error);
+  const errorType = error instanceof Error ? error.name : 'UnknownError';
+  
+  // Registrar log
+  logError(
+    `Device error (${source}): ${errorMessage}`, 
+    ErrorLevel.ERROR, 
+    "DeviceErrorTracker",
+    { error }
+  );
+  
+  // Almacenar en el historial
+  deviceErrorHistory.push({
+    errorType,
+    errorMessage,
+    timestamp: Date.now()
+  });
+  
+  // Limitar tamaño del historial
+  if (deviceErrorHistory.length > maxHistorySize) {
+    deviceErrorHistory.shift();
+  }
+}
 
 /**
  * Registra un error de dispositivo y proporciona recomendaciones
