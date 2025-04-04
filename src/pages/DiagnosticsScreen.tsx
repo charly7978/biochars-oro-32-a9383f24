@@ -1,10 +1,8 @@
-
 import React, { useEffect, useState, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useToast } from "@/components/ui/use-toast";
 import { SignalChart } from '../components/diagnostics/SignalChart';
 import { DiagnosticsPanel } from '../components/diagnostics/DiagnosticsPanel';
 import { SystemMetrics } from '../components/diagnostics/SystemMetrics';
@@ -19,7 +17,6 @@ import { useDiagnosticsCollector } from '../hooks/useDiagnosticsCollector';
  * Provides real-time visualization and metrics for the entire signal processing pipeline
  */
 const DiagnosticsScreen: React.FC = () => {
-  const { toast } = useToast();
   const { 
     isCollecting,
     startCollection,
@@ -37,17 +34,12 @@ const DiagnosticsScreen: React.FC = () => {
   // Start/stop collection when component mounts/unmounts
   useEffect(() => {
     startCollection();
-    toast({
-      title: "Diagnóstico iniciado",
-      description: "Recopilando datos en tiempo real...",
-      duration: 3000,
-    });
     
     return () => {
       stopCollection();
       cancelAnimationFrame(animationRef.current);
     };
-  }, [startCollection, stopCollection, toast]);
+  }, [startCollection, stopCollection]);
   
   return (
     <div className="container mx-auto p-4">

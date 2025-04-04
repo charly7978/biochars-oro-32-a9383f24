@@ -13,7 +13,6 @@ const App = () => {
         <Route path="/diagnostics" element={<DiagnosticsScreen />} />
         <Route path="*" element={<NotFound />} />
       </Routes>
-      <Toaster />
     </Router>
   );
 };
