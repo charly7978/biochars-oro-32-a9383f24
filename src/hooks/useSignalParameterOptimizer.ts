@@ -7,14 +7,11 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { 
   SignalParameterOptimizer, 
-  createSignalParameterOptimizer,
-  OptimizationState,
-  type OptimizationMetrics
+  OptimizationState, 
+  OptimizationMetrics,
+  createSignalParameterOptimizer 
 } from '@/modules/signal-processing/utils/parameter-optimization';
-import { 
-  type BayesianOptimizerConfig, 
-  type OptimizationParameter 
-} from '@/modules/signal-processing/utils/bayesian-optimization';
+import { OptimizationParameter } from '@/modules/signal-processing/utils/bayesian-optimization';
 import { useErrorPrevention } from '@/utils/errorPrevention/integration';
 import { logError, ErrorLevel } from '@/utils/debugUtils';
 
@@ -32,7 +29,6 @@ export interface SignalOptimizerConfig {
   observationsNeeded?: number;
   autoOptimize?: boolean;
   optimizationInterval?: number;
-  optimizerConfig?: BayesianOptimizerConfig;
 }
 
 /**
@@ -51,11 +47,7 @@ export function useSignalParameterOptimizer(config: SignalOptimizerConfig) {
   useEffect(() => {
     try {
       // Crear optimizador y configurarlo
-      const optimizer = createSignalParameterOptimizer(
-        config.parameters,
-        config.optimizerConfig || {}
-      );
-      
+      const optimizer = createSignalParameterOptimizer(config.parameters);
       optimizer.setScoreFunction(config.scoreFunction);
       optimizer.setApplyFunction(config.applyFunction);
       
@@ -80,7 +72,8 @@ export function useSignalParameterOptimizer(config: SignalOptimizerConfig) {
       errorPrevention.registerError(
         `Error initializing signal optimizer: ${error instanceof Error ? error.message : String(error)}`,
         "useSignalParameterOptimizer",
-        { error, parameters: config.parameters }
+        { error, parameters: config.parameters },
+        ErrorLevel.ERROR
       );
     }
     
@@ -181,7 +174,7 @@ export function useSignalParameterOptimizer(config: SignalOptimizerConfig) {
   }, [config.optimizationInterval, tryStartOptimization]);
   
   // Reiniciar el optimizador
-  const reset = useCallback(() => {
+  const resetOptimizer = useCallback(() => {
     if (!optimizerRef.current) return;
     
     optimizerRef.current.reset();
@@ -203,7 +196,7 @@ export function useSignalParameterOptimizer(config: SignalOptimizerConfig) {
     addQualityObservation,
     startOptimization: tryStartOptimization,
     setAutoOptimize,
-    reset,
+    reset: resetOptimizer,
     getBestParameters
   };
 }

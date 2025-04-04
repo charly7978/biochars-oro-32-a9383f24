@@ -1,309 +1,459 @@
+
+/**
+ * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
+ * 
+ * Componente de monitoreo para el sistema de detección de dedos
+ * Proporciona una interfaz visual para depurar y monitorear el sistema
+ */
+
 import React, { useState, useEffect } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Slider } from "@/components/ui/slider";
+import { useFingerDetectionSystem } from '@/hooks/useFingerDetectionSystem';
+import { CalibrationParameters } from '@/modules/signal-processing/utils/adaptive-calibration';
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Slider } from "@/components/ui/slider";
+import { 
+  Card, 
+  CardContent, 
+  CardDescription, 
+  CardFooter, 
+  CardHeader, 
+  CardTitle 
+} from "@/components/ui/card";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { toast } from "@/components/ui/use-toast";
-import {
-  unifiedFingerDetector,
-  resetFingerDetector,
-  getFingerDetectionState,
-  updateDetectionSource,
-  adaptDetectionThresholds,
-  isFingerDetected,
-  getDetectionConfidence
-} from '@/modules/signal-processing';
-import type {
-  DetectionSource,
-  DetectionState,
-  DiagnosticEvent,
-  DiagnosticEventType,
-  AdaptiveCalibrationParams,
-  EnvironmentalState
-} from '@/modules/signal-processing';
-import {
-  fingerDiagnostics,
-  reportFingerDetection,
-  reportDiagnosticEvent,
-  getDiagnosticStats,
-  clearDiagnosticEvents
-} from '@/modules/signal-processing';
-import {
-  adaptiveCalibration,
-  getCalibrationParameters,
-  updateEnvironmentalState,
-  resetCalibration
-} from '@/modules/signal-processing';
-import {
-  analyzeSignalForRhythmicPattern,
-  resetRhythmDetector,
-  isFingerDetectedByRhythm,
-  getConsistentPatternsCount
-} from '@/modules/signal-processing';
-import {
-  checkSignalStrength,
-  shouldProcessMeasurement,
-  resetAmplitudeDetector,
-  getLastSignalQuality,
-  isFingerDetectedByAmplitude
-} from '@/modules/signal-processing';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
-interface FingerDetectionMonitorProps {
-  className?: string;
-}
-
-const FingerDetectionMonitor: React.FC<FingerDetectionMonitorProps> = ({ className }) => {
-  const [detectionState, setDetectionState] = useState<DetectionState>(getFingerDetectionState());
-  const [sensitivity, setSensitivity] = useState(0.5);
-  const [diagnosticEvents, setDiagnosticEvents] = useState(fingerDiagnostics.getDiagnosticEvents());
-  const [isRhythmDetected, setIsRhythmDetected] = useState(isFingerDetectedByRhythm());
-  const [isAmplitudeDetected, setIsAmplitudeDetected] = useState(isFingerDetectedByAmplitude());
-  const [calibrationParams, setCalibrationParams] = useState(getCalibrationParameters());
-  const [environmentalState, setEnvironmentalState] = useState(adaptiveCalibration.getEnvironmentalState());
-  const [noiseLevel, setNoiseLevel] = useState(environmentalState.noise || 0);
-  const [lightingLevel, setLightingLevel] = useState(environmentalState.lighting || 50);
-  const [motionLevel, setMotionLevel] = useState(environmentalState.motion || 0);
+/**
+ * Componente para monitoreo del sistema de detección de dedos
+ * Útil para depuración y ajuste durante desarrollo
+ */
+export function FingerDetectionMonitor({
+  showDetailed = false
+}: {
+  showDetailed?: boolean;
+}) {
+  const [activeTab, setActiveTab] = useState("status");
+  const [showDetails, setShowDetails] = useState(showDetailed);
+  const [manualMode, setManualMode] = useState(false);
   
+  // Usar el hook del sistema de detección
+  const fingerSystem = useFingerDetectionSystem({
+    enableDebugLogs: true,
+    enableDiagnostics: true,
+    enableAdaptiveCalibration: true,
+    onDetectionChange: (isDetected) => {
+      console.log(`FingerDetectionMonitor: Detección cambiada a ${isDetected ? 'DETECTADO' : 'NO DETECTADO'}`);
+    }
+  });
+  
+  // Estado detallado para la pestaña avanzada
+  const [detailedStats, setDetailedStats] = useState<any>(null);
+  const [customCalibration, setCustomCalibration] = useState<Partial<CalibrationParameters>>({
+    sensitivityLevel: 0.6,
+    amplitudeThreshold: 0.3
+  });
+  
+  // Actualizar estadísticas detalladas periódicamente
   useEffect(() => {
-    const intervalId = setInterval(() => {
-      setDetectionState(getFingerDetectionState());
-      setDiagnosticEvents(fingerDiagnostics.getDiagnosticEvents());
-      setIsRhythmDetected(isFingerDetectedByRhythm());
-      setIsAmplitudeDetected(isFingerDetectedByAmplitude());
-      setCalibrationParams(getCalibrationParameters());
-      setEnvironmentalState(adaptiveCalibration.getEnvironmentalState());
-    }, 500);
+    if (activeTab === "advanced" || showDetails) {
+      const interval = setInterval(() => {
+        setDetailedStats(fingerSystem.getDetailedStats());
+      }, 1000);
+      
+      return () => clearInterval(interval);
+    }
+  }, [activeTab, showDetails, fingerSystem]);
+  
+  // Manejar cambios en la calibración personalizada
+  const handleCalibrationChange = (param: keyof CalibrationParameters, value: number) => {
+    setCustomCalibration(prev => ({
+      ...prev,
+      [param]: value
+    }));
+  };
+  
+  // Aplicar calibración personalizada
+  const applyCustomCalibration = () => {
+    fingerSystem.updateCalibration(customCalibration);
+  };
+  
+  // Manejar cambio de modo manual
+  const handleManualModeChange = (enabled: boolean) => {
+    setManualMode(enabled);
     
-    return () => clearInterval(intervalId);
-  }, []);
+    // Si se desactiva, quitar anulación
+    if (!enabled) {
+      fingerSystem.setManualOverride(false, false);
+    }
+  };
   
-  useEffect(() => {
-    setNoiseLevel(environmentalState.noise || 0);
-  }, [environmentalState.noise]);
+  // Manejar forzado manual de detección
+  const setManualDetection = (detected: boolean) => {
+    fingerSystem.setManualOverride(detected, true);
+  };
   
-  useEffect(() => {
-    setLightingLevel(environmentalState.lighting || 50);
-  }, [environmentalState.lighting]);
+  // Actualizar ambiente simulado
+  const simulateEnvironmentChange = (change: 'light' | 'motion') => {
+    if (change === 'light') {
+      fingerSystem.updateEnvironment({
+        lightLevel: Math.random() * 0.7 + 0.3 // 0.3-1.0
+      });
+    } else {
+      fingerSystem.updateEnvironment({
+        motionLevel: Math.random() * 0.5 // 0-0.5
+      });
+    }
+  };
   
-  useEffect(() => {
-    setMotionLevel(environmentalState.motion || 0);
-  }, [environmentalState.motion]);
+  // Reiniciar sistema
+  const handleReset = () => {
+    fingerSystem.resetSystem();
+  };
   
-  const handleApplySensitivity = (value: number) => {
-    if (value === 0.5) return; // No change at middle point
+  // Exportar datos de diagnóstico
+  const handleExportDiagnostics = () => {
+    const data = fingerSystem.exportDiagnostics();
+    console.log("Datos de diagnóstico exportados:", data);
     
-    // Use adaptThresholds instead of updateThresholds
-    unifiedFingerDetector.adaptThresholds({
-      amplitudeSensitivity: value < 0.5 ? 0.8 : 1.2,
-      rhythmSensitivity: value < 0.5 ? 0.8 : 1.2,
-    });
-    
-    toast({
-      title: "Sensitivity Applied",
-      description: `Detection sensitivity set to ${value < 0.5 ? "less" : "more"} sensitive`,
-    });
-  };
-  
-  const handleResetSensitivity = () => {
-    // Use adaptThresholds instead of updateThresholds
-    unifiedFingerDetector.adaptThresholds({
-      amplitudeSensitivity: 1.0,
-      rhythmSensitivity: 1.0,
-    });
-    
-    setSensitivity(0.5);
-    toast({
-      title: "Sensitivity Reset",
-      description: "Detection sensitivity returned to default",
-    });
-  };
-  
-  const handleNoiseChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const newNoise = Number(event.target.value);
-    setNoiseLevel(newNoise);
-    updateEnvironmentalState({ noise: newNoise });
-  };
-  
-  const handleLightingChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const newLighting = Number(event.target.value);
-    setLightingLevel(newLighting);
-    updateEnvironmentalState({ lighting: newLighting });
-  };
-  
-  const handleMotionChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const newMotion = Number(event.target.value);
-    setMotionLevel(newMotion);
-    updateEnvironmentalState({ motion: newMotion });
-  };
-  
-  const handleResetCalibration = () => {
-    resetCalibration();
-    toast({
-      title: "Calibration Reset",
-      description: "Adaptive calibration has been reset to default values.",
-    });
+    // Crear y descargar archivo
+    const blob = new Blob([data], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `finger-diagnostics-${new Date().toISOString()}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   };
   
   return (
-    <Card className={`w-full ${className}`}>
+    <Card className="w-full max-w-4xl">
       <CardHeader>
-        <CardTitle className="flex justify-between items-center">
-          <span>Finger Detection Monitor</span>
-          <Badge variant={detectionState.detected ? 'default' : 'outline'}>
-            {detectionState.detected ? 'Detected' : 'Not Detected'}
+        <CardTitle className="flex items-center justify-between">
+          Sistema de Detección de Dedo
+          <Badge variant={fingerSystem.isFingerDetected ? "default" : "destructive"}>
+            {fingerSystem.isFingerDetected ? "DEDO DETECTADO" : "SIN DETECCIÓN"}
           </Badge>
         </CardTitle>
         <CardDescription>
-          Monitor and adjust finger detection parameters
+          Monitor avanzado del sistema de detección unificado
         </CardDescription>
       </CardHeader>
       
-      <CardContent className="space-y-4">
-        <div className="space-y-2">
-          <h4 className="text-sm font-medium">Detection Sources</h4>
-          <div className="grid grid-cols-2 gap-2">
-            <div className="flex items-center space-x-2">
-              <Badge variant={detectionState.amplitude.detected ? 'default' : 'outline'}>
-                Amplitude
-              </Badge>
-              <span>Confidence: {detectionState.amplitude.confidence.toFixed(2)}</span>
-            </div>
-            <div className="flex items-center space-x-2">
-              <Badge variant={detectionState.rhythm.detected ? 'default' : 'outline'}>
-                Rhythm
-              </Badge>
-              <span>Confidence: {detectionState.rhythm.confidence.toFixed(2)}</span>
-            </div>
-          </div>
-        </div>
-        
-        <div className="space-y-2">
-          <h4 className="text-sm font-medium">Unified Detection</h4>
-          <div className="grid grid-cols-1 gap-2">
-            <div className="flex items-center space-x-2">
-              <span>Confidence: {getDetectionConfidence().toFixed(2)}</span>
-            </div>
-            <div className="flex items-center space-x-2">
-              <span>Is Finger Detected by Rhythm: {isRhythmDetected ? 'Yes' : 'No'}</span>
-            </div>
-            <div className="flex items-center space-x-2">
-              <span>Is Finger Detected by Amplitude: {isAmplitudeDetected ? 'Yes' : 'No'}</span>
-            </div>
-          </div>
-        </div>
-        
-        <div className="space-y-2">
-          <h4 className="text-sm font-medium">Sensitivity Adjustment</h4>
-          <div className="flex items-center space-x-2">
-            <Label htmlFor="sensitivity-slider">Sensitivity:</Label>
-            <Slider
-              id="sensitivity-slider"
-              defaultValue={[sensitivity * 100]}
-              max={100}
-              step={1}
-              onValueChange={(value) => setSensitivity(value[0] / 100)}
-              onMouseUp={() => handleApplySensitivity(sensitivity)}
-              className="w-1/2"
-            />
-            <Button variant="outline" size="sm" onClick={handleResetSensitivity}>
-              Reset
-            </Button>
-          </div>
-        </div>
-        
-        <div className="space-y-2">
-          <h4 className="text-sm font-medium">Environmental Simulation</h4>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-            <div>
-              <Label htmlFor="noise-input">Noise Level:</Label>
-              <Input
-                id="noise-input"
-                type="number"
-                value={noiseLevel}
-                onChange={handleNoiseChange}
-              />
-            </div>
-            <div>
-              <Label htmlFor="lighting-input">Lighting Level:</Label>
-              <Input
-                id="lighting-input"
-                type="number"
-                value={lightingLevel}
-                onChange={handleLightingChange}
-              />
-            </div>
-            <div>
-              <Label htmlFor="motion-input">Motion Level:</Label>
-              <Input
-                id="motion-input"
-                type="number"
-                value={motionLevel}
-                onChange={handleMotionChange}
-              />
-            </div>
-          </div>
-          <Button variant="outline" size="sm" onClick={handleResetCalibration}>
-            Reset Calibration
-          </Button>
-        </div>
-        
-        <div className="space-y-2">
-          <h4 className="text-sm font-medium">Calibration Parameters</h4>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-            <div>
-              <Label>Base Threshold: {calibrationParams.baseThreshold.toFixed(3)}</Label>
-            </div>
-            <div>
-              <Label>Noise Multiplier: {calibrationParams.noiseMultiplier.toFixed(3)}</Label>
-            </div>
-            <div>
-              <Label>Lighting Compensation: {calibrationParams.lightingCompensation.toFixed(3)}</Label>
-            </div>
-            <div>
-              <Label>Motion Compensation: {calibrationParams.motionCompensation.toFixed(3)}</Label>
-            </div>
-            <div>
-              <Label>Adaptation Rate: {calibrationParams.adaptationRate.toFixed(3)}</Label>
-            </div>
-            <div>
-              <Label>Stability Factor: {calibrationParams.stabilityFactor.toFixed(3)}</Label>
-            </div>
-          </div>
-        </div>
-        
-        <div className="space-y-2">
-          <h4 className="text-sm font-medium">Diagnostic Events</h4>
-          <ScrollArea className="h-[200px] w-full">
-            <div className="space-y-1">
-              {diagnosticEvents.slice().reverse().map((event, index) => (
-                <div key={index} className="text-xs border-l-2 pl-2 py-1 border-gray-300">
-                  <div className="flex justify-between">
-                    <span className="text-gray-500">
-                      {new Date(event.timestamp).toLocaleTimeString()}
-                    </span>
-                    <Badge variant="outline" className="text-xs">
-                      {event.type}
-                    </Badge>
+      <CardContent>
+        <Tabs value={activeTab} onValueChange={setActiveTab}>
+          <TabsList className="w-full">
+            <TabsTrigger value="status" className="flex-1">Estado</TabsTrigger>
+            <TabsTrigger value="calibration" className="flex-1">Calibración</TabsTrigger>
+            <TabsTrigger value="diagnostics" className="flex-1">Diagnósticos</TabsTrigger>
+            <TabsTrigger value="advanced" className="flex-1">Avanzado</TabsTrigger>
+          </TabsList>
+          
+          {/* Pestaña de Estado */}
+          <TabsContent value="status" className="mt-4">
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="bg-gray-100 dark:bg-gray-800 p-4 rounded-lg">
+                  <h3 className="text-sm font-medium mb-2">Confianza</h3>
+                  <div className="text-2xl font-bold">{Math.round(fingerSystem.confidence * 100)}%</div>
+                  <div className="w-full bg-gray-300 dark:bg-gray-700 h-2 mt-2 rounded-full overflow-hidden">
+                    <div 
+                      className={`h-full ${fingerSystem.isFingerDetected ? 'bg-green-500' : 'bg-red-500'}`} 
+                      style={{ width: `${Math.round(fingerSystem.confidence * 100)}%` }}
+                    ></div>
                   </div>
-                  <p className="mt-1">{event.message}</p>
                 </div>
-              ))}
+                
+                <div className="bg-gray-100 dark:bg-gray-800 p-4 rounded-lg">
+                  <h3 className="text-sm font-medium mb-2">Consenso</h3>
+                  <div className="text-2xl font-bold">
+                    {Math.round(fingerSystem.consensusLevel * 100)}%
+                  </div>
+                  <div className="w-full bg-gray-300 dark:bg-gray-700 h-2 mt-2 rounded-full overflow-hidden">
+                    <div 
+                      className={`h-full ${fingerSystem.consensusLevel > 0 ? 'bg-blue-500' : 'bg-orange-500'}`} 
+                      style={{ width: `${Math.abs(Math.round(fingerSystem.consensusLevel * 100))}%` }}
+                    ></div>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="bg-gray-100 dark:bg-gray-800 p-4 rounded-lg">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-sm font-medium">Modo Manual</h3>
+                  <Switch 
+                    checked={manualMode}
+                    onCheckedChange={handleManualModeChange}
+                  />
+                </div>
+                
+                {manualMode && (
+                  <div className="flex space-x-2">
+                    <Button
+                      variant="outline"
+                      className="flex-1"
+                      onClick={() => setManualDetection(false)}
+                    >
+                      Forzar No Detección
+                    </Button>
+                    <Button
+                      variant="default"
+                      className="flex-1"
+                      onClick={() => setManualDetection(true)}
+                    >
+                      Forzar Detección
+                    </Button>
+                  </div>
+                )}
+              </div>
+              
+              <div className="bg-gray-100 dark:bg-gray-800 p-4 rounded-lg">
+                <h3 className="text-sm font-medium mb-4">Acciones del Sistema</h3>
+                <div className="flex flex-wrap gap-2">
+                  <Button variant="outline" onClick={handleReset}>
+                    Reiniciar Sistema
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    onClick={() => simulateEnvironmentChange('light')}
+                  >
+                    Simular Cambio de Luz
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    onClick={() => simulateEnvironmentChange('motion')}
+                  >
+                    Simular Movimiento
+                  </Button>
+                </div>
+              </div>
             </div>
-          </ScrollArea>
-          <Button variant="outline" size="sm" onClick={() => {
-            clearDiagnosticEvents();
-            setDiagnosticEvents([]);
-          }}>
-            Clear Events
-          </Button>
-        </div>
+          </TabsContent>
+          
+          {/* Pestaña de Calibración */}
+          <TabsContent value="calibration" className="mt-4">
+            <div className="space-y-4">
+              <div className="grid gap-6">
+                <div>
+                  <h3 className="text-sm font-medium mb-2">Calibración Actual</h3>
+                  <div className="bg-gray-100 dark:bg-gray-800 p-4 rounded-lg space-y-3">
+                    <div>
+                      <div className="flex justify-between mb-1">
+                        <span className="text-sm">Sensibilidad</span>
+                        <span className="text-sm font-medium">{Math.round(fingerSystem.calibrationParams.sensitivityLevel * 100)}%</span>
+                      </div>
+                      <div className="w-full bg-gray-300 dark:bg-gray-700 h-2 rounded-full overflow-hidden">
+                        <div 
+                          className="h-full bg-blue-500" 
+                          style={{ width: `${fingerSystem.calibrationParams.sensitivityLevel * 100}%` }}
+                        ></div>
+                      </div>
+                    </div>
+                    
+                    <div>
+                      <div className="flex justify-between mb-1">
+                        <span className="text-sm">Umbral de Amplitud</span>
+                        <span className="text-sm font-medium">{Math.round(fingerSystem.calibrationParams.amplitudeThreshold * 100)}</span>
+                      </div>
+                      <div className="w-full bg-gray-300 dark:bg-gray-700 h-2 rounded-full overflow-hidden">
+                        <div 
+                          className="h-full bg-purple-500" 
+                          style={{ width: `${fingerSystem.calibrationParams.amplitudeThreshold * 100}%` }}
+                        ></div>
+                      </div>
+                    </div>
+                    
+                    <div>
+                      <div className="flex justify-between mb-1">
+                        <span className="text-sm">Reducción de Falsos Positivos</span>
+                        <span className="text-sm font-medium">{Math.round(fingerSystem.calibrationParams.falsePositiveReduction * 100)}%</span>
+                      </div>
+                      <div className="w-full bg-gray-300 dark:bg-gray-700 h-2 rounded-full overflow-hidden">
+                        <div 
+                          className="h-full bg-green-500" 
+                          style={{ width: `${fingerSystem.calibrationParams.falsePositiveReduction * 100}%` }}
+                        ></div>
+                      </div>
+                    </div>
+                    
+                    <div>
+                      <div className="flex justify-between mb-1">
+                        <span className="text-sm">Reducción de Falsos Negativos</span>
+                        <span className="text-sm font-medium">{Math.round(fingerSystem.calibrationParams.falseNegativeReduction * 100)}%</span>
+                      </div>
+                      <div className="w-full bg-gray-300 dark:bg-gray-700 h-2 rounded-full overflow-hidden">
+                        <div 
+                          className="h-full bg-amber-500" 
+                          style={{ width: `${fingerSystem.calibrationParams.falseNegativeReduction * 100}%` }}
+                        ></div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                
+                <div>
+                  <h3 className="text-sm font-medium mb-2">Calibración Personalizada</h3>
+                  <div className="bg-gray-100 dark:bg-gray-800 p-4 rounded-lg space-y-4">
+                    <div className="space-y-2">
+                      <div className="flex justify-between">
+                        <label className="text-sm">Sensibilidad</label>
+                        <span className="text-sm font-medium">{Math.round(customCalibration.sensitivityLevel! * 100)}%</span>
+                      </div>
+                      <Slider
+                        value={[customCalibration.sensitivityLevel! * 100]}
+                        min={0}
+                        max={100}
+                        step={1}
+                        onValueChange={(value) => handleCalibrationChange('sensitivityLevel', value[0] / 100)}
+                      />
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <div className="flex justify-between">
+                        <label className="text-sm">Umbral de Amplitud</label>
+                        <span className="text-sm font-medium">{Math.round(customCalibration.amplitudeThreshold! * 100)}</span>
+                      </div>
+                      <Slider
+                        value={[customCalibration.amplitudeThreshold! * 100]}
+                        min={10}
+                        max={50}
+                        step={1}
+                        onValueChange={(value) => handleCalibrationChange('amplitudeThreshold', value[0] / 100)}
+                      />
+                    </div>
+                    
+                    <Button onClick={applyCustomCalibration}>
+                      Aplicar Calibración
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </TabsContent>
+          
+          {/* Pestaña de Diagnósticos */}
+          <TabsContent value="diagnostics" className="mt-4">
+            <div className="space-y-4">
+              <div className="bg-gray-100 dark:bg-gray-800 p-4 rounded-lg">
+                <h3 className="text-sm font-medium mb-2">Estado de Diagnóstico</h3>
+                <div className="grid grid-cols-3 gap-4">
+                  <div>
+                    <span className="text-xs text-gray-500 dark:text-gray-400">Estado</span>
+                    <p className="font-medium">
+                      {fingerSystem.diagnostics.isRecording ? "Grabando" : "Detenido"}
+                    </p>
+                  </div>
+                  <div>
+                    <span className="text-xs text-gray-500 dark:text-gray-400">Sesión</span>
+                    <p className="font-medium truncate" title={fingerSystem.diagnostics.currentSessionId}>
+                      {fingerSystem.diagnostics.currentSessionId.substring(0, 8)}...
+                    </p>
+                  </div>
+                  <div>
+                    <span className="text-xs text-gray-500 dark:text-gray-400">Eventos</span>
+                    <p className="font-medium">{fingerSystem.diagnostics.totalEvents}</p>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="bg-gray-100 dark:bg-gray-800 p-4 rounded-lg">
+                <h3 className="text-sm font-medium mb-4">Acciones de Diagnóstico</h3>
+                <div className="flex flex-wrap gap-2">
+                  <Button 
+                    variant="outline" 
+                    onClick={handleExportDiagnostics}
+                  >
+                    Exportar Diagnósticos
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    onClick={handleReset}
+                  >
+                    Reiniciar
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </TabsContent>
+          
+          {/* Pestaña Avanzada */}
+          <TabsContent value="advanced" className="mt-4">
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-medium">Mostrar Detalles</h3>
+                <Switch 
+                  checked={showDetails}
+                  onCheckedChange={setShowDetails}
+                />
+              </div>
+              
+              {showDetails && detailedStats && (
+                <Accordion type="single" collapsible className="w-full">
+                  <AccordionItem value="sources">
+                    <AccordionTrigger>Fuentes de Detección</AccordionTrigger>
+                    <AccordionContent>
+                      <div className="space-y-2">
+                        {Object.entries(detailedStats.sources).map(([source, data]: [string, any]) => (
+                          <div key={source} className="p-2 border rounded">
+                            <div className="flex justify-between items-center">
+                              <span className="font-medium">{source}</span>
+                              <Badge 
+                                variant={data.isFingerDetected ? "default" : "secondary"}
+                              >
+                                {data.isFingerDetected ? "DETECTADO" : "NO DETECTADO"}
+                              </Badge>
+                            </div>
+                            <div className="mt-1 text-sm">
+                              <div>Confianza: {Math.round(data.confidence * 100)}%</div>
+                              <div>Última actualización: {new Date(data.lastUpdated).toLocaleTimeString()}</div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </AccordionContent>
+                  </AccordionItem>
+                  
+                  <AccordionItem value="historial">
+                    <AccordionTrigger>Historial de Detección</AccordionTrigger>
+                    <AccordionContent>
+                      <div className="h-40 overflow-y-auto space-y-1">
+                        {detailedStats.history.map((item: any, index: number) => (
+                          <div 
+                            key={index}
+                            className={`text-xs px-2 py-1 rounded ${
+                              item.isFingerDetected ? 'bg-green-100 dark:bg-green-900' : 'bg-red-100 dark:bg-red-900'
+                            }`}
+                          >
+                            {new Date(item.timestamp).toLocaleTimeString()} - 
+                            {item.isFingerDetected ? " DETECTADO" : " NO DETECTADO"} 
+                            ({Math.round(item.confidence * 100)}%)
+                          </div>
+                        ))}
+                      </div>
+                    </AccordionContent>
+                  </AccordionItem>
+                </Accordion>
+              )}
+            </div>
+          </TabsContent>
+        </Tabs>
       </CardContent>
+      
+      <CardFooter className="flex justify-between">
+        <div className="text-xs text-gray-500">
+          Sistema Avanzado de Detección de Dedos v2.0
+        </div>
+        <div className="text-xs text-gray-500">
+          Diagnósticos {fingerSystem.diagnostics.isRecording ? "Activos" : "Inactivos"}
+        </div>
+      </CardFooter>
     </Card>
   );
-};
-
-export default FingerDetectionMonitor;
+}
