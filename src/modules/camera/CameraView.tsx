@@ -1,4 +1,3 @@
-
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { configureCameraForDevice, processFramesControlled } from './CameraFrameCapture';
 import { logError, ErrorLevel } from '@/utils/debugUtils';
@@ -43,6 +42,9 @@ const CameraView: React.FC<CameraViewProps> = ({
   const maxRetryAttempts = 3;
   const processingCallbackRef = useRef<((imageData: ImageData) => void) | null>(null);
   const frameProcessorRef = useRef<(() => void) | null>(null);
+  const lastTrackErrorTimeRef = useRef<number>(0);
+  const trackErrorCountRef = useRef<number>(0);
+  const trackRestartThrottleMs = 2000; // Prevent rapid restarts
 
   useEffect(() => {
     processingCallbackRef.current = onFrameProcessed || null;
@@ -93,8 +95,74 @@ const CameraView: React.FC<CameraViewProps> = ({
       setStream(null);
       setTorchEnabled(false);
       retryAttemptsRef.current = 0;
+      trackErrorCountRef.current = 0;
     }
   };
+
+  const restartCameraProcessing = useCallback(async (): Promise<void> => {
+    const now = Date.now();
+    
+    // Evitar reintentos demasiado frecuentes
+    if (now - lastTrackErrorTimeRef.current < trackRestartThrottleMs) {
+      return;
+    }
+    
+    lastTrackErrorTimeRef.current = now;
+    trackErrorCountRef.current++;
+    
+    logError(`Reiniciando procesamiento de cámara después de error de track (intento ${trackErrorCountRef.current})`, 
+      ErrorLevel.WARNING, "CameraView");
+    
+    if (stream && processingCallbackRef.current) {
+      // Verificar si el track está activo
+      const videoTrack = stream.getVideoTracks()[0];
+      
+      if (!videoTrack || videoTrack.readyState !== 'live') {
+        logError("El track de video no está activo, reiniciando cámara", ErrorLevel.WARNING, "CameraView");
+        
+        // Si el track no está activo, reiniciar completamente
+        await stopCamera();
+        setTimeout(() => {
+          if (isMonitoring) {
+            startCamera();
+          }
+        }, 500);
+        return;
+      }
+      
+      try {
+        // Intentar reiniciar solo el procesamiento sin detener la cámara
+        if (frameProcessorRef.current) {
+          frameProcessorRef.current();
+        }
+        
+        if (typeof window.ImageCapture !== 'undefined') {
+          const imageCapture = new window.ImageCapture(videoTrack);
+          frameProcessorRef.current = processFramesControlled(
+            imageCapture,
+            isMonitoring,
+            frameRate,
+            processingCallbackRef.current
+          );
+          
+          logError("Procesamiento de frames reiniciado correctamente", ErrorLevel.INFO, "CameraView");
+        }
+      } catch (err) {
+        logError(`Error al reiniciar procesamiento: ${err}`, ErrorLevel.ERROR, "CameraView");
+        
+        // Si no podemos reiniciar el procesamiento, reiniciar completamente
+        if (trackErrorCountRef.current > 3) {
+          logError("Demasiados errores de track consecutivos, reiniciando cámara", ErrorLevel.WARNING, "CameraView");
+          await stopCamera();
+          setTimeout(() => {
+            if (isMonitoring) {
+              startCamera();
+            }
+          }, 1000);
+        }
+      }
+    }
+  }, [stream, frameRate, isMonitoring, stopCamera]);
 
   const startCamera = async (): Promise<void> => {
     try {
@@ -157,6 +225,16 @@ const CameraView: React.FC<CameraViewProps> = ({
           videoRef.current.style.perspective = '1000px';
         }
 
+        videoTrack.onended = () => {
+          logError("Video track terminado inesperadamente", ErrorLevel.WARNING, "CameraView");
+          restartCameraProcessing();
+        };
+        
+        videoTrack.onerror = (event) => {
+          logError(`Error en video track: ${event.type}`, ErrorLevel.ERROR, "CameraView");
+          restartCameraProcessing();
+        };
+
         setStream(newStream);
         
         if (processingCallbackRef.current && typeof window.ImageCapture !== 'undefined') {
@@ -179,6 +257,7 @@ const CameraView: React.FC<CameraViewProps> = ({
         }
         
         retryAttemptsRef.current = 0;
+        trackErrorCountRef.current = 0;
       }
     } catch (err) {
       logError("Error al iniciar la cámara: " + err, ErrorLevel.ERROR, "CameraView");
