@@ -1,3 +1,4 @@
+
 /**
  * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
  * 
@@ -55,12 +56,17 @@ export function handlePeakDetection(
     
     // Check if arrhythmia was detected
     if (result.isArrhythmia) {
-      // Dispatch custom event for arrhythmia visualization
+      // Dispatch custom event for arrhythmia visualization - EXPLICITLY CALL THIS FUNCTION
       dispatchArrhythmiaVisualizationEvent(true, now);
       
       // Update diagnostics
       diagnosticsData.isArrhythmia = true;
       diagnosticsData.arrhythmiaCount = (diagnosticsData.arrhythmiaCount || 0) + 1;
+      
+      console.log("Peak-detection: ARRITMIA DETECTADA - enviando evento de visualización", {
+        timestamp: now,
+        count: diagnosticsData.arrhythmiaCount
+      });
     }
     
     // If monitoring is active and we have a value, trigger beep
@@ -124,8 +130,14 @@ export function detectArrhythmia(intervals: number[]): boolean {
     };
     diagnosticsData.isArrhythmia = true;
     
-    // Dispatch arrhythmia visualization event
+    // Dispatch arrhythmia visualization event - ALWAYS DISPATCH ON DETECTION
     dispatchArrhythmiaVisualizationEvent(true, Date.now(), variability);
+    
+    console.log("detectArrhythmia: Arritmia detectada", { 
+      variability, 
+      threshold: 0.2, 
+      intervals: recentIntervals 
+    });
   }
   
   return isArrhythmia;
@@ -153,6 +165,11 @@ export function calculateArrhythmiaRisk(intervals: number[]): number {
     variability: riskScore
   };
   
+  // If high risk, also trigger visualization
+  if (riskScore > 0.4) {
+    dispatchArrhythmiaVisualizationEvent(true, Date.now(), riskScore);
+  }
+  
   return riskScore;
 }
 
@@ -161,8 +178,8 @@ export function calculateArrhythmiaRisk(intervals: number[]): number {
  */
 export function getArrhythmiaStatusMessage(isArrhythmia: boolean, count: number): string {
   return isArrhythmia 
-    ? `ARRHYTHMIA DETECTED|${count}`
-    : `NORMAL RHYTHM|${count}`;
+    ? `ARRITMIA DETECTADA|${count}`
+    : `RITMO NORMAL|${count}`;
 }
 
 /**
@@ -255,7 +272,6 @@ function updateProcessingMetrics(
 
 /**
  * Get average diagnostics data
- * This was missing and causing the import error
  */
 export function getAverageDiagnostics(): {
   avgProcessTime: number;
@@ -279,7 +295,6 @@ export function getAverageDiagnostics(): {
 
 /**
  * Get detailed quality stats
- * This was missing and causing the import error
  */
 export function getDetailedQualityStats(): {
   qualityDistribution: {
@@ -289,6 +304,7 @@ export function getDetailedQualityStats(): {
     weak: number;
   };
   qualityTrend: string;
+  lastQualityScore?: number;
 } {
   // Default values
   const distribution = {
@@ -318,17 +334,24 @@ export function getDetailedQualityStats(): {
   
   // Determine quality trend
   let trend = "stable";
+  let lastQualityScore = 0;
+  
   if (qualityStatsHistory.length >= 10) {
     const recentAvg = qualityStatsHistory.slice(-5).reduce((sum, item) => sum + item.quality, 0) / 5;
     const previousAvg = qualityStatsHistory.slice(-10, -5).reduce((sum, item) => sum + item.quality, 0) / 5;
     
     if (recentAvg > previousAvg * 1.1) trend = "improving";
     else if (recentAvg < previousAvg * 0.9) trend = "degrading";
+    
+    if (qualityStatsHistory.length > 0) {
+      lastQualityScore = qualityStatsHistory[qualityStatsHistory.length - 1].quality;
+    }
   }
   
   return {
     qualityDistribution: distribution,
-    qualityTrend: trend
+    qualityTrend: trend,
+    lastQualityScore
   };
 }
 
@@ -343,7 +366,7 @@ export function dispatchArrhythmiaVisualizationEvent(
 ): void {
   if (!isArrhythmia) return;
   
-  // Create event for visualization
+  // Create event for visualization with correct event name
   const event = new CustomEvent('arrhythmia-window-detected', {
     detail: {
       start: timestamp,
@@ -355,6 +378,10 @@ export function dispatchArrhythmiaVisualizationEvent(
   // Dispatch event for visualization components to catch
   if (typeof window !== 'undefined') {
     window.dispatchEvent(event);
-    console.log("Arrhythmia visualization event dispatched", timestamp);
+    console.log("EVENTO ARRITMIA DISPATCH: Evento de visualización enviado", { 
+      timestamp, 
+      endTime: timestamp + 2000,
+      strength 
+    });
   }
 }

@@ -91,3 +91,41 @@ export interface ProcessorState {
   calibrationCounter: number;
   lastSignalQuality: number;
 }
+
+/**
+ * Interface for arrhythmia state
+ */
+export interface ArrhythmiaState {
+  isActive: boolean;
+  lastDetectionTime: number;
+  recoveryTime: number;
+  windows: Array<{
+    start: number;
+    end: number;
+  }>;
+}
+
+/**
+ * Return type for the useArrhythmiaDetector hook
+ */
+export interface UseArrhythmiaDetectorReturn {
+  processRRIntervals: (intervals: number[]) => boolean;
+  reset: () => void;
+  getArrhythmiaState: () => ArrhythmiaState;
+  heartRateVariabilityRef: React.MutableRefObject<number[]>;
+  stabilityCounterRef: React.MutableRefObject<number>;
+  lastRRIntervalsRef: React.MutableRefObject<number[]>;
+  lastIsArrhythmiaRef: React.MutableRefObject<boolean>;
+  currentBeatIsArrhythmiaRef: React.MutableRefObject<boolean>;
+  detectArrhythmia: (intervals: number[]) => RRAnalysisResult;
+}
+
+/**
+ * Interface for RR interval analysis result
+ */
+export interface RRAnalysisResult {
+  rmssd: number;
+  rrVariation: number;
+  timestamp: number;
+  isArrhythmia: boolean;
+}

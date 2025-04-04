@@ -229,7 +229,7 @@ export function useSignalProcessor() {
         peakStrength: Math.abs(optimizedValue) * 1.15,
         lastValidBpmTime: lastValidBpmRef.current > 0 ? Date.now() : 0,
         bpmReliability: result.confidence * 100,
-        confidenceStatus: result.confidence > 0.7 ? 'high' : result.confidence > 0.4 ? 'moderate' : 'low',
+        confidenceStatus: result.confidence > 0.7 ? 'high' : result.confidence > 0.4 ? 'medium' : 'low',
         processingStatus: 'optimized',
         rhythmAnalysis: {
           regularity: lastRRIntervalsRef.current.length > 3 ? 100 - calculateVariability(lastRRIntervalsRef.current) * 100 : 0,
@@ -249,6 +249,7 @@ export function useSignalProcessor() {
         bpm: lastValidBpmRef.current > 0 ? lastValidBpmRef.current : (currentBPM > 0 ? currentBPM : 72),
         confidence: 0.25,
         isPeak: false,
+        isArrhythmia: false,
         arrhythmiaCount: 0,
         rrData: {
           intervals: [],
