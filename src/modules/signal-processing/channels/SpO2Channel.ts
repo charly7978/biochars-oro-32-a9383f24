@@ -6,7 +6,7 @@
  * Implementación unificada que mantiene toda la funcionalidad existente
  */
 
-import { SpecializedChannel } from './SpecializedChannel';
+import { SpecializedChannel, ChannelConfig } from './SpecializedChannel';
 import { VitalSignType, ChannelFeedback } from '../../../types/signal';
 
 /**
@@ -16,19 +16,24 @@ export class SpO2Channel extends SpecializedChannel {
   private readonly BASELINE_SPO2 = 97; // Porcentaje base
   private spo2Buffer: number[] = [];
   private readonly BUFFER_SIZE = 10;
-  private recentValues: number[] = [];
   
-  constructor() {
-    super(VitalSignType.SPO2);
+  constructor(config?: ChannelConfig) {
+    super(VitalSignType.SPO2, config);
+  }
+  
+  /**
+   * Apply SpO2-specific optimization to the signal
+   */
+  protected applyChannelSpecificOptimization(value: number): number {
+    // SpO2 specific processing - this is a pass-through implementation
+    return value;
   }
   
   /**
    * Procesa un array de valores PPG y calcula SpO2
    */
   public process(values: number[]): number {
-    // Almacenar valores para su uso posterior
-    this.recentValues = [...values];
-    
+    // If not enough values, return last valid
     if (values.length < 30) {
       return this.getLastValidValue();
     }
@@ -73,6 +78,9 @@ export class SpO2Channel extends SpecializedChannel {
     // Calcular promedio para estabilidad
     const sum = this.spo2Buffer.reduce((a, b) => a + b, 0);
     const avgSpo2 = Math.round(sum / this.spo2Buffer.length);
+    
+    // Update signal quality based on perfusion index
+    this.quality = Math.min(1.0, perfusionIndex * 10);
     
     return avgSpo2;
   }
@@ -122,6 +130,5 @@ export class SpO2Channel extends SpecializedChannel {
   public override reset(): void {
     super.reset();
     this.spo2Buffer = [];
-    this.recentValues = [];
   }
 }

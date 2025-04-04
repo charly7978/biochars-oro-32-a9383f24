@@ -2,6 +2,7 @@
 /**
  * Sistema de tipos unificado para procesamiento de señales
  * Consolida definiciones de tipos de múltiples archivos mientras mantiene toda la funcionalidad
+ * Simplificado para enfocarse en SPO2
  */
 
 // Re-exportamos tipos existentes para mantener compatibilidad
