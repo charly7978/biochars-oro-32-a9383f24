@@ -4,6 +4,7 @@
  * 
  * Signal processing module
  * Central export for all signal processing utilities
+ * Consolidated architecture that maintains all existing functionality
  */
 
 // Export signal distributor
@@ -20,5 +21,14 @@ export { BloodPressureChannel } from './channels/BloodPressureChannel';
 export { SpO2Channel } from './channels/SpO2Channel';
 export { CardiacChannel } from './channels/CardiacChannel';
 
+// Export unified processor (new)
+export { UnifiedSignalProcessor } from './UnifiedSignalProcessor';
+
+// Export unified vital signs processor (new)
+export { UnifiedVitalSignsProcessor } from './UnifiedVitalSignsProcessor';
+
 // Re-export utility types
 export type { SignalDistributorConfig } from '../../types/signal';
+
+// Export from unified types
+export * from '../../types/signal-processing';
