@@ -13,6 +13,14 @@ export enum ErrorLevel {
   CRITICAL = 'critical'
 }
 
+// Estado de la cámara para seguimiento
+export enum CameraState {
+  INACTIVE = 'inactive',
+  REQUESTING = 'requesting',
+  ACTIVE = 'active',
+  ERROR = 'error'
+}
+
 // Estructura para un mensaje de log
 interface LogMessage {
   timestamp: number;
@@ -62,6 +70,48 @@ const globalLogBuffer = new LogBuffer(300);
 // Configuración global
 let consoleOutputEnabled = true;
 let logLevel: ErrorLevel = ErrorLevel.INFO;
+let verboseLogging = false;
+
+/**
+ * Inicializa el sistema de tracking de errores con opciones
+ */
+export function initializeErrorTracking(options: {
+  verbose: boolean;
+  setupGlobalHandlers: boolean;
+}): void {
+  verboseLogging = options.verbose;
+  
+  if (options.setupGlobalHandlers) {
+    // Configurar manejadores globales
+    window.addEventListener('error', (event) => {
+      logError(
+        `Unhandled error: ${event.message || 'Unknown error'} at ${event.filename}:${event.lineno}:${event.colno}`,
+        ErrorLevel.ERROR,
+        'GlobalErrorHandler',
+        { error: event.error }
+      );
+    });
+    
+    window.addEventListener('unhandledrejection', (event) => {
+      logError(
+        `Unhandled promise rejection: ${event.reason}`,
+        ErrorLevel.ERROR,
+        'GlobalPromiseHandler',
+        { reason: event.reason }
+      );
+    });
+    
+    console.log('Global error handlers initialized');
+  }
+}
+
+/**
+ * Configura si el logging debe ser detallado o no
+ */
+export function setVerboseLogging(enabled: boolean): void {
+  verboseLogging = enabled;
+  console.log(`Verbose logging ${enabled ? 'enabled' : 'disabled'}`);
+}
 
 /**
  * Registra un mensaje en el sistema centralizado de logs
@@ -110,6 +160,11 @@ export function logError(
  * Verifica si un nivel de error debe ser mostrado según la configuración
  */
 function isLevelLoggable(level: ErrorLevel): boolean {
+  // Si el modo detallado está activado, mostrar todos los niveles
+  if (verboseLogging) {
+    return true;
+  }
+  
   const levels = [
     ErrorLevel.DEBUG,
     ErrorLevel.INFO,
@@ -150,14 +205,6 @@ export function getAllLogs(): LogMessage[] {
  */
 export function clearLogs(): void {
   globalLogBuffer.clear();
-}
-
-// Estado de la cámara para seguimiento
-export enum CameraState {
-  INACTIVE = 'inactive',
-  REQUESTING = 'requesting',
-  ACTIVE = 'active',
-  ERROR = 'error'
 }
 
 // Estado actual de la cámara
