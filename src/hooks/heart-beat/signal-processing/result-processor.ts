@@ -40,7 +40,7 @@ export function updateLastValidBpm(result: any, lastValidBpmRef: React.MutableRe
 
 /**
  * Handle peak detection
- * Compatible with both simplified and complete call signatures
+ * Simplified signature to match how it's called in signal-processor.ts
  */
 export function handlePeakDetection(
   result: any, 
@@ -63,70 +63,43 @@ export function handlePeakDetection(
 }
 
 /**
- * Enhance diagnostic data with calculated statistics 
- * for improved visualization and analysis
+ * Enhances visualization data for better graph rendering
+ * @param data Raw signal data
+ * @returns Enhanced data for visualization
  */
-export function enhanceDiagnosticData(
-  rrIntervals: number[],
-  signalQuality: number,
-  arrhythmiaCount: number
-): {
-  rrVariability: number;
-  signalDiagnostic: string;
-  rhythmStatus: string;
-  rhythmQuality: number;
-  timeInterval: number;
-} {
-  // Calculate variability if we have enough intervals
-  let rrVariability = 0;
-  let timeInterval = 0;
+export function enhanceVisualizationData(data: number[]): number[] {
+  if (!data || data.length === 0) return [];
   
-  if (rrIntervals.length >= 3) {
-    const avgRR = rrIntervals.reduce((a, b) => a + b, 0) / rrIntervals.length;
-    const variations = rrIntervals.map(rr => Math.abs(rr - avgRR) / avgRR);
-    rrVariability = variations.reduce((a, b) => a + b, 0) / variations.length;
-    timeInterval = avgRR;
-  }
+  // Calculate average for normalization
+  const sum = data.reduce((acc, val) => acc + val, 0);
+  const avg = sum / data.length;
   
-  // Determine signal diagnostic status
-  let signalDiagnostic = "Señal insuficiente";
-  if (signalQuality > 80) {
-    signalDiagnostic = "Señal óptima";
-  } else if (signalQuality > 60) {
-    signalDiagnostic = "Señal buena";
-  } else if (signalQuality > 40) {
-    signalDiagnostic = "Señal aceptable";
-  } else if (signalQuality > 20) {
-    signalDiagnostic = "Señal débil";
-  }
-  
-  // Determine rhythm quality and status
-  let rhythmStatus = "Ritmo normal";
-  let rhythmQuality = 100;
-  
-  if (arrhythmiaCount > 0) {
-    rhythmStatus = `Arritmia${arrhythmiaCount > 1 ? 's' : ''} detectada${arrhythmiaCount > 1 ? 's' : ''}`;
-    rhythmQuality = 100 - (arrhythmiaCount * 10);
-    
-    if (rrVariability > 0.2) {
-      rhythmStatus = "Alta variabilidad RR";
-    }
-  } else if (rrIntervals.length > 3) {
-    if (rrVariability > 0.15) {
-      rhythmStatus = "Variabilidad elevada";
-      rhythmQuality = 85;
-    } else if (rrVariability < 0.05) {
-      rhythmStatus = "Variabilidad muy baja";
-      rhythmQuality = 90;
-    }
-  }
-  
-  return {
-    rrVariability,
-    signalDiagnostic,
-    rhythmStatus,
-    rhythmQuality,
-    timeInterval
-  };
+  // Enhance signal amplitude for better visualization
+  return data.map(val => {
+    // Center around zero and amplify differences
+    const centered = val - avg;
+    // Apply amplification factor (higher for small values, lower for large values)
+    const amplificationFactor = Math.min(3, 2.5 / (Math.abs(centered) + 0.5));
+    // Return amplified centered value
+    return centered * amplificationFactor;
+  });
 }
 
+/**
+ * Prepares data for PPG graph rendering
+ * @param buffer Signal buffer
+ * @param peaks Peak information array
+ * @returns Formatted data for graph
+ */
+export function prepareGraphData(buffer: number[], peaks: boolean[] = []): any[] {
+  if (!buffer || buffer.length === 0) return [];
+  
+  return buffer.map((value, index) => {
+    const isPeak = index < peaks.length ? peaks[index] : false;
+    return {
+      time: index,
+      value: value,
+      isPeak: isPeak
+    };
+  });
+}

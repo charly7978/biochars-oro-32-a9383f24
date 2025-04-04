@@ -71,25 +71,17 @@ export function createWeakSignalResult(arrhythmiaCount = 0): HeartBeatResult {
 /**
  * Handles peak detection and beep requests
  * Enhanced for improved visualization and response
- * Updated to match signature in result-processor.ts with optional parameters
  */
 export function handlePeakDetection(
   result: HeartBeatResult,
   lastPeakTimeRef: React.MutableRefObject<number | null>,
-  requestImmediateBeep: (value: number) => boolean,
-  isMonitoringRef?: React.MutableRefObject<boolean>,
-  value?: number
+  requestImmediateBeep: (value: number) => boolean
 ): void {
-  const now = Date.now();
-  
   if (result.isPeak) {
+    const now = Date.now();
+    
     // Update peak time
     lastPeakTimeRef.current = now;
-    
-    // If monitoring is active and we have a value, trigger beep
-    if ((!isMonitoringRef || isMonitoringRef.current) && value !== undefined) {
-      requestImmediateBeep(value);
-    }
     
     // Enhanced diagnostics for peak detection
     if (result.diagnosticData) {
