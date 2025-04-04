@@ -1,9 +1,11 @@
+
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Activity, Zap, Layers, Fingerprint } from 'lucide-react';
+import FingerDetectionMonitor from '@/components/FingerDetectionMonitor';
 
 const MonitoringPage: React.FC = () => {
   const navigate = useNavigate();
@@ -59,7 +61,10 @@ const MonitoringPage: React.FC = () => {
                 Sistema de monitoreo sin simulaciones
               </div>
             </TabsContent>
-
+            
+            <TabsContent value="finger">
+              <FingerDetectionMonitor />
+            </TabsContent>
             
           </Tabs>
         </CardContent>

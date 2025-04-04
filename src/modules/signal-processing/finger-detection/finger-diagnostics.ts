@@ -36,9 +36,9 @@ class FingerDiagnostics {
     }
     
     // Registrar eventos importantes
-    if (['FINGER_DETECTED', 'FINGER_LOST', 'DETECTOR_RESET'].includes(event.eventType)) {
+    if ([DiagnosticEventType.FINGER_DETECTED, DiagnosticEventType.FINGER_LOST, DiagnosticEventType.DETECTOR_RESET].includes(event.type)) {
       logError(
-        `FingerDiagnostics: ${event.eventType} from ${event.source} with confidence ${event.confidence}`,
+        `FingerDiagnostics: ${event.type} from ${event.source} with confidence ${event.confidence}`,
         ErrorLevel.INFO,
         "FingerDetection"
       );
@@ -60,21 +60,22 @@ class FingerDiagnostics {
     const eventCounts: Record<string, number> = {};
     
     this.events.forEach(event => {
-      if (!eventCounts[event.eventType]) {
-        eventCounts[event.eventType] = 0;
+      if (!eventCounts[event.type]) {
+        eventCounts[event.type] = 0;
       }
-      eventCounts[event.eventType]++;
+      eventCounts[event.type]++;
     });
     
     // Calcular confianza promedio
-    const confidenceSum = this.events.reduce((sum, event) => sum + event.confidence, 0);
+    const confidenceSum = this.events.reduce((sum, event) => sum + (event.confidence || 0), 0);
     const avgConfidence = this.events.length > 0 ? confidenceSum / this.events.length : 0;
     
     return {
       totalEvents: this.events.length,
       eventCounts,
       avgConfidence,
-      lastEvent: this.events[0]
+      lastEvent: this.events[0],
+      events: this.events.slice(0, 10) // Include the 10 most recent events
     };
   }
   
@@ -99,11 +100,13 @@ export function reportFingerDetection(
   details?: Record<string, any>
 ): void {
   fingerDiagnostics.logEvent({
-    eventType: isDetected ? 'FINGER_DETECTED' : 'FINGER_LOST',
+    type: isDetected ? DiagnosticEventType.FINGER_DETECTED : DiagnosticEventType.FINGER_LOST,
+    message: isDetected ? "Finger detected" : "Finger lost",
     source,
     isFingerDetected: isDetected,
     confidence,
-    details
+    details,
+    timestamp: Date.now()
   });
 }
 
@@ -111,18 +114,11 @@ export function reportFingerDetection(
  * Reporta un evento de diagnóstico genérico
  */
 export function reportDiagnosticEvent(
-  eventType: DiagnosticEventType,
-  source: DetectionSource,
-  isFingerDetected: boolean,
-  confidence: number,
-  details?: Record<string, any>
+  event: Partial<DiagnosticEvent> & { type: DiagnosticEventType, message: string }
 ): void {
   fingerDiagnostics.logEvent({
-    eventType,
-    source,
-    isFingerDetected,
-    confidence,
-    details
+    ...event,
+    timestamp: event.timestamp || Date.now()
   });
 }
 

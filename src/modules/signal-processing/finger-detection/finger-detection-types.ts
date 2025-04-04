@@ -47,27 +47,27 @@ export interface DetectionState {
 /**
  * Tipos de eventos de diagnóstico
  */
-export type DiagnosticEventType =
-  | 'detection_change'
-  | 'threshold_adaptation'
-  | 'calibration_update'
-  | 'environmental_change'
-  | 'signal_quality'
-  | 'error'
-  | 'info'
-  | 'FINGER_DETECTED'
-  | 'FINGER_LOST'
-  | 'DETECTOR_RESET'
-  | 'PATTERN_DETECTED'
-  | 'PATTERN_LOST'
-  | 'PATTERN_TIMEOUT';
+export enum DiagnosticEventType {
+  DETECTION_CHANGE = 'detection_change',
+  THRESHOLD_ADAPTATION = 'threshold_adaptation',
+  CALIBRATION_UPDATE = 'calibration_update',
+  ENVIRONMENTAL_CHANGE = 'environmental_change',
+  SIGNAL_QUALITY = 'signal_quality',
+  ERROR = 'error',
+  INFO = 'info',
+  FINGER_DETECTED = 'FINGER_DETECTED',
+  FINGER_LOST = 'FINGER_LOST',
+  DETECTOR_RESET = 'DETECTOR_RESET',
+  PATTERN_DETECTED = 'PATTERN_DETECTED',
+  PATTERN_LOST = 'PATTERN_LOST',
+  PATTERN_TIMEOUT = 'PATTERN_TIMEOUT'
+}
 
 /**
  * Eventos de diagnóstico
  */
 export interface DiagnosticEvent {
   type: DiagnosticEventType;
-  eventType?: DiagnosticEventType; // For backward compatibility
   message: string;
   source?: DetectionSource;
   isFingerDetected?: boolean;
@@ -83,14 +83,14 @@ export interface EnvironmentalState {
   noise: number;
   lighting: number;
   motion: number;
-  brightness?: number; // For backward compatibility
-  movement?: number; // For backward compatibility
-  signalToNoiseRatio?: number; // For backward compatibility
+  brightness?: number; 
+  movement?: number; 
+  signalToNoiseRatio?: number;
   device?: {
     type: string;
     model?: string;
     capabilities?: string[];
-    camera?: any; // For backward compatibility
+    camera?: any;
   };
   lastUpdate?: number;
 }
@@ -110,5 +110,5 @@ export interface AdaptiveCalibrationParams {
   amplitudeThreshold?: number;
   falsePositiveReduction?: number;
   falseNegativeReduction?: number;
-  [key: string]: number | EnvironmentalState | undefined;
+  [key: string]: number | undefined;
 }

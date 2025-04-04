@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Slider } from "@/components/ui/slider";
@@ -76,10 +75,12 @@ const FingerDetectionMonitor: React.FC<FingerDetectionMonitorProps> = ({ classNa
   useEffect(() => {
     const intervalId = setInterval(() => {
       setDetectionState(getFingerDetectionState());
-      setDiagnosticEvents([]);  // Simplificado para evitar errores
+      const stats = getDiagnosticStats();
+      setDiagnosticEvents(stats.events || []);
       setIsRhythmDetected(isFingerDetectedByRhythm());
       setIsAmplitudeDetected(isFingerDetectedByAmplitude());
       setCalibrationParams(getCalibrationParameters());
+      setEnvironmentalState(getCalibrationParameters().environmentalState);
     }, 500);
     
     return () => clearInterval(intervalId);

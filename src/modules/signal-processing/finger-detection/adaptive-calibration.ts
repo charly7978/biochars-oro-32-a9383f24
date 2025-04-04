@@ -1,3 +1,4 @@
+
 /**
  * Módulo de calibración adaptativa para el detector de dedos
  * Ajusta los umbrales de detección según las condiciones ambientales
@@ -5,8 +6,7 @@
 
 import { logError, ErrorLevel } from '@/utils/debugUtils';
 import { reportDiagnosticEvent } from './finger-diagnostics';
-import { DiagnosticEventType } from './finger-detection-types';
-import type { AdaptiveCalibrationParams, EnvironmentalState } from './finger-detection-types';
+import { DiagnosticEventType, AdaptiveCalibrationParams, EnvironmentalState } from './finger-detection-types';
 
 /**
  * Estado interno de calibración
@@ -100,6 +100,7 @@ export function updateEnvironmentalState(newState: Partial<EnvironmentalState>):
   reportDiagnosticEvent({
     type: DiagnosticEventType.ENVIRONMENTAL_CHANGE,
     message: `Environmental state updated: noise=${currentState.noise}, lighting=${currentState.lighting}, motion=${currentState.motion}`,
+    timestamp: Date.now()
   });
   
   // Guardar en historial
@@ -182,6 +183,7 @@ function adaptToDeviceChange(): void {
   reportDiagnosticEvent({
     type: DiagnosticEventType.CALIBRATION_UPDATE,
     message: `Calibration reset due to device change: ${JSON.stringify(currentState.device)}`,
+    timestamp: Date.now()
   });
 }
 
@@ -198,7 +200,7 @@ function updateParameter(paramName: keyof AdaptiveCalibrationParams, newValue: n
     return;
   }
   
-  const oldValue = currentParams[paramName];
+  const oldValue = currentParams[paramName] as number;
   
   // Usar tasa de adaptación para suavizar cambios
   currentParams[paramName] = (1 - currentParams.adaptationRate) * oldValue + 
@@ -206,7 +208,8 @@ function updateParameter(paramName: keyof AdaptiveCalibrationParams, newValue: n
   
   reportDiagnosticEvent({
     type: DiagnosticEventType.CALIBRATION_UPDATE,
-    message: `Parameter ${paramName} updated: ${oldValue.toFixed(4)} -> ${currentParams[paramName].toFixed(4)}`
+    message: `Parameter ${paramName} updated: ${oldValue.toFixed(4)} -> ${(currentParams[paramName] as number).toFixed(4)}`,
+    timestamp: Date.now()
   });
 }
 
@@ -236,7 +239,8 @@ export function resetCalibration(): void {
   
   reportDiagnosticEvent({
     type: DiagnosticEventType.CALIBRATION_UPDATE,
-    message: "Calibration parameters reset to default values"
+    message: "Calibration parameters reset to default values",
+    timestamp: Date.now()
   });
 }
 
