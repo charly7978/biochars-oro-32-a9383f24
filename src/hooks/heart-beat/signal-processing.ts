@@ -63,6 +63,7 @@ export function createWeakSignalResult(arrhythmiaCount = 0): HeartBeatResult {
 /**
  * Handles peak detection and beep requests
  * Enhanced for improved visualization and response
+ * Fixed function signature to match how it's called in signal-processor.ts
  */
 export function handlePeakDetection(
   result: HeartBeatResult,
