@@ -1,6 +1,6 @@
 
 import React, { useEffect, useState } from 'react';
-import { Bell, BellOff } from 'lucide-react';
+import { Bell, BellOff, HeartPulse, AlertTriangle } from 'lucide-react';
 
 interface ArrhythmiaIndicatorProps {
   isActive: boolean;
@@ -30,14 +30,14 @@ const ArrhythmiaIndicator = ({ isActive, count, className = '' }: ArrhythmiaIndi
     <div 
       className={`flex items-center gap-1 px-2 py-1 rounded-full transition-all duration-300 ${
         isActive 
-          ? 'bg-red-600/90 text-white animate-pulse' 
+          ? 'bg-red-600/90 text-white animate-pulse shadow-lg shadow-red-600/50' 
           : 'bg-orange-600/70 text-white'
       } ${className}`}
     >
       {isActive ? (
-        <Bell className="w-4 h-4" />
+        <AlertTriangle className="w-4 h-4" />
       ) : (
-        <BellOff className="w-4 h-4" />
+        <Bell className="w-4 h-4" />
       )}
       <span className="text-xs font-semibold">
         {count > 0 ? `${count} ${count === 1 ? 'Arritmia' : 'Arritmias'}` : 'Normal'}

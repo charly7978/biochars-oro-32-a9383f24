@@ -93,7 +93,8 @@ export function createWeakSignalResult(arrhythmiaCount = 0): HeartBeatResult {
       detectionStatus: 'insufficient_signal',
       lastProcessedTime: Date.now(),
       isFingerDetected: false,
-      isArrhythmia: false
+      isArrhythmia: false,
+      arrhythmiaCount: 0
     }
   };
 }
@@ -189,7 +190,7 @@ export function processLowConfidenceResult(
         originalConfidence: result.confidence,
         adjustedConfidence: Math.max(0.3, result.confidence),
         arrhythmiaTracking: true,
-        arrhythmiaCount
+        arrhythmiaCount: arrhythmiaCount
       }
     };
     
@@ -205,7 +206,7 @@ export function processLowConfidenceResult(
         ...(result.diagnosticData || {}),
         bpmStatus: 'zero',
         arrhythmiaTracking: true,
-        arrhythmiaCount
+        arrhythmiaCount: arrhythmiaCount
       }
     };
   }
@@ -216,7 +217,7 @@ export function processLowConfidenceResult(
     diagnosticData: {
       ...(result.diagnosticData || {}),
       processingStatus: 'normal',
-      arrhythmiaCount
+      arrhythmiaCount: arrhythmiaCount
     }
   };
 }

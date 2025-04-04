@@ -1,6 +1,5 @@
 
 import React, { useEffect, useRef, useState } from 'react';
-import { testAudioSystem, playBeep } from '@/services/AudioManager';
 import ArrhythmiaIndicator from './ArrhythmiaIndicator';
 
 export interface PPGSignalMeterProps {
@@ -10,7 +9,8 @@ export interface PPGSignalMeterProps {
   onStartMeasurement: () => void;
   onReset: () => void;
   arrhythmiaStatus: string;
-  isArrhythmia: boolean;
+  isArrhythmia?: boolean;
+  rawArrhythmiaData?: any;
 }
 
 const PPGSignalMeter: React.FC<PPGSignalMeterProps> = ({
@@ -42,6 +42,7 @@ const PPGSignalMeter: React.FC<PPGSignalMeterProps> = ({
   const audioContextRef = useRef<AudioContext | null>(null);
   const lastBeepTime = useRef<number>(0);
   const lastArrhythmiaTime = useRef<number>(0);
+  const vibrationSupported = useRef(typeof navigator !== 'undefined' && 'vibrate' in navigator);
   
   // Parse arrhythmia status to get count
   useEffect(() => {
@@ -68,7 +69,8 @@ const PPGSignalMeter: React.FC<PPGSignalMeterProps> = ({
       
       // Play special arrhythmia beep
       if (now - lastArrhythmiaTime.current > 2000) {
-        playBeep('arrhythmia');
+        playArrhythmiaBeep();
+        vibrateDevice();
         lastArrhythmiaTime.current = now;
       }
       
@@ -94,12 +96,39 @@ const PPGSignalMeter: React.FC<PPGSignalMeterProps> = ({
     if (!isInitialized) {
       try {
         audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
-        console.log("PPGSignalMeter: Inicializando Audio Context");
+        console.log("PPGSignalMeter: Initializing Audio Context");
         setIsInitialized(true);
       } catch (error) {
         console.error("Error initializing audio context:", error);
       }
     }
+    
+    // Listen for arrhythmia events
+    const handleArrhythmiaEvent = (event: CustomEvent) => {
+      const { timestamp, rrIntervals, heartRate } = event.detail;
+      
+      // Trigger arrhythmia visualization and feedback
+      setArrhythmiaInfo(prev => ({
+        active: true,
+        lastTime: timestamp,
+        count: prev.count + 1
+      }));
+      
+      // Play arrhythmia beep
+      playArrhythmiaBeep();
+      vibrateDevice();
+      
+      console.log("PPGSignalMeter: Arrhythmia event received", { 
+        timestamp, heartRate, 
+        intervalCount: rrIntervals?.length 
+      });
+    };
+    
+    window.addEventListener('arrhythmia-detected', handleArrhythmiaEvent as EventListener);
+    
+    return () => {
+      window.removeEventListener('arrhythmia-detected', handleArrhythmiaEvent as EventListener);
+    };
   }, [isInitialized]);
 
   // Update datapoints with new values
@@ -131,7 +160,6 @@ const PPGSignalMeter: React.FC<PPGSignalMeterProps> = ({
       if (value > 0.1 && now - lastBeepTime.current > 600) {
         // Adjust volume based on quality
         const beepVolume = Math.min(0.01 + quality / 1000, 0.05);
-        console.log("PPGSignalMeter: Reproduciendo beep para círculo dibujado, volumen:", beepVolume);
         playBeepWithVolume(440, beepVolume, 50);
         lastBeepTime.current = now;
       }
@@ -259,6 +287,18 @@ const PPGSignalMeter: React.FC<PPGSignalMeterProps> = ({
       ctx.textAlign = 'right';
       ctx.fillText(qualityText, width - 10, 20);
       
+      // Show arrhythmia status if active
+      if (isArrhythmiaInfo.active) {
+        const arrhythmiaText = `¡ARRITMIA DETECTADA!`;
+        ctx.font = 'bold 16px Arial';
+        ctx.fillStyle = '#ff0000';
+        ctx.textAlign = 'center';
+        // Flash effect
+        if (Math.floor(Date.now() / 500) % 2 === 0) {
+          ctx.fillText(arrhythmiaText, width / 2, height - 20);
+        }
+      }
+      
       animationFrameRef.current = requestAnimationFrame(draw);
     };
     
@@ -296,10 +336,83 @@ const PPGSignalMeter: React.FC<PPGSignalMeterProps> = ({
       console.error("Error playing beep:", error);
     }
   };
+  
+  // Play arrhythmia alert sound - more distinctive from regular beep
+  const playArrhythmiaBeep = () => {
+    if (!audioContextRef.current) return;
+    
+    try {
+      // Create a more complex sound for arrhythmia alerts
+      const mainOscillator = audioContextRef.current.createOscillator();
+      const modulatorOscillator = audioContextRef.current.createOscillator();
+      const mainGain = audioContextRef.current.createGain();
+      const modulatorGain = audioContextRef.current.createGain();
+      
+      // Main tone
+      mainOscillator.type = 'triangle';
+      mainOscillator.frequency.value = 800;
+      
+      // Modulator for alarm-like sound
+      modulatorOscillator.type = 'square';
+      modulatorOscillator.frequency.value = 8;
+      
+      // Connect modulator to main oscillator gain
+      modulatorGain.gain.value = 0.5;
+      modulatorOscillator.connect(modulatorGain);
+      
+      // Main gain settings
+      mainGain.gain.value = 0.2;
+      
+      // Envelope for the sound
+      const now = audioContextRef.current.currentTime;
+      mainGain.gain.setValueAtTime(0, now);
+      mainGain.gain.linearRampToValueAtTime(0.2, now + 0.05);
+      mainGain.gain.exponentialRampToValueAtTime(0.01, now + 0.5);
+      
+      // Connect modulator to control main gain
+      modulatorGain.connect(mainGain.gain);
+      
+      // Connect main oscillator to output
+      mainOscillator.connect(mainGain);
+      mainGain.connect(audioContextRef.current.destination);
+      
+      // Start and stop
+      mainOscillator.start();
+      modulatorOscillator.start();
+      mainOscillator.stop(now + 0.5);
+      modulatorOscillator.stop(now + 0.5);
+      
+      // Cleanup
+      setTimeout(() => {
+        mainOscillator.disconnect();
+        modulatorOscillator.disconnect();
+        mainGain.disconnect();
+        modulatorGain.disconnect();
+      }, 600);
+    } catch (error) {
+      console.error("Error playing arrhythmia alert:", error);
+    }
+  };
+  
+  // Vibrate device for arrhythmia alerts
+  const vibrateDevice = () => {
+    if (vibrationSupported.current) {
+      try {
+        // Pattern for arrhythmia alert: vibrate-pause-vibrate
+        navigator.vibrate([200, 100, 200]);
+      } catch (error) {
+        console.error("Error vibrating device:", error);
+      }
+    }
+  };
 
   // Test audio system by playing different types of beeps
   const testAudio = () => {
-    testAudioSystem();
+    playBeepWithVolume(440, 0.1, 100);
+    setTimeout(() => playArrhythmiaBeep(), 500);
+    if (vibrationSupported.current) {
+      setTimeout(() => navigator.vibrate(100), 1000);
+    }
   };
 
   // Helper to check if arrhythmia is active

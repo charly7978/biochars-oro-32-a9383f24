@@ -1,9 +1,8 @@
-
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { HeartBeatProcessor } from './heart-beat/heart-beat-processor';
 import { HeartBeatResult, UseHeartBeatReturn } from './heart-beat/types';
 import { useArrhythmiaDetector } from './heart-beat/arrhythmia-detector';
 import { getDetailedQualityStats, clearDiagnosticsData } from './heart-beat/signal-processing/peak-detection';
+import { HeartBeatProcessor } from '../modules/HeartBeatProcessor';
 
 /**
  * Hook for processing heart beat signals with improved detection algorithms
