@@ -19,7 +19,6 @@ export { unifiedFingerDetector, resetFingerDetector } from './utils/unified-fing
 
 // Exportar optimizador bayesiano
 export { 
-  BayesianOptimizer,
   createBayesianOptimizer,
   createDefaultPPGOptimizer,
   createHeartbeatOptimizer,
@@ -29,7 +28,13 @@ export {
 } from './utils/bayesian-optimization';
 
 // Use 'export type' for types when isolatedModules is enabled
-export type { BayesianDataPoint } from './utils/bayesian-optimization';
+export type { 
+  BayesianOptimizer, 
+  BayesianDataPoint,
+  BayesianOptimizerConfig,
+  GaussianProcess,
+  ParameterOptions
+} from './utils/bayesian-optimization';
 
 // Exportar sistema adaptativo
 export { getAdaptiveSystemCoordinator, MessageType } from './utils/adaptive-system-coordinator';

@@ -1,10 +1,11 @@
+
 /**
  * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
  * 
  * Implementación del optimizador de parámetros de señal
  * Utiliza optimización bayesiana para ajustar parámetros de procesamiento
  */
-import { BayesianOptimizer, BayesianOptimizerConfig } from './bayesian-optimization';
+import { BayesianOptimizer, BayesianOptimizerConfig, createBayesianOptimizer } from './bayesian-optimization';
 
 /**
  * Estados del optimizador durante el ciclo de optimización
@@ -78,17 +79,20 @@ export class SignalParameterOptimizer {
   
   /**
    * Constructor del optimizador
-   * @param parameters Lista de parámetros a optimizar
+   * @param config Configuración del optimizador bayesiano
    */
-  constructor(parameters: BayesianOptimizerConfig) {
-    this.optimizer = new BayesianOptimizer(parameters);
-    
-    // Inicializar parámetros actuales con valores iniciales
-    if (parameters.parameters) {
-      parameters.parameters.forEach(param => {
+  constructor(config: BayesianOptimizerConfig) {
+    // Create bayesian optimizer with provided parameters
+    if (config.parameters && config.parameters.length > 0) {
+      this.optimizer = createBayesianOptimizer(config.parameters, {}, config);
+      
+      // Initialize current parameters with default values
+      config.parameters.forEach(param => {
         this.currentParams[param.name] = param.initialValue !== undefined ? 
           param.initialValue : param.default;
       });
+    } else {
+      throw new Error("Parameter optimizer requires parameter definitions");
     }
   }
   
@@ -194,32 +198,35 @@ export class SignalParameterOptimizer {
    * Ejecuta el algoritmo de optimización
    */
   private runOptimization(): void {
-    // Obtener el siguiente punto a evaluar del optimizador
-    const nextParams = this.optimizer.nextPointToEvaluate();
-    
-    // Actualizar parámetros actuales
-    this.currentParams = { ...nextParams };
-    
-    // Cambiar estado a aplicación
-    this.state = OptimizationState.APPLYING;
-    console.log('Optimization phase: APPLYING new parameters', nextParams);
-    
-    // Aplicar nuevos parámetros
-    if (this.applyFunction) {
-      this.applyFunction(nextParams);
-    }
-    
-    // Cambiar estado a evaluación
-    this.state = OptimizationState.EVALUATING;
-    console.log('Optimization phase: EVALUATING new parameters');
-    
-    // Reiniciar contadores para evaluación
-    this.currentObservationCount = 0;
-    this.tempObservations = [];
-    
-    // Actualizar tiempos y contadores
-    this.lastOptimizationTime = Date.now();
-    this.cycleCount++;
+    // Get next parameters to try
+    this.optimizer.suggest(this.scoreFunction!).then(nextParams => {
+      // Actualizar parámetros actuales
+      this.currentParams = { ...nextParams };
+      
+      // Cambiar estado a aplicación
+      this.state = OptimizationState.APPLYING;
+      console.log('Optimization phase: APPLYING new parameters', nextParams);
+      
+      // Aplicar nuevos parámetros
+      if (this.applyFunction) {
+        this.applyFunction(nextParams);
+      }
+      
+      // Cambiar estado a evaluación
+      this.state = OptimizationState.EVALUATING;
+      console.log('Optimization phase: EVALUATING new parameters');
+      
+      // Reiniciar contadores para evaluación
+      this.currentObservationCount = 0;
+      this.tempObservations = [];
+      
+      // Actualizar tiempos y contadores
+      this.lastOptimizationTime = Date.now();
+      this.cycleCount++;
+    }).catch(error => {
+      console.error('Error during optimization:', error);
+      this.state = OptimizationState.IDLE;
+    });
   }
   
   /**
@@ -300,7 +307,7 @@ export class SignalParameterOptimizer {
    * Obtiene los mejores parámetros encontrados
    */
   public getBestParameters(): Record<string, number> | null {
-    return this.optimizer.getBestParameters();
+    return this.optimizer.getCurrentBest()?.params || null;
   }
   
   /**
@@ -323,7 +330,7 @@ export class SignalParameterOptimizer {
  * Crea un nuevo optimizador de parámetros de señal
  */
 export function createSignalParameterOptimizer(
-  parameters: BayesianOptimizerConfig
+  config: BayesianOptimizerConfig
 ): SignalParameterOptimizer {
-  return new SignalParameterOptimizer(parameters);
+  return new SignalParameterOptimizer(config);
 }
