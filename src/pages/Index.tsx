@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect } from "react";
 import { Link } from "react-router-dom";
 import VitalSign from "@/components/VitalSign";
@@ -9,6 +10,27 @@ import PPGSignalMeter from "@/components/PPGSignalMeter";
 import MeasurementConfirmationDialog from "@/components/MeasurementConfirmationDialog";
 import { Button } from "@/components/ui/button";
 import { Activity } from "lucide-react";
+
+// Define interfaces for the browser compatibility
+interface DocumentWithFullscreen extends Document {
+  fullscreenElement?: Element;
+  mozFullScreenElement?: Element;
+  webkitFullscreenElement?: Element;
+  msFullscreenElement?: Element;
+}
+
+interface ElementWithFullscreen extends HTMLElement {
+  requestFullscreen?: () => Promise<void>;
+  webkitRequestFullscreen?: () => Promise<void>;
+  mozRequestFullScreen?: () => Promise<void>;
+  msRequestFullscreen?: () => Promise<void>;
+}
+
+interface WindowWithAndroid extends Window {
+  AndroidFullScreen?: {
+    immersiveMode(success: () => void, error: () => void): void;
+  };
+}
 
 const Index = () => {
   const [isMonitoring, setIsMonitoring] = useState(false);
@@ -28,28 +50,31 @@ const Index = () => {
   const [arrhythmiaCount, setArrhythmiaCount] = useState("--");
   const [elapsedTime, setElapsedTime] = useState(0);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
-  const measurementTimerRef = useRef(null);
+  const measurementTimerRef = useRef<number | null>(null);
   
   const { startProcessing, stopProcessing, lastSignal, processFrame } = useSignalProcessor();
   const { processSignal: processHeartBeat } = useHeartBeatProcessor();
   const { processSignal: processVitalSigns, reset: resetVitalSigns } = useVitalSignsProcessor();
 
   const enterFullScreen = async () => {
-    const elem = document.documentElement;
     try {
+      const elem = document.documentElement as ElementWithFullscreen;
+      const doc = document as DocumentWithFullscreen;
+      const win = window as WindowWithAndroid;
+      
       if (elem.requestFullscreen) {
-        await elem.requestFullscreen({ navigationUI: "hide" });
+        await elem.requestFullscreen();
       } else if (elem.webkitRequestFullscreen) {
-        await elem.webkitRequestFullscreen({ navigationUI: "hide" });
+        await elem.webkitRequestFullscreen();
       } else if (elem.mozRequestFullScreen) {
-        await elem.mozRequestFullScreen({ navigationUI: "hide" });
+        await elem.mozRequestFullScreen();
       } else if (elem.msRequestFullscreen) {
-        await elem.msRequestFullscreen({ navigationUI: "hide" });
+        await elem.msRequestFullscreen();
       }
       
       if (window.navigator.userAgent.match(/Android/i)) {
-        if (window.AndroidFullScreen) {
-          window.AndroidFullScreen.immersiveMode(
+        if (win.AndroidFullScreen) {
+          win.AndroidFullScreen.immersiveMode(
             function() { console.log('Immersive mode enabled'); },
             function() { console.log('Failed to enable immersive mode'); }
           );
@@ -61,7 +86,7 @@ const Index = () => {
   };
 
   useEffect(() => {
-    const preventScroll = (e) => e.preventDefault();
+    const preventScroll = (e: Event) => e.preventDefault();
     
     const lockOrientation = async () => {
       try {
@@ -75,7 +100,7 @@ const Index = () => {
     
     const setMaxResolution = () => {
       if ('devicePixelRatio' in window && window.devicePixelRatio !== 1) {
-        document.body.style.zoom = 1 / window.devicePixelRatio;
+        document.body.style.zoom = (1 / window.devicePixelRatio).toString();
       }
     };
     
@@ -93,7 +118,7 @@ const Index = () => {
     window.addEventListener('orientationchange', enterFullScreen);
     
     document.addEventListener('fullscreenchange', () => {
-      if (!document.fullscreenElement) {
+      if (!(document as DocumentWithFullscreen).fullscreenElement) {
         setTimeout(enterFullScreen, 1000);
       }
     });
@@ -198,58 +223,63 @@ const Index = () => {
     }
   };
 
-  const handleStreamReady = (stream) => {
+  const handleStreamReady = (stream: MediaStream) => {
     if (!isMonitoring) return;
     
     const videoTrack = stream.getVideoTracks()[0];
-    const imageCapture = new ImageCapture(videoTrack);
     
-    const capabilities = videoTrack.getCapabilities();
-    if (capabilities.width && capabilities.height) {
-      const maxWidth = capabilities.width.max;
-      const maxHeight = capabilities.height.max;
+    if (typeof window !== 'undefined' && 'ImageCapture' in window) {
+      const imageCapture = new (window as any).ImageCapture(videoTrack);
       
-      videoTrack.applyConstraints({
-        width: { ideal: maxWidth },
-        height: { ideal: maxHeight },
-        torch: true
-      }).catch(err => console.error("Error aplicando configuración de alta resolución:", err));
-    } else if (videoTrack.getCapabilities()?.torch) {
-      videoTrack.applyConstraints({
-        advanced: [{ torch: true }]
-      }).catch(err => console.error("Error activando linterna:", err));
-    }
-    
-    const tempCanvas = document.createElement('canvas');
-    const tempCtx = tempCanvas.getContext('2d');
-    if (!tempCtx) {
-      console.error("No se pudo obtener el contexto 2D");
-      return;
-    }
-    
-    const processImage = async () => {
-      if (!isMonitoring) return;
-      
-      try {
-        const frame = await imageCapture.grabFrame();
-        tempCanvas.width = frame.width;
-        tempCanvas.height = frame.height;
-        tempCtx.drawImage(frame, 0, 0);
-        const imageData = tempCtx.getImageData(0, 0, frame.width, frame.height);
-        processFrame(imageData);
+      const capabilities = videoTrack.getCapabilities();
+      if (capabilities.width && capabilities.height) {
+        const maxWidth = capabilities.width.max;
+        const maxHeight = capabilities.height.max;
         
-        if (isMonitoring) {
-          requestAnimationFrame(processImage);
-        }
-      } catch (error) {
-        console.error("Error capturando frame:", error);
-        if (isMonitoring) {
-          requestAnimationFrame(processImage);
-        }
+        videoTrack.applyConstraints({
+          width: { ideal: maxWidth },
+          height: { ideal: maxHeight },
+          torch: true
+        }).catch(err => console.error("Error aplicando configuración de alta resolución:", err));
+      } else if (videoTrack.getCapabilities()?.torch) {
+        videoTrack.applyConstraints({
+          advanced: [{ torch: true }]
+        }).catch(err => console.error("Error activando linterna:", err));
       }
-    };
+      
+      const tempCanvas = document.createElement('canvas');
+      const tempCtx = tempCanvas.getContext('2d');
+      if (!tempCtx) {
+        console.error("No se pudo obtener el contexto 2D");
+        return;
+      }
+      
+      const processImage = async () => {
+        if (!isMonitoring) return;
+        
+        try {
+          const frame = await imageCapture.grabFrame();
+          tempCanvas.width = frame.width;
+          tempCanvas.height = frame.height;
+          tempCtx.drawImage(frame, 0, 0);
+          const imageData = tempCtx.getImageData(0, 0, frame.width, frame.height);
+          processFrame(imageData);
+          
+          if (isMonitoring) {
+            requestAnimationFrame(processImage);
+          }
+        } catch (error) {
+          console.error("Error capturando frame:", error);
+          if (isMonitoring) {
+            requestAnimationFrame(processImage);
+          }
+        }
+      };
 
-    processImage();
+      processImage();
+    } else {
+      console.error("ImageCapture API not supported in this browser");
+    }
   };
 
   useEffect(() => {
@@ -309,7 +339,6 @@ const Index = () => {
               onStartMeasurement={startMonitoring}
               onReset={stopMonitoring}
               arrhythmiaStatus={vitalSigns.arrhythmiaStatus}
-              rawArrhythmiaData={vitalSigns.lastArrhythmiaData}
             />
           </div>
 
