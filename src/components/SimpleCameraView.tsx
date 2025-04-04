@@ -1,7 +1,7 @@
+
 import React, { useRef, useEffect, useState } from 'react';
-import { logError, ErrorLevel } from '@/utils/debugUtils';
-import { setCameraState, CameraState } from '@/utils/deviceErrorTracker';
-import { handleCameraError } from '@/utils/deviceErrorTracker';
+import { logError, ErrorLevel, CameraState } from '@/utils/debugUtils';
+import { setCameraState, handleCameraError } from '@/utils/deviceErrorTracker';
 import { unifiedFingerDetector } from '@/modules/signal-processing/utils/unified-finger-detector';
 
 interface SimpleCameraViewProps {
@@ -27,6 +27,7 @@ const SimpleCameraView: React.FC<SimpleCameraViewProps> = ({
   const frameCountRef = useRef<number>(0);
   const lastFrameTimeRef = useRef<number>(0);
   
+  // Limpiar recursos de cámara
   const cleanupCamera = () => {
     if (stream) {
       stream.getTracks().forEach(track => {
@@ -49,6 +50,7 @@ const SimpleCameraView: React.FC<SimpleCameraViewProps> = ({
     frameCountRef.current = 0;
   };
   
+  // Iniciar la cámara
   const startCamera = async () => {
     try {
       setCameraState(CameraState.REQUESTING);
@@ -76,6 +78,7 @@ const SimpleCameraView: React.FC<SimpleCameraViewProps> = ({
       setStream(newStream);
       setCameraState(CameraState.ACTIVE);
       
+      // Comenzar a procesar frames cuando el video esté listo
       if (videoRef.current) {
         videoRef.current.onloadedmetadata = () => {
           if (isActive && onFrameCallback) {
@@ -93,6 +96,7 @@ const SimpleCameraView: React.FC<SimpleCameraViewProps> = ({
     }
   };
   
+  // Procesar frames de video
   const startFrameProcessing = () => {
     if (!videoRef.current || !canvasRef.current || !onFrameCallback) return;
     
@@ -119,26 +123,33 @@ const SimpleCameraView: React.FC<SimpleCameraViewProps> = ({
       const frameTime = 1000 / targetFps;
       const elapsed = now - lastFrameTimeRef.current;
       
+      // Control de velocidad de frames
       if (lastFrameTimeRef.current > 0 && elapsed < frameTime) {
         animationFrameRef.current = requestAnimationFrame(processFrame);
         return;
       }
       
       try {
+        // Asegurar dimensiones del canvas
         if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
           canvas.width = video.videoWidth;
           canvas.height = video.videoHeight;
         }
         
+        // Dibujar frame actual
         ctx.drawImage(video, 0, 0);
         
+        // Obtener datos de imagen
         const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
         
+        // Procesar frame
         onFrameCallback(imageData);
         
+        // Actualizar contadores
         frameCountRef.current++;
         lastFrameTimeRef.current = now;
         
+        // Estadísticas cada 100 frames
         if (frameCountRef.current % 100 === 0) {
           const totalTime = (now - processingStartTimeRef.current) / 1000;
           const fps = frameCountRef.current / totalTime;
@@ -150,12 +161,15 @@ const SimpleCameraView: React.FC<SimpleCameraViewProps> = ({
         console.error("Error al procesar frame:", errorMsg);
       }
       
+      // Continuar procesando
       animationFrameRef.current = requestAnimationFrame(processFrame);
     };
     
+    // Iniciar bucle de procesamiento
     animationFrameRef.current = requestAnimationFrame(processFrame);
   };
   
+  // Efecto para controlar la cámara según el estado
   useEffect(() => {
     if (isActive && !stream) {
       startCamera();
@@ -176,6 +190,7 @@ const SimpleCameraView: React.FC<SimpleCameraViewProps> = ({
     };
   }, [isActive, stream, onFrameCallback, isProcessing]);
   
+  // Actualizamos el detector unificado con brillo de la cámara
   useEffect(() => {
     if (!isActive || !stream || !isProcessing) return;
     
@@ -199,6 +214,7 @@ const SimpleCameraView: React.FC<SimpleCameraViewProps> = ({
         
         brightness /= (data.length / 16);
         
+        // Actualizar detector unificado
         unifiedFingerDetector.updateSource(
           'camera-analysis', 
           brightness < 60, // Oscuridad sugiere presencia de dedo
@@ -226,6 +242,7 @@ const SimpleCameraView: React.FC<SimpleCameraViewProps> = ({
         className="absolute inset-0 w-full h-full object-cover z-0"
       />
       
+      {/* Canvas oculto para procesamiento */}
       <canvas
         ref={canvasRef}
         className="absolute top-0 left-0 w-1 h-1 opacity-0 pointer-events-none"

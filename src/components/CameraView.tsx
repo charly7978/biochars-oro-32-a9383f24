@@ -1,4 +1,3 @@
-
 import React, { useRef, useEffect, useState } from 'react';
 import { Fingerprint } from 'lucide-react';
 import { logError, ErrorLevel } from '@/utils/debugUtils';
@@ -139,10 +138,9 @@ const CameraView: React.FC<CameraViewProps> = ({
           
           // Agregar manejadores de errores para el video
           videoRef.current.onerror = (e) => {
-            const errorEvent = e as Event;
-            logError(`Error en elemento video: ${errorEvent instanceof Error ? errorEvent.message : errorEvent.type}`, ErrorLevel.ERROR, "CameraView");
+            logError(`Error en elemento video: ${e.type}`, ErrorLevel.ERROR, "CameraView");
             streamErrorRef.current = true;
-            handleCameraError(errorEvent);
+            handleCameraError(e);
           };
         } catch (err) {
           throw new Error(`Error al configurar video: ${err instanceof Error ? err.message : String(err)}`);
@@ -174,10 +172,10 @@ const CameraView: React.FC<CameraViewProps> = ({
   };
 
   // Función para manejar errores de cámara
-  const handleCameraError = (error: unknown) => {
-    const errorMessage = error instanceof Error 
-      ? error.message 
-      : (typeof error === 'string' ? error : 'Error desconocido');
+  const handleCameraError = (error: string | Event) => {
+    const errorMessage = typeof error === 'string' 
+      ? error 
+      : (error instanceof Error ? error.message : 'Error desconocido');
     
     logError(`Error de cámara: ${errorMessage}`, ErrorLevel.ERROR, "CameraView");
     
@@ -250,7 +248,7 @@ const CameraView: React.FC<CameraViewProps> = ({
         
         // Actualizar detector unificado con información de brillo
         unifiedFingerDetector.updateSource(
-          'brightness' as DetectionSource, 
+          'brightness', 
           avgBrightness < 60, // Oscuro sugiere presencia de dedo
           Math.min(1.0, Math.max(0.0, (120 - avgBrightness) / 120))
         );
@@ -322,7 +320,7 @@ const CameraView: React.FC<CameraViewProps> = ({
   useEffect(() => {
     if (isMonitoring) {
       unifiedFingerDetector.updateSource(
-        'camera-analysis' as DetectionSource, 
+        'camera-analysis', 
         actualFingerStatus,
         signalQuality ? (signalQuality / 100) : 0.5
       );

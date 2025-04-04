@@ -30,16 +30,6 @@ interface LogMessage {
   data?: any;
 }
 
-// Estructura para entradas de error
-export interface ErrorEntry {
-  timestamp: number;
-  level: ErrorLevel;
-  message: string;
-  source?: string;
-  data?: any;
-  stack?: string;
-}
-
 // Buffer circular para almacenar logs recientes
 class LogBuffer {
   private buffer: LogMessage[] = [];
