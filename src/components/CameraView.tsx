@@ -1,7 +1,8 @@
+
 import React, { useRef, useEffect, useState } from 'react';
 import { Fingerprint } from 'lucide-react';
 import { logError, ErrorLevel } from '@/utils/debugUtils';
-import { CameraState, setCameraState, trackDeviceError } from '@/utils/deviceErrorTracker';
+import { CameraState, setCameraState } from '@/utils/deviceErrorTracker';
 import { unifiedFingerDetector } from '@/modules/signal-processing/utils/unified-finger-detector';
 
 interface CameraViewProps {
@@ -138,9 +139,10 @@ const CameraView: React.FC<CameraViewProps> = ({
           
           // Agregar manejadores de errores para el video
           videoRef.current.onerror = (e) => {
-            logError(`Error en elemento video: ${e.type}`, ErrorLevel.ERROR, "CameraView");
+            const eventType = e instanceof Event && 'type' in e ? e.type : 'unknown';
+            logError(`Error en elemento video: ${eventType}`, ErrorLevel.ERROR, "CameraView");
             streamErrorRef.current = true;
-            handleCameraError(e);
+            handleCameraError(eventType);
           };
         } catch (err) {
           throw new Error(`Error al configurar video: ${err instanceof Error ? err.message : String(err)}`);
@@ -151,7 +153,7 @@ const CameraView: React.FC<CameraViewProps> = ({
       videoTrack.onended = () => {
         logError("Video track terminado inesperadamente", ErrorLevel.WARNING, "CameraView");
         streamErrorRef.current = true;
-        handleCameraError(new Error("Video track terminado inesperadamente"));
+        handleCameraError("Video track terminado inesperadamente");
       };
 
       setStream(newStream);
@@ -166,8 +168,7 @@ const CameraView: React.FC<CameraViewProps> = ({
       logError("Cámara iniciada correctamente", ErrorLevel.INFO, "CameraView");
     } catch (err) {
       setCameraState(CameraState.ERROR);
-      trackDeviceError(err);
-      handleCameraError(err);
+      handleCameraError(err instanceof Error ? err.message : String(err));
     }
   };
 
@@ -257,7 +258,7 @@ const CameraView: React.FC<CameraViewProps> = ({
         if (videoRef.current && (videoRef.current.paused || videoRef.current.ended)) {
           logError("Video pausado o terminado inesperadamente", ErrorLevel.WARNING, "CameraView");
           streamErrorRef.current = true;
-          handleCameraError(new Error("Video pausado o terminado"));
+          handleCameraError("Video pausado o terminado");
         }
       } catch (err) {
         logError(`Error al verificar brillo: ${err instanceof Error ? err.message : String(err)}`, 
@@ -276,7 +277,7 @@ const CameraView: React.FC<CameraViewProps> = ({
         if (videoTracks.length === 0 || videoTracks[0].readyState !== 'live') {
           logError("Estado de video track no válido", ErrorLevel.WARNING, "CameraView");
           streamErrorRef.current = true;
-          handleCameraError(new Error("Video track no válido"));
+          handleCameraError("Video track no válido");
         }
       }
       

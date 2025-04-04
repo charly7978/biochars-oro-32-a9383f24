@@ -1,4 +1,3 @@
-
 /**
  * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
  * 
@@ -15,7 +14,10 @@ type DetectionSource =
   | 'ppg-extractor'      // Detección del extractor PPG
   | 'camera-analysis'    // Análisis de la cámara
   | 'weak-signal-result' // Resultado de la detección de señal débil
-  | 'manual-override';   // Anulación manual (para pruebas)
+  | 'manual-override'    // Anulación manual (para pruebas)
+  | 'extraction'         // Extracción directa de señal
+  | 'signalProcessor'    // Procesador de señal
+  | 'brightness';        // Análisis de brillo de imagen
 
 // Estado de una fuente de detección
 interface SourceState {
@@ -54,6 +56,11 @@ const HYSTERESIS_NEGATIVE_COUNT = 5;    // Cuenta requerida para cambiar a detec
 class UnifiedFingerDetector {
   private state: DetectionState;
   private debug: boolean = true;
+  private thresholds = {
+    quality: 50,
+    brightness: 120,
+    amplitude: 0.3
+  };
   
   constructor() {
     // Inicializar estado
@@ -68,13 +75,48 @@ class UnifiedFingerDetector {
         'ppg-extractor': this.createInitialSourceState(),
         'camera-analysis': this.createInitialSourceState(),
         'weak-signal-result': this.createInitialSourceState(),
-        'manual-override': this.createInitialSourceState()
+        'manual-override': this.createInitialSourceState(),
+        'extraction': this.createInitialSourceState(),
+        'signalProcessor': this.createInitialSourceState(),
+        'brightness': this.createInitialSourceState()
       },
       historyBuffer: [],
       overallConsensus: 0
     };
     
     console.log("UnifiedFingerDetector: Sistema de detección unificado inicializado");
+  }
+  
+  /**
+   * Adapta los umbrales de detección basados en la calidad de señal y brillo ambiental
+   * @param signalQuality Calidad de la señal (0-100)
+   * @param brightness Brillo ambiental (opcional)
+   */
+  public adaptThresholds(signalQuality: number, brightness?: number): void {
+    // Adaptar umbral de calidad basado en signalQuality
+    if (signalQuality !== undefined) {
+      // Ajuste dinámico: más restrictivo con señales débiles, más permisivo con buenas señales
+      this.thresholds.quality = Math.max(30, Math.min(70, 50 + (50 - signalQuality) / 2));
+    }
+    
+    // Adaptar umbral de brillo si se proporciona
+    if (brightness !== undefined) {
+      // Ajuste para condiciones de iluminación
+      this.thresholds.brightness = Math.max(60, Math.min(180, brightness * 1.2));
+      
+      // Ajuste de amplitud basado en brillo (más sensible en ambientes oscuros)
+      if (brightness < 80) {
+        this.thresholds.amplitude = 0.25; // Más sensible en ambientes oscuros
+      } else if (brightness > 150) {
+        this.thresholds.amplitude = 0.35; // Menos sensible en ambientes brillantes
+      } else {
+        this.thresholds.amplitude = 0.3; // Normal
+      }
+    }
+    
+    if (this.debug) {
+      console.log(`UnifiedFingerDetector: Umbrales adaptados - Calidad: ${this.thresholds.quality}, Brillo: ${this.thresholds.brightness}, Amplitud: ${this.thresholds.amplitude}`);
+    }
   }
   
   /**
