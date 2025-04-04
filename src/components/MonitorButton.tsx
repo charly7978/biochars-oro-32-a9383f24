@@ -1,7 +1,7 @@
 
 import React from "react";
 import { Button } from "./ui/button";
-import { Activity, RotateCcw, Monitoring } from "lucide-react";
+import { Activity, RotateCcw, Gauge } from "lucide-react";
 
 interface MonitorButtonProps {
   isMonitoring: boolean;
@@ -28,7 +28,7 @@ const MonitorButton: React.FC<MonitorButtonProps> = ({ isMonitoring, onToggle, v
     case "debug":
       buttonClass = "bg-purple-600 hover:bg-purple-700";
       buttonText = "MONITOR TÉCNICO";
-      icon = <Monitoring size={20} className="mr-2" />;
+      icon = <Gauge size={20} className="mr-2" />;
       break;
     default:
       buttonClass = "bg-gray-600 hover:bg-gray-700";

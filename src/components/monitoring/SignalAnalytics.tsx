@@ -103,7 +103,7 @@ const SignalAnalytics: React.FC<SignalAnalyticsProps> = ({
         </CardHeader>
         <CardContent>
           <div className="text-xs text-gray-400">
-            Se requiere un mínimo de señal PPG de calidad >40% para detección precisa.
+            Se requiere un mínimo de señal PPG de calidad {'>'}40% para detección precisa.
           </div>
           <div className="grid grid-cols-2 gap-2 mt-2 text-xs">
             <div>
