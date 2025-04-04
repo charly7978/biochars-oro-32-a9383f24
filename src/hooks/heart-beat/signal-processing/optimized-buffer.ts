@@ -151,13 +151,16 @@ export class OptimizedPPGBuffer<T extends TimestampedPPGData = TimestampedPPGDat
     
     // Transferir los datos al nuevo buffer
     points.forEach(point => {
+      // Type safety check to ensure point has the right properties
+      if (!point) return;
+      
       // Ensure point has all required properties
       const enhancedPoint = { ...point } as U;
       
       // Garantizar que tanto time como timestamp existan
-      if ('timestamp' in enhancedPoint && !('time' in enhancedPoint)) {
+      if (enhancedPoint.timestamp && !enhancedPoint.time) {
         (enhancedPoint as any).time = enhancedPoint.timestamp;
-      } else if ('time' in enhancedPoint && !('timestamp' in enhancedPoint)) {
+      } else if (enhancedPoint.time && !enhancedPoint.timestamp) {
         (enhancedPoint as any).timestamp = enhancedPoint.time;
       }
       
@@ -185,9 +188,9 @@ export class CircularBufferAdapter<T extends TimestampedPPGData = TimestampedPPG
     const enhancedItem = { ...item } as T;
     
     // Garantizar que tanto time como timestamp existan
-    if ('timestamp' in enhancedItem && !('time' in enhancedItem)) {
+    if (enhancedItem.timestamp && !enhancedItem.time) {
       (enhancedItem as any).time = enhancedItem.timestamp;
-    } else if ('time' in enhancedItem && !('timestamp' in enhancedItem)) {
+    } else if (enhancedItem.time && !enhancedItem.timestamp) {
       (enhancedItem as any).timestamp = enhancedItem.time;
     }
     
