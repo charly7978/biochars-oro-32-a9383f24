@@ -130,7 +130,7 @@ export function processLowConfidenceResult(
       arrhythmiaCount,
       diagnosticData: {
         ...(result.diagnosticData || {}),
-        confidenceStatus: 'low',
+        confidenceStatus: 'low' as 'low',
         usingHistoricalBPM: true,
         historyBPM: currentBPM,
         originalConfidence: result.confidence,

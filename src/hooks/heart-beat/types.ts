@@ -1,3 +1,4 @@
+
 /**
  * Type definitions for heart beat processing
  */

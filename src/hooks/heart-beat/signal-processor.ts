@@ -1,3 +1,4 @@
+
 import { useCallback, useRef, useEffect } from 'react';
 import { HeartBeatResult } from './types';
 import { HeartBeatConfig } from '../../modules/heart-beat/config';
@@ -7,7 +8,7 @@ import {
   createWeakSignalResult, 
   handlePeakDetection,
   updateLastValidBpm,
-  processLowConfidenceResult
+  processLowConfidenceResult as importedProcessLowConfidenceResult // Renamed to avoid conflict
 } from './signal-processing';
 import { 
   optimizeCardiacSignal,
@@ -116,7 +117,7 @@ export function useSignalProcessor() {
       }
       
       // Apply optimized cardiac signal processing with increased sensitivity
-      const optimizedValue = optimizeCardiacSignal(enhancedValue, signalBufferRef.current, 1.2); // Aumentar factor
+      const optimizedValue = optimizeCardiacSignal(enhancedValue, signalBufferRef.current);
       
       // Check for weak signal with reduced threshold for better sensitivity
       const { isWeakSignal, updatedWeakSignalsCount } = checkWeakSignal(
@@ -214,9 +215,7 @@ export function useSignalProcessor() {
       handlePeakDetection(
         result, 
         lastPeakTimeRef, 
-        requestImmediateBeep, 
-        isMonitoringRef,
-        optimizedValue * 1.15 // Valor amplificado para mejor detección
+        requestImmediateBeep
       );
       
       // Update last valid BPM with improved filtering
@@ -225,7 +224,7 @@ export function useSignalProcessor() {
       lastSignalQualityRef.current = result.confidence;
 
       // Process result with improved confidence
-      const processedResult = processLowConfidenceResult(
+      const processedResult = importedProcessLowConfidenceResult(
         result, 
         currentBPM || lastValidBpmRef.current, // Usar último BPM válido si actual es 0
         processor.getArrhythmiaCounter()
@@ -308,38 +307,5 @@ export function useSignalProcessor() {
     // Nuevas propiedades para mejorar visualización
     visualizationBuffer: visualizationBufferRef.current,
     amplificationFactor: amplificationFactorRef
-  };
-}
-
-/**
- * Process low confidence results and ensures valid output
- * Enhanced with historical BPM support
- */
-export function processLowConfidenceResult(
-  result: HeartBeatResult,
-  currentBPM: number,
-  arrhythmiaCount: number
-): HeartBeatResult {
-  // Handle low confidence results by maintaining current BPM
-  if (result.confidence < 0.3 && currentBPM > 0) {
-    return {
-      ...result,
-      bpm: currentBPM,
-      confidence: Math.max(0.3, result.confidence), // Minimum confidence to show something
-      arrhythmiaCount
-    };
-  }
-  
-  // If no current BPM and low confidence, ensure arrhythmia count is preserved
-  if (result.bpm === 0) {
-    return {
-      ...result,
-      arrhythmiaCount
-    };
-  }
-  
-  return {
-    ...result,
-    arrhythmiaCount
   };
 }
