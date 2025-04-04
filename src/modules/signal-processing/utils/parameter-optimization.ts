@@ -2,314 +2,324 @@
 /**
  * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
  * 
- * Parameter optimization system for signal processing
- * Connects the Bayesian optimizer with signal processing pipeline
+ * Implementación del optimizador de parámetros de señal
+ * Utiliza optimización bayesiana para ajustar parámetros de procesamiento
  */
+import { BayesianOptimizer, OptimizationParameter } from './bayesian-optimization';
 
-import { BayesianOptimizer, OptimizationParameter, createBayesianOptimizer } from './bayesian-optimization';
-import { logError, ErrorLevel } from '@/utils/debugUtils';
-import { safeExecute } from '@/utils/errorPrevention/utils';
-
-// Optimization cycle states
+/**
+ * Estados del optimizador durante el ciclo de optimización
+ */
 export enum OptimizationState {
   IDLE = 'idle',
   COLLECTING = 'collecting',
   OPTIMIZING = 'optimizing',
   APPLYING = 'applying',
-  EVALUATING = 'evaluating',
+  EVALUATING = 'evaluating'
 }
 
-// Memory-efficient storage for optimization metrics
+/**
+ * Tipo para un punto en el historial de parámetros
+ */
+export interface ParameterHistoryEntry {
+  timestamp: number;
+  params: Record<string, number>;
+  score: number;
+}
+
+/**
+ * Métricas del optimizador para supervisión
+ */
 export interface OptimizationMetrics {
   currentScore: number;
   bestScore: number;
   improvementPercentage: number;
   optimizationCycles: number;
   lastOptimizationTime: number | null;
-  paramsHistory: Array<{
-    timestamp: number;
-    params: Record<string, number>;
-    score: number;
-  }>;
+  paramsHistory: ParameterHistoryEntry[];
 }
 
 /**
- * Manager class that integrates Bayesian optimization with signal processing
+ * Optimizador de parámetros de señal
+ * Gestiona el ciclo completo de optimización bayesiana
  */
 export class SignalParameterOptimizer {
+  // Optimizador bayesiano interno
   private optimizer: BayesianOptimizer;
-  private state: OptimizationState = OptimizationState.IDLE;
-  private metrics: OptimizationMetrics;
-  private readonly MAX_HISTORY_SIZE = 20;
   
-  // Observation collection config
-  private observationCounter: number = 0;
-  private observationsNeeded: number = 10;
-  private currentParams: Record<string, number> = {};
-  private scoringFunction: ((params: Record<string, number>) => number) | null = null;
+  // Estado actual del optimizador
+  private state: OptimizationState = OptimizationState.IDLE;
+  
+  // Función para calcular puntuación de calidad
+  private scoreFunction: ((params: Record<string, number>) => number) | null = null;
+  
+  // Función para aplicar nuevos parámetros
   private applyFunction: ((params: Record<string, number>) => void) | null = null;
   
+  // Historial de optimización
+  private history: ParameterHistoryEntry[] = [];
+  
+  // Contador de ciclos de optimización
+  private cycleCount: number = 0;
+  
+  // Tiempo de la última optimización
+  private lastOptimizationTime: number | null = null;
+  
+  // Parámetros actuales y mejores
+  private currentParams: Record<string, number> = {};
+  private currentScore: number = 0;
+  private bestScore: number = 0;
+  
+  // Configuración para recolección de observaciones
+  private observationsNeeded: number = 5;
+  private currentObservationCount: number = 0;
+  
+  // Almacén temporal de observaciones para evaluación
+  private tempObservations: number[] = [];
+  
+  /**
+   * Constructor del optimizador
+   * @param parameters Lista de parámetros a optimizar
+   */
   constructor(parameters: OptimizationParameter[]) {
-    this.optimizer = createBayesianOptimizer(parameters);
+    this.optimizer = new BayesianOptimizer(parameters);
     
-    // Initialize current params
-    parameters.forEach(p => {
-      this.currentParams[p.name] = p.current;
+    // Inicializar parámetros actuales con valores iniciales
+    parameters.forEach(param => {
+      this.currentParams[param.name] = param.initialValue !== undefined ? 
+        param.initialValue : param.min;
     });
-    
-    // Initialize metrics with empty history
-    this.metrics = {
-      currentScore: 0,
-      bestScore: 0,
-      improvementPercentage: 0,
-      optimizationCycles: 0,
-      lastOptimizationTime: null,
-      paramsHistory: []
-    };
-    
-    logError(
-      "SignalParameterOptimizer: Initialized with Bayesian optimizer",
-      ErrorLevel.INFO,
-      "ParameterOptimizer"
-    );
   }
   
   /**
-   * Set the function that calculates the quality score for parameters
+   * Configura la función para calcular la puntuación de calidad
    */
-  public setScoreFunction(fn: (params: Record<string, number>) => number): void {
-    this.scoringFunction = fn;
+  public setScoreFunction(func: (params: Record<string, number>) => number): void {
+    this.scoreFunction = func;
   }
   
   /**
-   * Set the function that applies new parameters to the signal processor
+   * Configura la función para aplicar nuevos parámetros
    */
-  public setApplyFunction(fn: (params: Record<string, number>) => void): void {
-    this.applyFunction = fn;
+  public setApplyFunction(func: (params: Record<string, number>) => void): void {
+    this.applyFunction = func;
   }
   
   /**
-   * Configure observation collection settings
+   * Configura el número de observaciones necesarias para evaluación
    */
-  public configureObservation(observationsNeeded: number): void {
-    this.observationsNeeded = Math.max(5, observationsNeeded);
+  public configureObservation(count: number): void {
+    this.observationsNeeded = Math.max(3, count);
   }
   
   /**
-   * Start the optimization cycle
+   * Inicia el ciclo de optimización
    */
   public startOptimization(): boolean {
     if (this.state !== OptimizationState.IDLE) {
-      logError(
-        `SignalParameterOptimizer: Cannot start optimization in ${this.state} state`,
-        ErrorLevel.WARNING,
-        "ParameterOptimizer"
-      );
+      console.warn('Optimization already in progress');
       return false;
     }
     
-    if (!this.scoringFunction || !this.applyFunction) {
-      logError(
-        "SignalParameterOptimizer: Cannot start optimization without score and apply functions",
-        ErrorLevel.ERROR,
-        "ParameterOptimizer"
-      );
+    if (!this.scoreFunction || !this.applyFunction) {
+      console.error('Score or apply function not set');
       return false;
     }
     
-    // Start collecting observations
+    // Comenzar recolección de observaciones
     this.state = OptimizationState.COLLECTING;
-    this.observationCounter = 0;
+    this.currentObservationCount = 0;
+    this.tempObservations = [];
     
-    logError(
-      `SignalParameterOptimizer: Starting optimization cycle - collecting ${this.observationsNeeded} observations`,
-      ErrorLevel.INFO,
-      "ParameterOptimizer"
-    );
-    
+    console.log('Parameter optimization started: COLLECTING observations');
     return true;
   }
   
   /**
-   * Add a quality score observation using current parameters
+   * Añade una observación durante la fase de recolección
    */
-  public addObservation(qualityScore: number): void {
-    if (this.state !== OptimizationState.COLLECTING) return;
+  public addObservation(quality: number): void {
+    if (this.state !== OptimizationState.COLLECTING) {
+      return;
+    }
     
-    this.observationCounter++;
+    this.tempObservations.push(quality);
+    this.currentObservationCount++;
     
-    // Add observation to optimizer
-    safeExecute(
-      () => {
-        this.optimizer.addObservation(this.currentParams, qualityScore);
-        this.metrics.currentScore = qualityScore;
-        
-        // Update best score if needed
-        if (qualityScore > this.metrics.bestScore) {
-          this.metrics.bestScore = qualityScore;
-        }
-      },
-      (error) => {
-        logError(
-          `Error adding observation: ${error instanceof Error ? error.message : String(error)}`,
-          ErrorLevel.ERROR,
-          "ParameterOptimizer"
-        );
-      },
-      "ParameterOptimizer",
-      "addObservation"
-    );
-    
-    // If we've collected enough observations, move to optimizing
-    if (this.observationCounter >= this.observationsNeeded) {
-      this.state = OptimizationState.OPTIMIZING;
-      this.runOptimizationStep();
+    // Comprobar si tenemos suficientes observaciones
+    if (this.currentObservationCount >= this.observationsNeeded) {
+      this.proceedToOptimization();
     }
   }
   
   /**
-   * Run one optimization step to generate new parameters
+   * Avanza al siguiente paso: optimización
    */
-  private runOptimizationStep(): void {
-    if (this.state !== OptimizationState.OPTIMIZING) return;
+  private proceedToOptimization(): void {
+    // Calcular puntuación media de las observaciones
+    const avgQuality = this.tempObservations.reduce((sum, q) => sum + q, 0) / 
+                      this.tempObservations.length;
     
-    logError(
-      "SignalParameterOptimizer: Running optimization step",
-      ErrorLevel.INFO,
-      "ParameterOptimizer"
-    );
+    // Añadir observación al optimizador con los parámetros actuales
+    this.optimizer.addObservation(this.currentParams, avgQuality);
+    this.currentScore = avgQuality;
     
-    // Get parameter suggestions
-    safeExecute(
-      () => {
-        const result = this.optimizer.suggestNextParameters(15);
-        this.currentParams = result.parameters;
-        
-        // Move to applying phase
-        this.state = OptimizationState.APPLYING;
-        
-        // Apply new parameters
-        if (this.applyFunction) {
-          this.applyFunction(this.currentParams);
-        }
-        
-        // Record metrics
-        this.metrics.optimizationCycles++;
-        this.metrics.lastOptimizationTime = Date.now();
-        
-        // Store in history (memory-optimized)
-        this.metrics.paramsHistory.push({
-          timestamp: Date.now(),
-          params: {...this.currentParams},
-          score: this.metrics.currentScore
-        });
-        
-        // Maintain bounded history size
-        if (this.metrics.paramsHistory.length > this.MAX_HISTORY_SIZE) {
-          this.metrics.paramsHistory.shift();
-        }
-        
-        // Move to evaluation state after parameters are applied
-        this.state = OptimizationState.EVALUATING;
-        
-        // Reset observation counter for evaluation
-        this.observationCounter = 0;
-      },
-      (error) => {
-        logError(
-          `Error in optimization step: ${error instanceof Error ? error.message : String(error)}`,
-          ErrorLevel.ERROR,
-          "ParameterOptimizer"
-        );
-        // Reset to idle on error
-        this.state = OptimizationState.IDLE;
-      },
-      "ParameterOptimizer",
-      "runOptimizationStep"
-    );
+    // Actualizar mejor puntuación
+    if (this.cycleCount === 0 || avgQuality > this.bestScore) {
+      this.bestScore = avgQuality;
+    }
+    
+    // Añadir al historial
+    this.history.push({
+      timestamp: Date.now(),
+      params: { ...this.currentParams },
+      score: avgQuality
+    });
+    
+    // Limitar tamaño del historial
+    if (this.history.length > 50) {
+      this.history = this.history.slice(-50);
+    }
+    
+    // Cambiar estado a optimización
+    this.state = OptimizationState.OPTIMIZING;
+    console.log('Optimization phase: OPTIMIZING parameters', { currentScore: avgQuality });
+    
+    // Ejecutar optimización
+    this.runOptimization();
   }
   
   /**
-   * Add an evaluation score for the newly applied parameters
+   * Ejecuta el algoritmo de optimización
    */
-  public addEvaluationScore(qualityScore: number): void {
-    if (this.state !== OptimizationState.EVALUATING) return;
+  private runOptimization(): void {
+    // Obtener el siguiente punto a evaluar del optimizador
+    const nextParams = this.optimizer.nextPointToEvaluate();
     
-    this.observationCounter++;
-    this.metrics.currentScore = qualityScore;
+    // Actualizar parámetros actuales
+    this.currentParams = { ...nextParams };
     
-    // Add to optimizer
-    this.optimizer.addObservation(this.currentParams, qualityScore);
+    // Cambiar estado a aplicación
+    this.state = OptimizationState.APPLYING;
+    console.log('Optimization phase: APPLYING new parameters', nextParams);
     
-    // Update best score if improved
-    if (qualityScore > this.metrics.bestScore) {
-      const prevBest = this.metrics.bestScore;
-      this.metrics.bestScore = qualityScore;
-      
-      // Calculate improvement
-      if (prevBest > 0) {
-        this.metrics.improvementPercentage = ((qualityScore - prevBest) / prevBest) * 100;
-      }
-      
-      logError(
-        `SignalParameterOptimizer: New best score ${qualityScore.toFixed(2)} (${this.metrics.improvementPercentage.toFixed(1)}% improvement)`,
-        ErrorLevel.INFO,
-        "ParameterOptimizer"
-      );
+    // Aplicar nuevos parámetros
+    if (this.applyFunction) {
+      this.applyFunction(nextParams);
     }
     
-    // After sufficient evaluations, reset to idle
-    if (this.observationCounter >= 5) {
-      this.state = OptimizationState.IDLE;
-      
-      logError(
-        "SignalParameterOptimizer: Optimization cycle completed",
-        ErrorLevel.INFO,
-        "ParameterOptimizer"
-      );
+    // Cambiar estado a evaluación
+    this.state = OptimizationState.EVALUATING;
+    console.log('Optimization phase: EVALUATING new parameters');
+    
+    // Reiniciar contadores para evaluación
+    this.currentObservationCount = 0;
+    this.tempObservations = [];
+    
+    // Actualizar tiempos y contadores
+    this.lastOptimizationTime = Date.now();
+    this.cycleCount++;
+  }
+  
+  /**
+   * Añade una puntuación para la evaluación de nuevos parámetros
+   */
+  public addEvaluationScore(quality: number): void {
+    if (this.state !== OptimizationState.EVALUATING) {
+      return;
+    }
+    
+    this.tempObservations.push(quality);
+    this.currentObservationCount++;
+    
+    // Comprobar si tenemos suficientes observaciones
+    if (this.currentObservationCount >= this.observationsNeeded) {
+      this.finishEvaluation();
     }
   }
   
   /**
-   * Get current optimization metrics
+   * Finaliza la evaluación y el ciclo de optimización
    */
-  public getMetrics(): OptimizationMetrics {
-    return {...this.metrics};
+  private finishEvaluation(): void {
+    // Calcular puntuación media de las observaciones
+    const avgQuality = this.tempObservations.reduce((sum, q) => sum + q, 0) / 
+                      this.tempObservations.length;
+    
+    // Añadir observación al optimizador con los parámetros actuales
+    this.optimizer.addObservation(this.currentParams, avgQuality);
+    this.currentScore = avgQuality;
+    
+    // Actualizar mejor puntuación
+    if (avgQuality > this.bestScore) {
+      this.bestScore = avgQuality;
+    }
+    
+    // Añadir al historial
+    this.history.push({
+      timestamp: Date.now(),
+      params: { ...this.currentParams },
+      score: avgQuality
+    });
+    
+    // Volver a estado inactivo
+    this.state = OptimizationState.IDLE;
+    console.log('Optimization cycle completed', { 
+      newScore: avgQuality, 
+      bestScore: this.bestScore,
+      cycles: this.cycleCount
+    });
   }
   
   /**
-   * Get current optimization state
+   * Obtiene el estado actual del optimizador
    */
   public getState(): OptimizationState {
     return this.state;
   }
   
   /**
-   * Get the best parameters found so far
+   * Obtiene las métricas del optimizador para visualización
+   */
+  public getMetrics(): OptimizationMetrics {
+    const improvementPercentage = this.cycleCount > 0 && this.bestScore > 0 ?
+      ((this.bestScore / Math.max(0.1, this.history[0]?.score || 0.1)) - 1) * 100 : 0;
+    
+    return {
+      currentScore: this.currentScore,
+      bestScore: this.bestScore,
+      improvementPercentage,
+      optimizationCycles: this.cycleCount,
+      lastOptimizationTime: this.lastOptimizationTime,
+      paramsHistory: [...this.history]
+    };
+  }
+  
+  /**
+   * Obtiene los mejores parámetros encontrados
    */
   public getBestParameters(): Record<string, number> | null {
     return this.optimizer.getBestParameters();
   }
   
   /**
-   * Reset the optimizer
+   * Reinicia el optimizador
    */
   public reset(): void {
     this.optimizer.reset();
     this.state = OptimizationState.IDLE;
-    this.observationCounter = 0;
-    this.metrics.paramsHistory = [];
-    
-    logError(
-      "SignalParameterOptimizer: Reset",
-      ErrorLevel.INFO,
-      "ParameterOptimizer"
-    );
+    this.cycleCount = 0;
+    this.lastOptimizationTime = null;
+    this.currentScore = 0;
+    this.bestScore = 0;
+    this.history = [];
+    this.tempObservations = [];
+    this.currentObservationCount = 0;
   }
 }
 
 /**
- * Create a new signal parameter optimizer
+ * Crea un nuevo optimizador de parámetros de señal
  */
 export function createSignalParameterOptimizer(
   parameters: OptimizationParameter[]

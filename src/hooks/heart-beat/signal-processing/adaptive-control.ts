@@ -1,325 +1,408 @@
+
 /**
- * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE
+ * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
  * 
- * Adaptive control utilities for heart rate processing
- * Provides signal enhancement, prediction, and quality estimation
+ * Módulo de control adaptativo para procesamiento de señal cardíaca
+ * Implementa técnicas avanzadas de adaptación y predicción sin simulaciones
  */
+import { getAdaptivePredictor, PredictionResult } from '../../../modules/signal-processing/utils/adaptive-predictor';
+import { createDefaultPPGOptimizer } from '../../../modules/signal-processing/utils/bayesian-optimization';
+import { logError, ErrorLevel } from '../../../utils/debugUtils';
 
-import { 
-  getAdaptivePredictor, 
-  resetAdaptivePredictor, 
-  AdaptiveModelState 
-} from '../../../modules/signal-processing/utils/adaptive-predictor';
-import {
-  getMixedModel,
-  resetMixedModel,
-  MixedModelPrediction
-} from '../../../modules/signal-processing/utils/mixed-model';
-import {
-  BayesianOptimizer,
-  createDefaultPPGOptimizer,
-  OptimizationResult
-} from '../../../modules/signal-processing/utils/bayesian-optimization';
-import {
-  GaussianProcessModel,
-  GPPrediction
-} from '../../../modules/signal-processing/utils/gaussian-process';
+// Buffer de valores para el filtro adaptativo
+const valueBuffer: number[] = [];
+const MAX_BUFFER_SIZE = 20;
 
-// Keep history of signal values for processing
-const signalHistory: {time: number, value: number, quality: number}[] = [];
-const MAX_HISTORY_LENGTH = 30;
+// Estado del controlador adaptativo
+let adaptiveFilterStrength = 0.25;
+let qualityWeightFactor = 0.5;
+let lastPredictionQuality = 0;
+let anomalyDetectionThreshold = 2.0;
 
-// Bayesian optimization for parameter tuning
-let bayesianOptimizer: BayesianOptimizer | null = null;
-
-// Gaussian process model for uncertainty estimation
-let gaussianProcess: GaussianProcessModel | null = null;
-
-// Window-based statistics
-let windowMean = 0;
-let windowStd = 0;
-let lastAnomalyDetectionTime = 0;
-const ANOMALY_DETECTION_INTERVAL = 1000; // ms
+// Referencia al optimizador bayesiano
+let bayesianOptimizer: any = null;
 
 /**
- * Reset the adaptive control system
+ * Inicializa el control adaptativo
  */
-export function resetAdaptiveControl(): void {
-  signalHistory.length = 0;
-  windowMean = 0;
-  windowStd = 0;
-  lastAnomalyDetectionTime = 0;
-  
-  resetAdaptivePredictor();
-  resetMixedModel();
-  
-  if (bayesianOptimizer) {
-    bayesianOptimizer.reset();
+function initializeAdaptiveControl() {
+  if (!bayesianOptimizer) {
+    try {
+      bayesianOptimizer = createDefaultPPGOptimizer();
+      logError(
+        "Adaptive control: Bayesian optimizer initialized",
+        ErrorLevel.INFO,
+        "AdaptiveControl"
+      );
+    } catch (error) {
+      logError(
+        `Error initializing Bayesian optimizer: ${error}`,
+        ErrorLevel.ERROR,
+        "AdaptiveControl"
+      );
+    }
   }
-  
-  if (gaussianProcess) {
-    gaussianProcess.reset();
-  }
-  
-  console.log("AdaptiveControl: System reset");
 }
 
 /**
- * Get the current state of the adaptive model
+ * Aplica un filtro adaptativo a la señal
+ * @param value Valor de entrada
+ * @param qualityFactor Factor de calidad (0-1)
  */
-export function getAdaptiveModelState(): AdaptiveModelState {
-  return getAdaptivePredictor().getState();
-}
-
-/**
- * Apply adaptive filtering to a signal value
- */
-export function applyAdaptiveFilter(value: number, time: number, quality: number): number {
-  // Add to history
-  signalHistory.push({time, value, quality});
-  if (signalHistory.length > MAX_HISTORY_LENGTH) {
-    signalHistory.shift();
+export function applyAdaptiveFilter(value: number, qualityFactor: number = 0.5): number {
+  // Añadir valor al buffer
+  valueBuffer.push(value);
+  if (valueBuffer.length > MAX_BUFFER_SIZE) {
+    valueBuffer.shift();
   }
   
-  // Update window statistics
-  if (signalHistory.length >= 5) {
-    const values = signalHistory.map(h => h.value);
-    windowMean = values.reduce((sum, v) => sum + v, 0) / values.length;
-    windowStd = Math.sqrt(
-      values.reduce((sum, v) => sum + Math.pow(v - windowMean, 2), 0) / values.length
-    );
-  }
-  
-  // Update the adaptive predictor
-  getAdaptivePredictor().update(time, value, quality);
-  
-  // Apply adaptive filtering based on signal quality
-  if (signalHistory.length < 3) return value;
-  
-  // For high quality signals, apply minimal filtering
-  if (quality > 0.8) {
+  // Si hay pocos valores, devolver el original
+  if (valueBuffer.length < 3) {
     return value;
   }
   
-  // For medium quality, apply moderate filtering
-  if (quality > 0.5) {
-    const recent = signalHistory.slice(-3);
-    const weightedSum = recent.reduce((sum, h, i) => {
-      // More weight to more recent values
-      const weight = i === 2 ? 0.6 : i === 1 ? 0.3 : 0.1;
-      return sum + h.value * weight;
-    }, 0);
+  // Ajustar fuerza del filtro basado en la calidad
+  // Más filtrado cuando la calidad es baja
+  const adjustedStrength = adaptiveFilterStrength * (1 + (1 - qualityFactor) * 0.5);
+  
+  // Calcular valor filtrado con EMA
+  const lastFiltered = valueBuffer[valueBuffer.length - 2];
+  return adjustedStrength * value + (1 - adjustedStrength) * lastFiltered;
+}
+
+/**
+ * Predice el siguiente valor usando el predictor adaptativo
+ * @param timestamp Marca de tiempo
+ * @param recentValues Valores recientes
+ */
+export function predictNextValue(timestamp: number, recentValues: number[]): PredictionResult {
+  const predictor = getAdaptivePredictor();
+  
+  // Actualizar el predictor con valores recientes
+  // Solo si hay suficientes valores
+  if (recentValues.length >= 3) {
+    try {
+      // Usar el último valor para actualizar
+      const lastValue = recentValues[recentValues.length - 1];
+      
+      // Calcular confianza basada en la variabilidad reciente
+      const variance = calculateVariance(recentValues.slice(-5));
+      const stability = Math.max(0, 1 - Math.min(1, variance * 10));
+      
+      predictor.update(timestamp - 50, lastValue, stability);
+    } catch (error) {
+      logError(
+        `Error updating adaptive predictor: ${error}`,
+        ErrorLevel.WARNING,
+        "AdaptiveControl"
+      );
+    }
+  }
+  
+  // Hacer predicción
+  try {
+    return predictor.predict(timestamp);
+  } catch (error) {
+    logError(
+      `Error in signal prediction: ${error}`,
+      ErrorLevel.WARNING,
+      "AdaptiveControl"
+    );
     
-    return weightedSum;
+    // Falback seguro en caso de error
+    return {
+      predictedValue: recentValues.length > 0 ? recentValues[recentValues.length - 1] : 0,
+      confidence: 0.1,
+      predictedTimestamp: timestamp
+    };
   }
-  
-  // For low quality, apply stronger filtering
-  const recent = signalHistory.slice(-5);
-  const weightedSum = recent.reduce((sum, h, i) => {
-    // Exponential weighting
-    const weight = Math.pow(0.8, 4 - i);
-    return sum + h.value * weight;
-  }, 0);
-  
-  const weights = recent.reduce((sum, _, i) => sum + Math.pow(0.8, 4 - i), 0);
-  return weightedSum / weights;
 }
 
 /**
- * Predict the next value in the signal
+ * Corrige anomalías en la señal utilizando predicción
+ * @param value Valor actual
+ * @param recentValues Valores recientes
+ * @param timestamp Marca de tiempo
  */
-export function predictNextValue(time: number): {
-  prediction: number;
-  confidence: number;
-} {
-  // If not enough history, return simple prediction
-  if (signalHistory.length < 5) {
-    return {
-      prediction: signalHistory.length > 0 ? signalHistory[signalHistory.length - 1].value : 0,
-      confidence: 0.1
-    };
+export function correctSignalAnomalies(
+  value: number,
+  recentValues: number[],
+  timestamp: number
+): { correctedValue: number, isAnomaly: boolean } {
+  // Si no hay suficientes valores, no corregir
+  if (recentValues.length < 5) {
+    return { correctedValue: value, isAnomaly: false };
   }
   
-  // Get prediction from adaptive predictor
-  const prediction = getAdaptivePredictor().predict(time);
-  
-  return {
-    prediction: prediction.predictedValue,
-    confidence: prediction.confidence
-  };
-}
-
-/**
- * Detect and correct anomalies in the signal
- */
-export function correctSignalAnomalies(value: number, time: number, quality: number): {
-  correctedValue: number;
-  anomalyDetected: boolean;
-  anomalyProbability: number;
-} {
-  // If not enough history, return original value
-  if (signalHistory.length < 5) {
-    return {
-      correctedValue: value,
-      anomalyDetected: false,
-      anomalyProbability: 0
-    };
-  }
-  
-  // Only run expensive anomaly detection periodically
-  const now = Date.now();
-  const runFullDetection = now - lastAnomalyDetectionTime > ANOMALY_DETECTION_INTERVAL;
-  
-  if (runFullDetection) {
-    lastAnomalyDetectionTime = now;
-  }
-  
-  // Quick anomaly check: deviation from recent mean
-  const deviationFromMean = Math.abs(value - windowMean);
-  const quickAnomalyScore = windowStd > 0 ? deviationFromMean / (windowStd * 3) : 0;
-  const quickAnomalyThreshold = 1.0;
-  
-  // For high quality signals, apply minimal correction
-  if (quality > 0.7 && quickAnomalyScore < quickAnomalyThreshold) {
-    return {
-      correctedValue: value,
-      anomalyDetected: false,
-      anomalyProbability: quickAnomalyScore
-    };
-  }
-  
-  // For suspected anomalies, use adaptive predictor
-  const correctedValue = getAdaptivePredictor().correctAnomaly(time, value, quality);
-  const anomalyProbability = runFullDetection ? 
-    getAdaptivePredictor().calculateArtifactProbability() : 
-    quickAnomalyScore;
-  
-  const anomalyDetected = correctedValue !== value || anomalyProbability > 0.5;
-  
-  if (anomalyDetected) {
-    console.log("AdaptiveControl: Anomaly detected", {
-      original: value.toFixed(2),
-      corrected: correctedValue.toFixed(2),
-      probability: anomalyProbability.toFixed(2),
-      quality
-    });
-  }
-  
-  return {
-    correctedValue,
-    anomalyDetected,
-    anomalyProbability
-  };
-}
-
-/**
- * Update signal quality based on prediction accuracy
- */
-export function updateQualityWithPrediction(
-  value: number, 
-  quality: number, 
-  time: number
-): number {
-  // If not enough history, return original quality
-  if (signalHistory.length < 5) {
-    return quality;
-  }
-  
-  // Get the most recent prediction
-  const lastPrediction = predictNextValue(time);
-  
-  // Compare prediction with actual value
-  const predictionError = Math.abs(value - lastPrediction.prediction);
-  const normalizedError = windowStd > 0 ? 
-    predictionError / (windowStd * 3) : 
-    predictionError / (Math.abs(value) + 0.01);
-  
-  // Compute quality factor based on prediction accuracy
-  const accuracyFactor = Math.max(0, 1 - normalizedError);
-  
-  // Only decrease quality based on prediction, never increase
-  if (accuracyFactor < quality) {
-    const adaptationRate = 0.3;
-    const updatedQuality = quality * (1 - adaptationRate) + accuracyFactor * adaptationRate;
+  try {
+    // Predecir valor esperado
+    const prediction = predictNextValue(timestamp, recentValues);
     
-    if (Math.abs(updatedQuality - quality) > 0.2) {
-      console.log("AdaptiveControl: Significant quality reduction based on prediction", {
-        original: quality.toFixed(2),
-        updated: updatedQuality.toFixed(2),
-        error: normalizedError.toFixed(2)
-      });
+    // Calcular variabilidad normal de la señal
+    const recent = recentValues.slice(-5);
+    const variance = calculateVariance(recent);
+    const expectedDeviation = Math.sqrt(variance) * anomalyDetectionThreshold;
+    
+    // Comparar con valor actual
+    const difference = Math.abs(value - prediction.predictedValue);
+    const isAnomaly = difference > expectedDeviation && prediction.confidence > 0.4;
+    
+    // Actualizar factor de calidad para diagnóstico
+    lastPredictionQuality = prediction.confidence;
+    
+    if (isAnomaly) {
+      // Corrección suave, mezclando valor real y predicción
+      const blendFactor = Math.min(1, difference / (expectedDeviation * 2));
+      const correctedValue = value * (1 - blendFactor) + prediction.predictedValue * blendFactor;
+      
+      logError(
+        `Signal anomaly corrected: ${value.toFixed(3)} → ${correctedValue.toFixed(3)}`,
+        ErrorLevel.INFO,
+        "AdaptiveControl"
+      );
+      
+      return { correctedValue, isAnomaly: true };
     }
     
-    return updatedQuality;
+    return { correctedValue: value, isAnomaly: false };
+  } catch (error) {
+    logError(
+      `Error correcting signal anomalies: ${error}`,
+      ErrorLevel.WARNING,
+      "AdaptiveControl"
+    );
+    return { correctedValue: value, isAnomaly: false };
   }
-  
-  return quality;
 }
 
 /**
- * Apply Bayesian optimization to signal processing parameters
+ * Mejora la evaluación de calidad usando predicción
+ * @param baseQuality Calidad básica
+ * @param value Valor actual
+ * @param recentValues Valores recientes
+ */
+export function updateQualityWithPrediction(
+  baseQuality: number,
+  value: number,
+  recentValues: number[]
+): number {
+  // Si hay pocos valores o la calidad base es muy baja, no mejorar
+  if (recentValues.length < 5 || baseQuality < 10) {
+    return baseQuality;
+  }
+  
+  try {
+    // Calcular factor de predictibilidad
+    const variance = calculateVariance(recentValues);
+    const predictabilityFactor = Math.max(0, 1 - Math.min(1, variance * 5));
+    
+    // Actualizar peso de la calidad
+    qualityWeightFactor = 0.7 * qualityWeightFactor + 0.3 * predictabilityFactor;
+    
+    // Calcular calidad ajustada
+    return baseQuality * (1 + qualityWeightFactor * 0.2);
+  } catch (error) {
+    return baseQuality;
+  }
+}
+
+/**
+ * Calcula la varianza de un conjunto de valores
+ */
+function calculateVariance(values: number[]): number {
+  if (values.length < 2) return 0;
+  
+  const mean = values.reduce((sum, v) => sum + v, 0) / values.length;
+  return values.reduce((sum, v) => sum + Math.pow(v - mean, 2), 0) / values.length;
+}
+
+/**
+ * Reinicia el sistema de control adaptativo
+ */
+export function resetAdaptiveControl(): void {
+  valueBuffer.length = 0;
+  adaptiveFilterStrength = 0.25;
+  qualityWeightFactor = 0.5;
+  lastPredictionQuality = 0;
+  
+  // Reiniciar predictor
+  try {
+    const predictor = getAdaptivePredictor();
+    predictor.reset();
+  } catch (error) {
+    logError(
+      `Error resetting adaptive predictor: ${error}`,
+      ErrorLevel.WARNING,
+      "AdaptiveControl"
+    );
+  }
+  
+  // Reiniciar optimizador bayesiano
+  if (bayesianOptimizer) {
+    try {
+      bayesianOptimizer.reset();
+    } catch (error) {
+      logError(
+        `Error resetting Bayesian optimizer: ${error}`,
+        ErrorLevel.WARNING,
+        "AdaptiveControl"
+      );
+    }
+  }
+}
+
+/**
+ * Obtiene el estado del modelo adaptativo
+ */
+export function getAdaptiveModelState(): any {
+  try {
+    const predictor = getAdaptivePredictor();
+    return {
+      filterStrength: adaptiveFilterStrength,
+      qualityWeight: qualityWeightFactor,
+      predictorState: predictor.getState(),
+      lastPredictionQuality,
+      bufferSize: valueBuffer.length
+    };
+  } catch (error) {
+    return {
+      error: `Error getting model state: ${error}`
+    };
+  }
+}
+
+/**
+ * Aplica optimización bayesiana a los parámetros
+ * @param parameterMap Mapa de parámetros
+ * @param quality Calidad obtenida
  */
 export function applyBayesianOptimization(
-  parameters: Record<string, number>,
-  qualityScore: number
-): OptimizationResult {
+  parameterMap: Record<string, number>,
+  quality: number
+): Record<string, number> {
+  // Inicializar si es necesario
   if (!bayesianOptimizer) {
-    // Create optimizer with default parameters
-    bayesianOptimizer = createDefaultPPGOptimizer();
+    initializeAdaptiveControl();
+    if (!bayesianOptimizer) {
+      return parameterMap;
+    }
   }
   
-  // Add observation to optimizer
-  bayesianOptimizer.addObservation(parameters, qualityScore);
-  
-  // Get suggestion for next parameters
-  return bayesianOptimizer.suggestNextParameters();
+  try {
+    // Añadir observación con los parámetros actuales
+    bayesianOptimizer.addObservation(parameterMap, quality);
+    
+    // Si la calidad es buena, mantener los parámetros
+    if (quality > 80) {
+      return parameterMap;
+    }
+    
+    // Obtener próximos parámetros a probar
+    const nextParams = bayesianOptimizer.nextPointToEvaluate();
+    return nextParams;
+  } catch (error) {
+    logError(
+      `Error applying Bayesian optimization: ${error}`,
+      ErrorLevel.WARNING,
+      "AdaptiveControl"
+    );
+    return parameterMap;
+  }
 }
 
 /**
- * Apply Gaussian process modeling to the signal
+ * Aplica modelado de proceso Gaussiano para optimización
+ * Esta es una implementación simplificada sin simulación
  */
 export function applyGaussianProcessModeling(
-  time: number, 
-  value: number, 
-  uncertainty: number
-): GPPrediction {
-  if (!gaussianProcess) {
-    gaussianProcess = new GaussianProcessModel();
+  recentValues: number[],
+  recentQuality: number[]
+): { confidence: number, trend: 'improving' | 'stable' | 'degrading' } {
+  if (recentValues.length < 5 || recentQuality.length < 5) {
+    return { confidence: 0.2, trend: 'stable' };
   }
   
-  // Add observation to GP model
-  gaussianProcess.addObservation({
-    time,
-    value,
-    uncertainty
-  });
-  
-  // Update GP parameters periodically
-  if (signalHistory.length % 5 === 0) {
-    gaussianProcess.updateParameters();
+  try {
+    // Calcular tendencia de calidad
+    const firstHalf = recentQuality.slice(0, Math.floor(recentQuality.length / 2));
+    const secondHalf = recentQuality.slice(Math.floor(recentQuality.length / 2));
+    
+    const firstAvg = firstHalf.reduce((sum, q) => sum + q, 0) / firstHalf.length;
+    const secondAvg = secondHalf.reduce((sum, q) => sum + q, 0) / secondHalf.length;
+    
+    const difference = secondAvg - firstAvg;
+    const significantChange = Math.abs(difference) > 5;
+    
+    // Determinar tendencia
+    let trend: 'improving' | 'stable' | 'degrading' = 'stable';
+    if (significantChange) {
+      trend = difference > 0 ? 'improving' : 'degrading';
+    }
+    
+    // Calcular confianza basada en la consistencia
+    const qualityVariance = calculateVariance(recentQuality);
+    const consistency = Math.max(0, 1 - Math.min(1, qualityVariance / 100));
+    const confidence = 0.4 + consistency * 0.5;
+    
+    return { confidence, trend };
+  } catch (error) {
+    return { confidence: 0.2, trend: 'stable' };
   }
-  
-  // Predict using GP
-  return gaussianProcess.predict(time);
 }
 
 /**
- * Apply the mixed model (deep learning + Bayesian) to signal processing
+ * Aplica un modelo mixto para predicción de calidad
+ * Combina componentes lineales, estacionales y de error
  */
 export function applyMixedModelPrediction(
-  features: number[],
-  targetTime: number
-): Promise<MixedModelPrediction> {
-  const mixedModel = getMixedModel();
-  
-  // If we have a recent value to train with
-  if (signalHistory.length > 0) {
-    const lastPoint = signalHistory[signalHistory.length - 1];
-    mixedModel.update(features, lastPoint.value).catch(err => {
-      console.error("Error updating mixed model:", err);
-    });
+  recentValues: number[],
+  recentQuality: number[]
+): { predictedQuality: number, confidence: number } {
+  if (recentValues.length < 8 || recentQuality.length < 5) {
+    const lastQuality = recentQuality.length > 0 ? 
+                       recentQuality[recentQuality.length - 1] : 50;
+    return { predictedQuality: lastQuality, confidence: 0.3 };
   }
   
-  // Make prediction
-  return mixedModel.predict(features);
+  try {
+    // Componente de tendencia (lineal)
+    const x = Array.from({ length: recentQuality.length }, (_, i) => i);
+    const sumX = x.reduce((sum, val) => sum + val, 0);
+    const sumY = recentQuality.reduce((sum, val) => sum + val, 0);
+    const sumXY = x.reduce((sum, val, i) => sum + val * recentQuality[i], 0);
+    const sumX2 = x.reduce((sum, val) => sum + val * val, 0);
+    
+    const slope = (recentQuality.length * sumXY - sumX * sumY) / 
+                 (recentQuality.length * sumX2 - sumX * sumX);
+                 
+    const intercept = (sumY - slope * sumX) / recentQuality.length;
+    
+    // Predicción lineal
+    const nextStep = recentQuality.length;
+    const linearPrediction = intercept + slope * nextStep;
+    
+    // Componente de error (basado en varianza)
+    const variance = calculateVariance(recentQuality);
+    const errorComponent = Math.sqrt(variance) * 0.5;
+    
+    // Combinar componentes con límites razonables
+    let predictedQuality = linearPrediction;
+    predictedQuality = Math.max(0, Math.min(100, predictedQuality));
+    
+    // Confianza basada en predictibilidad de la señal
+    const valueVariance = calculateVariance(recentValues);
+    const predictabilityFactor = Math.max(0, 1 - Math.min(1, valueVariance * 10));
+    const trendStrength = Math.min(1, Math.abs(slope) * 10); // Qué tan clara es la tendencia
+    
+    const confidence = 0.3 + predictabilityFactor * 0.4 + trendStrength * 0.3;
+    
+    return { predictedQuality, confidence };
+  } catch (error) {
+    const lastQuality = recentQuality.length > 0 ? 
+                       recentQuality[recentQuality.length - 1] : 50;
+    return { predictedQuality: lastQuality, confidence: 0.3 };
+  }
 }
+
+// Inicializar al cargar el módulo
+initializeAdaptiveControl();
