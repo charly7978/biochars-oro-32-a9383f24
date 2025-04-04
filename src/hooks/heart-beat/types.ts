@@ -1,7 +1,36 @@
-
 /**
  * Type definitions for heart beat processing
  */
+
+export interface DiagnosticData {
+  signalStrength?: number;
+  signalQuality?: 'weak' | 'moderate' | 'good' | 'excellent';
+  detectionStatus?: string;
+  lastProcessedTime?: number;
+  lastPeakDetected?: number;
+  peakStrength?: number;
+  lastValidBpmTime?: number;
+  bpmReliability?: number;
+  confidenceStatus?: 'low' | 'moderate' | 'high';
+  usingHistoricalBPM?: boolean;
+  historyBPM?: number;
+  originalConfidence?: number;
+  adjustedConfidence?: number;
+  bpmStatus?: 'zero' | 'normal' | 'high' | 'low' | 'using_historical';
+  arrhythmiaTracking?: boolean;
+  processingStatus?: string;
+  rhythmAnalysis?: {
+    regularity: number;
+    variability: number;
+  };
+  processPerformance?: {
+    avgProcessTime: number;
+    avgSignalStrength: number;
+    qualityDistribution: any;
+    qualityTrend: string;
+  };
+  rhythmQuality?: string;
+}
 
 export interface HeartBeatResult {
   bpm: number;
@@ -12,7 +41,8 @@ export interface HeartBeatResult {
   rrData: {
     intervals: number[];
     lastPeakTime: number | null;
-  }
+  };
+  diagnosticData?: DiagnosticData;
 }
 
 export interface HeartBeatProcessor {
@@ -32,6 +62,7 @@ export interface UseHeartBeatReturn {
   requestBeep: (value: number) => boolean;
   startMonitoring: () => void;
   stopMonitoring: () => void;
+  getDiagnostics?: () => any;
 }
 
 export interface UseArrhythmiaDetectorReturn {

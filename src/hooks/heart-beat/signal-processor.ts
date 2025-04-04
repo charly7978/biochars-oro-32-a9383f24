@@ -1,4 +1,3 @@
-
 import { useCallback, useRef, useEffect } from 'react';
 import { HeartBeatResult } from './types';
 import { HeartBeatConfig } from '../../modules/heart-beat/config';
@@ -309,5 +308,38 @@ export function useSignalProcessor() {
     // Nuevas propiedades para mejorar visualización
     visualizationBuffer: visualizationBufferRef.current,
     amplificationFactor: amplificationFactorRef
+  };
+}
+
+/**
+ * Process low confidence results and ensures valid output
+ * Enhanced with historical BPM support
+ */
+export function processLowConfidenceResult(
+  result: HeartBeatResult,
+  currentBPM: number,
+  arrhythmiaCount: number
+): HeartBeatResult {
+  // Handle low confidence results by maintaining current BPM
+  if (result.confidence < 0.3 && currentBPM > 0) {
+    return {
+      ...result,
+      bpm: currentBPM,
+      confidence: Math.max(0.3, result.confidence), // Minimum confidence to show something
+      arrhythmiaCount
+    };
+  }
+  
+  // If no current BPM and low confidence, ensure arrhythmia count is preserved
+  if (result.bpm === 0) {
+    return {
+      ...result,
+      arrhythmiaCount
+    };
+  }
+  
+  return {
+    ...result,
+    arrhythmiaCount
   };
 }

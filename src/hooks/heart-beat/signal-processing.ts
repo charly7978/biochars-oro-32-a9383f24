@@ -45,6 +45,7 @@ export function shouldProcessMeasurement(
 
 /**
  * Creates a result object for weak signal scenarios
+ * Enhanced with additional diagnostic data
  */
 export function createWeakSignalResult(arrhythmiaCount = 0): HeartBeatResult {
   return {
@@ -56,6 +57,13 @@ export function createWeakSignalResult(arrhythmiaCount = 0): HeartBeatResult {
     rrData: {
       intervals: [],
       lastPeakTime: null
+    },
+    // Add diagnostic information for weak signal
+    diagnosticData: {
+      signalStrength: 0,
+      signalQuality: 'weak',
+      detectionStatus: 'insufficient_signal',
+      lastProcessedTime: Date.now()
     }
   };
 }
@@ -67,9 +75,7 @@ export function createWeakSignalResult(arrhythmiaCount = 0): HeartBeatResult {
 export function handlePeakDetection(
   result: HeartBeatResult,
   lastPeakTimeRef: React.MutableRefObject<number | null>,
-  requestImmediateBeep: (value: number) => boolean,
-  isMonitoringRef: React.MutableRefObject<boolean>,
-  signalValue: number
+  requestImmediateBeep: (value: number) => boolean
 ): void {
   if (result.isPeak) {
     const now = Date.now();
@@ -77,16 +83,18 @@ export function handlePeakDetection(
     // Update peak time
     lastPeakTimeRef.current = now;
     
-    // Request beep with amplified value for better audio response
-    if (isMonitoringRef.current) {
-      // Amplificar la señal para mejor respuesta de audio
-      requestImmediateBeep(signalValue * 1.5);
+    // Enhanced diagnostics for peak detection
+    if (result.diagnosticData) {
+      result.diagnosticData.lastPeakDetected = now;
+      result.diagnosticData.peakStrength = result.confidence;
+      result.diagnosticData.detectionStatus = 'peak_detected';
     }
   }
 }
 
 /**
  * Updates the last valid BPM reference
+ * Enhanced with diagnostic capture
  */
 export function updateLastValidBpm(
   result: HeartBeatResult,
@@ -94,12 +102,18 @@ export function updateLastValidBpm(
 ): void {
   if (result.bpm >= 40 && result.bpm <= 200 && result.confidence > 0.4) {
     lastValidBpmRef.current = result.bpm;
+    
+    // Add diagnostic information for valid BPM
+    if (result.diagnosticData) {
+      result.diagnosticData.lastValidBpmTime = Date.now();
+      result.diagnosticData.bpmReliability = result.confidence;
+    }
   }
 }
 
 /**
  * Processes low confidence results and ensures valid output
- * Enhanced with historical BPM support
+ * Enhanced with historical BPM support and diagnostic data
  */
 export function processLowConfidenceResult(
   result: HeartBeatResult,
@@ -108,24 +122,44 @@ export function processLowConfidenceResult(
 ): HeartBeatResult {
   // Handle low confidence results by maintaining current BPM
   if (result.confidence < 0.3 && currentBPM > 0) {
-    return {
+    // Enhanced diagnostics for low confidence
+    const enhancedResult = {
       ...result,
       bpm: currentBPM,
       confidence: Math.max(0.3, result.confidence), // Minimum confidence to show something
-      arrhythmiaCount
+      arrhythmiaCount,
+      diagnosticData: {
+        ...(result.diagnosticData || {}),
+        confidenceStatus: 'low',
+        usingHistoricalBPM: true,
+        historyBPM: currentBPM,
+        originalConfidence: result.confidence,
+        adjustedConfidence: Math.max(0.3, result.confidence)
+      }
     };
+    
+    return enhancedResult;
   }
   
   // If no current BPM and low confidence, ensure arrhythmia count is preserved
   if (result.bpm === 0) {
     return {
       ...result,
-      arrhythmiaCount
+      arrhythmiaCount,
+      diagnosticData: {
+        ...(result.diagnosticData || {}),
+        bpmStatus: 'zero',
+        arrhythmiaTracking: true
+      }
     };
   }
   
   return {
     ...result,
-    arrhythmiaCount
+    arrhythmiaCount,
+    diagnosticData: {
+      ...(result.diagnosticData || {}),
+      processingStatus: 'normal'
+    }
   };
 }
