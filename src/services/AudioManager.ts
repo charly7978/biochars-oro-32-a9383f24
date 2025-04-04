@@ -11,7 +11,7 @@
 let audioContext: AudioContext | null = null;
 
 // State
-let audioEnabled: boolean = true; // Renamed from isAudioEnabled to avoid conflict
+let audioEnabledState: boolean = true;
 let beepVolume: number = 0.3; // Default volume
 let lastBeepTime: number = 0;
 const MIN_BEEP_INTERVAL_MS = 500; // Minimum time between beeps
@@ -50,7 +50,7 @@ function initializeAudioContextOnUserInteraction(): void {
  * Handle cardiac peak events from the OptimizedSignalDistributor
  */
 function handleCardiacPeakEvent(event: CustomEvent): void {
-  if (!audioEnabled || !audioContext) return; // Updated variable name
+  if (!audioEnabledState || !audioContext) return;
   
   const now = Date.now();
   
@@ -60,14 +60,14 @@ function handleCardiacPeakEvent(event: CustomEvent): void {
   }
   
   // Extract heart rate and determine if it's an arrhythmia
-  const { heartRate, isArrhythmia } = event.detail;
+  const { heartRate, source } = event.detail;
   
-  // Choose beep type based on heart rate and arrhythmia flag
+  // Choose beep type based on heart rate
   let beepType: BeepType = 'normal';
   
   if (heartRate > 100) {
     beepType = 'alert';
-  } else if (isArrhythmia) {
+  } else if (event.detail.isArrhythmia) {
     beepType = 'arrhythmia';
   }
   
@@ -79,7 +79,7 @@ function handleCardiacPeakEvent(event: CustomEvent): void {
   
   console.log("AudioManager: Handled cardiac peak event", { 
     heartRate, 
-    isArrhythmia,
+    source,
     beepType
   });
 }
@@ -88,7 +88,7 @@ function handleCardiacPeakEvent(event: CustomEvent): void {
  * Play a beep sound with the specified type
  */
 export function playBeep(type: BeepType = 'normal'): boolean {
-  if (!audioEnabled || !audioContext) { // Updated variable name
+  if (!audioEnabledState || !audioContext) {
     return false;
   }
   
@@ -141,7 +141,7 @@ export function playBeep(type: BeepType = 'normal'): boolean {
  * Set audio enabled state
  */
 export function setAudioEnabled(enabled: boolean): void {
-  audioEnabled = enabled; // Updated variable name
+  audioEnabledState = enabled;
   console.log(`AudioManager: Audio ${enabled ? 'enabled' : 'disabled'}`);
 }
 
@@ -157,7 +157,7 @@ export function setBeepVolume(volume: number): void {
  * Check if audio is enabled
  */
 export function isAudioEnabled(): boolean {
-  return audioEnabled; // Updated variable name
+  return audioEnabledState;
 }
 
 /**
