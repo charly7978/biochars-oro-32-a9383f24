@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -7,7 +6,8 @@ import { Slider } from '@/components/ui/slider';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { unifiedFingerDetector, DetectionState } from '@/modules/signal-processing/finger-detection/unified-finger-detector';
+import { unifiedFingerDetector } from '@/modules/signal-processing';
+import { DetectionState } from '@/modules/signal-processing/finger-detection/finger-detection-types';
 import { CircularBuffer } from '@/modules/signal-processing/utils/circular-buffer';
 import { useToast } from '@/hooks/use-toast';
 
@@ -192,14 +192,14 @@ const FingerDetectionMonitor: React.FC = () => {
   
   // Ajusta la sensibilidad
   const handleSensitivityChange = (value: number[]) => {
-    if (!value.length) return;
-    unifiedFingerDetector.setSensitivity(value[0]);
+    if (!value.length || !detectionState) return;
+    unifiedFingerDetector.updateThresholds({ sensitivityLevel: value[0] });
   };
   
   // Ajusta la tasa de adaptación
   const handleAdaptationRateChange = (value: number[]) => {
-    if (!value.length) return;
-    unifiedFingerDetector.setAdaptationRate(value[0]);
+    if (!value.length || !detectionState) return;
+    unifiedFingerDetector.updateThresholds({ adaptationRate: value[0] });
   };
   
   // Renderizado
@@ -313,7 +313,11 @@ const FingerDetectionMonitor: React.FC = () => {
                     min={0.1} 
                     max={0.8} 
                     step={0.05}
-                    onValueChange={(value) => detectionState && unifiedFingerDetector.setAmplitudeThreshold(value[0])}
+                    onValueChange={(value) => {
+                      if (detectionState) {
+                        unifiedFingerDetector.updateThresholds({ amplitudeThreshold: value[0] });
+                      }
+                    }}
                   />
                 </div>
                 
@@ -330,7 +334,11 @@ const FingerDetectionMonitor: React.FC = () => {
                     min={0.1} 
                     max={0.5} 
                     step={0.05}
-                    onValueChange={(value) => detectionState && unifiedFingerDetector.setFalsePositiveReduction(value[0])}
+                    onValueChange={(value) => {
+                      if (detectionState) {
+                        unifiedFingerDetector.updateThresholds({ falsePositiveReduction: value[0] });
+                      }
+                    }}
                   />
                 </div>
                 
@@ -347,7 +355,11 @@ const FingerDetectionMonitor: React.FC = () => {
                     min={0.1} 
                     max={0.5} 
                     step={0.05}
-                    onValueChange={(value) => detectionState && unifiedFingerDetector.setFalseNegativeReduction(value[0])}
+                    onValueChange={(value) => {
+                      if (detectionState) {
+                        unifiedFingerDetector.updateThresholds({ falseNegativeReduction: value[0] });
+                      }
+                    }}
                   />
                 </div>
               </div>

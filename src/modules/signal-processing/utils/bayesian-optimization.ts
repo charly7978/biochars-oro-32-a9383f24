@@ -9,7 +9,7 @@ import {
 } from '../finger-detection/unified-finger-detector';
 
 // Forward export the DetectionState interface to keep compatibility
-export type { DetectionState } from '../finger-detection/unified-finger-detector';
+export type { DetectionState } from '../finger-detection/finger-detection-types';
 
 export interface ParameterOptions {
   name: string;
@@ -251,7 +251,7 @@ export function createBayesianOptimizer(
 /**
  * Default parameters for PPG signal optimization
  */
-export const DEFAULT_PPG_PARAMETERS = [
+export const DEFAULT_PPG_PARAMETERS: OptimizationParameter[] = [
   {
     name: 'amplificationFactor',
     min: 1.0,
@@ -288,7 +288,7 @@ export function createDefaultPPGOptimizer(initialParameters = {}) {
 /**
  * Default parameters for Heartbeat signal optimization
  */
-export const DEFAULT_HEARTBEAT_PARAMETERS = [
+export const DEFAULT_HEARTBEAT_PARAMETERS: OptimizationParameter[] = [
   {
     name: 'peakThreshold',
     min: 0.1,

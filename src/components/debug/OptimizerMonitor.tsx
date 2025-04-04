@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -7,20 +6,7 @@ import { Switch } from "@/components/ui/switch";
 import { Progress } from "@/components/ui/progress";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { OptimizationState } from '@/modules/signal-processing/utils/parameter-optimization';
-
-// Define OptimizationMetrics interface to match useSignalParameterOptimizer
-interface OptimizationMetrics {
-  currentScore: number;
-  bestScore: number;
-  improvementPercentage: number;
-  optimizationCycles: number;
-  lastOptimizationTime: number | null;
-  paramsHistory: Array<{
-    timestamp: number;
-    score: number;
-    params: Record<string, any>;
-  }>;
-}
+import type { OptimizationMetrics } from '@/modules/signal-processing/utils/parameter-optimization';
 
 interface OptimizerMonitorProps {
   metrics: OptimizationMetrics | null;
@@ -63,6 +49,12 @@ const OptimizerMonitor: React.FC<OptimizerMonitorProps> = ({
         return 'bg-amber-500';
       case OptimizationState.FAILED:
         return 'bg-green-500';
+      case OptimizationState.COLLECTING:
+        return 'bg-cyan-500';
+      case OptimizationState.EVALUATING:
+        return 'bg-pink-500';
+      case OptimizationState.APPLYING:
+        return 'bg-orange-500';
       default:
         return 'bg-gray-500';
     }
@@ -92,7 +84,6 @@ const OptimizerMonitor: React.FC<OptimizerMonitorProps> = ({
       </CardHeader>
       
       <CardContent className="space-y-4">
-        {/* Current scores */}
         {metrics && (
           <>
             <div className="space-y-2">
@@ -120,7 +111,6 @@ const OptimizerMonitor: React.FC<OptimizerMonitorProps> = ({
               </div>
             </div>
             
-            {/* Parameter history */}
             {metrics.paramsHistory.length > 0 && (
               <div className="space-y-2 mt-4">
                 <h4 className="text-sm font-medium">Parameter History</h4>

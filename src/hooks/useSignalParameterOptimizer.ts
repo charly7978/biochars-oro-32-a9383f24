@@ -1,4 +1,3 @@
-
 /**
  * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
  * 
@@ -9,11 +8,11 @@ import {
   SignalParameterOptimizer, 
   createSignalParameterOptimizer,
   OptimizationState,
-  OptimizationMetrics
+  type OptimizationMetrics
 } from '@/modules/signal-processing/utils/parameter-optimization';
 import { 
-  BayesianOptimizerConfig, 
-  OptimizationParameter 
+  type BayesianOptimizerConfig, 
+  type OptimizationParameter 
 } from '@/modules/signal-processing/utils/bayesian-optimization';
 import { useErrorPrevention } from '@/utils/errorPrevention/integration';
 import { logError, ErrorLevel } from '@/utils/debugUtils';
@@ -80,8 +79,7 @@ export function useSignalParameterOptimizer(config: SignalOptimizerConfig) {
       errorPrevention.registerError(
         `Error initializing signal optimizer: ${error instanceof Error ? error.message : String(error)}`,
         "useSignalParameterOptimizer",
-        { error, parameters: config.parameters },
-        ErrorLevel.ERROR
+        { error, parameters: config.parameters }
       );
     }
     
@@ -182,7 +180,7 @@ export function useSignalParameterOptimizer(config: SignalOptimizerConfig) {
   }, [config.optimizationInterval, tryStartOptimization]);
   
   // Reiniciar el optimizador
-  const resetOptimizer = useCallback(() => {
+  const reset = useCallback(() => {
     if (!optimizerRef.current) return;
     
     optimizerRef.current.reset();
@@ -204,7 +202,7 @@ export function useSignalParameterOptimizer(config: SignalOptimizerConfig) {
     addQualityObservation,
     startOptimization: tryStartOptimization,
     setAutoOptimize,
-    reset: resetOptimizer,
+    reset,
     getBestParameters
   };
 }

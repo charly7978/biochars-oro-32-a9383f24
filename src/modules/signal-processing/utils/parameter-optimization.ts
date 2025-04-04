@@ -48,7 +48,7 @@ export interface OptimizationMetrics {
  */
 export interface SignalParameterOptimizer {
   // Comienza optimización
-  startOptimization(objectiveFunction?: (params: Record<string, number>) => number): Promise<Record<string, number>>;
+  startOptimization(objectiveFunction?: (params: Record<string, number>) => number): Promise<Record<string, number>> | boolean;
   
   // Detiene optimización en curso
   stopOptimization(): void;

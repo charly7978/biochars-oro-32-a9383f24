@@ -73,8 +73,7 @@ export {
   createDefaultPPGOptimizer,
   createHeartbeatOptimizer,
   DEFAULT_PPG_PARAMETERS,
-  DEFAULT_HEARTBEAT_PARAMETERS,
-  OptimizationParameter
+  DEFAULT_HEARTBEAT_PARAMETERS
 } from './utils/bayesian-optimization';
 
 // Use 'export type' for types when isolatedModules is enabled
@@ -83,7 +82,8 @@ export type {
   BayesianDataPoint,
   BayesianOptimizerConfig,
   GaussianProcess,
-  ParameterOptions
+  ParameterOptions,
+  OptimizationParameter
 } from './utils/bayesian-optimization';
 
 // Exportar sistema adaptativo
