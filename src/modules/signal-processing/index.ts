@@ -21,14 +21,18 @@ export { BloodPressureChannel } from './channels/BloodPressureChannel';
 export { SpO2Channel } from './channels/SpO2Channel';
 export { CardiacChannel } from './channels/CardiacChannel';
 
-// Export unified processor (new)
+// Export unified processor
 export { UnifiedSignalProcessor } from './UnifiedSignalProcessor';
 
-// Export unified vital signs processor (new)
+// Export unified vital signs processor
 export { UnifiedVitalSignsProcessor } from './UnifiedVitalSignsProcessor';
 
-// Re-export utility types
+// Export from compatibility layer
+export { VitalSignsProcessorAdapter, createCompatibleVitalSignsProcessor } from './CompatibilityLayer';
+
+// Re-export types
 export type { SignalDistributorConfig } from '../../types/signal';
+export type { SignalProcessor, ProcessedSignal } from '../../types/signal';
 
 // Export from unified types
 export * from '../../types/signal-processing';

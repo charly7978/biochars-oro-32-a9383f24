@@ -9,10 +9,7 @@
 import { UnifiedVitalSignsResult, RRIntervalAnalysis } from '../../types/signal-processing';
 import { UnifiedSignalProcessor } from './UnifiedSignalProcessor';
 import { SpO2Channel } from './channels/SpO2Channel';
-import { CardiacChannel } from './channels/CardiacChannel';
-import { GlucoseChannel } from './channels/GlucoseChannel';
-import { LipidsChannel } from './channels/LipidsChannel';
-import { BloodPressureChannel } from './channels/BloodPressureChannel';
+import { VitalSignType } from '../../types/signal';
 
 /**
  * Procesador unificado de signos vitales
@@ -21,10 +18,6 @@ import { BloodPressureChannel } from './channels/BloodPressureChannel';
 export class UnifiedVitalSignsProcessor {
   private signalProcessor: UnifiedSignalProcessor;
   private spo2Channel: SpO2Channel;
-  private cardiacChannel: CardiacChannel;
-  private glucoseChannel: GlucoseChannel;
-  private lipidsChannel: LipidsChannel;
-  private bpChannel: BloodPressureChannel;
   
   private arrhythmiaCounter: number = 0;
   private ppgValues: number[] = [];
@@ -33,16 +26,13 @@ export class UnifiedVitalSignsProcessor {
     // Inicializar procesadores especializados
     this.signalProcessor = new UnifiedSignalProcessor();
     this.spo2Channel = new SpO2Channel();
-    this.cardiacChannel = new CardiacChannel();
-    this.glucoseChannel = new GlucoseChannel();
-    this.lipidsChannel = new LipidsChannel();
-    this.bpChannel = new BloodPressureChannel();
     
     console.log("UnifiedVitalSignsProcessor: Initialized");
   }
   
   /**
    * Procesa un valor PPG y calcula todos los signos vitales
+   * Centrándose primero solo en SpO2 para simplificar
    */
   public processSignal(value: number, rrData?: RRIntervalAnalysis): UnifiedVitalSignsResult {
     // Procesar señal base
@@ -62,33 +52,18 @@ export class UnifiedVitalSignsProcessor {
     // Procesar datos de arritmia si están disponibles
     const arrhythmiaResult = this.processArrhythmiaData(rrData);
     
-    // Procesar canales especializados
+    // Procesar canales - por ahora solo SpO2
     const spo2 = this.spo2Channel.process(this.ppgValues);
-    const pressure = this.bpChannel.process(this.ppgValues, rrData);
-    const glucose = this.glucoseChannel.process(this.ppgValues);
-    const lipids = this.lipidsChannel.process(this.ppgValues);
     
-    // Calcular confianza
-    const glucoseConfidence = this.calculateConfidence(this.ppgValues);
-    const lipidsConfidence = this.calculateConfidence(this.ppgValues) * 0.9; // Lipids slightly less confident
-    
-    // Overall confidence
-    const overallConfidence = (glucoseConfidence + lipidsConfidence) / 2;
-    
-    // Resultado final
+    // Resultados simplificados para depuración
     return {
       spo2,
-      pressure,
+      pressure: "--/--",
       arrhythmiaStatus: arrhythmiaResult.status,
-      glucose,
+      glucose: 0,
       lipids: {
-        totalCholesterol: lipids.totalCholesterol,
-        triglycerides: lipids.triglycerides
-      },
-      confidence: {
-        glucose: glucoseConfidence,
-        lipids: lipidsConfidence,
-        overall: overallConfidence
+        totalCholesterol: 0,
+        triglycerides: 0
       },
       lastArrhythmiaData: arrhythmiaResult.data
     };
@@ -140,30 +115,6 @@ export class UnifiedVitalSignsProcessor {
   }
   
   /**
-   * Calcula nivel de confianza basado en la calidad de la señal
-   */
-  private calculateConfidence(values: number[]): number {
-    if (values.length < 10) {
-      return 0;
-    }
-    
-    // Calcular amplitud de señal
-    const recentValues = values.slice(-10);
-    const min = Math.min(...recentValues);
-    const max = Math.max(...recentValues);
-    const amplitude = max - min;
-    
-    // Calcular estabilidad (menor varianza = mayor estabilidad)
-    const avg = recentValues.reduce((sum, val) => sum + val, 0) / recentValues.length;
-    const variance = recentValues.reduce((sum, val) => sum + Math.pow(val - avg, 2), 0) / recentValues.length;
-    const stability = Math.max(0, 1 - Math.sqrt(variance) * 5);
-    
-    // Confianza combinada
-    const rawConfidence = (amplitude * 2 + stability) / 3;
-    return Math.min(1, Math.max(0, rawConfidence));
-  }
-  
-  /**
    * Crea un resultado vacío cuando no hay datos suficientes
    */
   private createEmptyResult(): UnifiedVitalSignsResult {
@@ -184,11 +135,7 @@ export class UnifiedVitalSignsProcessor {
    */
   public reset(): UnifiedVitalSignsResult | null {
     this.signalProcessor.reset();
-    this.spo2Channel = new SpO2Channel();
-    this.cardiacChannel = new CardiacChannel();
-    this.glucoseChannel = new GlucoseChannel();
-    this.lipidsChannel = new LipidsChannel();
-    this.bpChannel = new BloodPressureChannel();
+    this.spo2Channel.reset();
     this.ppgValues = [];
     
     console.log("UnifiedVitalSignsProcessor: Reset complete");

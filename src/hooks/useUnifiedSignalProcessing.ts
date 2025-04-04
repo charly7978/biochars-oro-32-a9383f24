@@ -12,6 +12,7 @@ import { UnifiedVitalSignsResult, RRIntervalAnalysis } from '../types/signal-pro
 
 /**
  * Hook para procesamiento de señales unificado
+ * Versión simplificada centrada en SpO2
  */
 export const useUnifiedSignalProcessing = () => {
   // Referencia al procesador

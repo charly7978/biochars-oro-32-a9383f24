@@ -15,9 +15,6 @@ export interface SignalProcessingOptions {
   qualityThreshold?: number;
   fingerDetectionSensitivity?: number;
   useAdaptiveControl?: boolean;
-  qualityEnhancedByPrediction?: boolean;
-  predictionHorizon?: number;
-  adaptationRate?: number;
 }
 
 // Interfaz común para todos los procesadores
@@ -43,9 +40,6 @@ export interface ProcessedSignalResult {
 export interface RRIntervalAnalysis {
   intervals: number[];
   lastPeakTime: number | null;
-  variability?: number;
-  rmssd?: number;
-  isArrhythmia?: boolean;
 }
 
 // Interfaz unificada para resultados de signos vitales

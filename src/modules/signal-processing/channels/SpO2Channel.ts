@@ -16,6 +16,7 @@ export class SpO2Channel extends SpecializedChannel {
   private readonly BASELINE_SPO2 = 97; // Porcentaje base
   private spo2Buffer: number[] = [];
   private readonly BUFFER_SIZE = 10;
+  private recentValues: number[] = [];
   
   constructor() {
     super(VitalSignType.SPO2);
@@ -25,6 +26,9 @@ export class SpO2Channel extends SpecializedChannel {
    * Procesa un array de valores PPG y calcula SpO2
    */
   public process(values: number[]): number {
+    // Almacenar valores para su uso posterior
+    this.recentValues = [...values];
+    
     if (values.length < 30) {
       return this.getLastValidValue();
     }
@@ -118,5 +122,6 @@ export class SpO2Channel extends SpecializedChannel {
   public override reset(): void {
     super.reset();
     this.spo2Buffer = [];
+    this.recentValues = [];
   }
 }
