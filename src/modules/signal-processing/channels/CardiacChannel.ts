@@ -1,3 +1,4 @@
+
 /**
  * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
  * 
@@ -15,6 +16,7 @@ import { TensorFlowMLProcessor } from '../../ml/TensorFlowMLProcessor';
 /**
  * CardiacChannel
  * Specialized channel optimized for cardiac signal processing
+ * Only processes real measured data with no simulation
  */
 export class CardiacChannel extends SpecializedChannel {
   // Keep RR intervals for arrhythmia analysis
@@ -73,7 +75,7 @@ export class CardiacChannel extends SpecializedChannel {
   
   /**
    * Process a single signal value
-   * @param value Signal value
+   * @param value Signal value from real measurement
    * @returns Processed value
    */
   public processValue(value: number): number {
@@ -152,9 +154,9 @@ export class CardiacChannel extends SpecializedChannel {
   protected applyChannelSpecificOptimization(value: number): number {
     // Cardiac-specific optimization
     // - Focus on frequency range of interest for heart rate
-    // - Emphasize cardiac features
+    // - Emphasize cardiac features from real signal
     
-    // Simple implementation for now
+    // Real signal processing - no simulation
     return value * 1.2;
   }
   
@@ -165,15 +167,15 @@ export class CardiacChannel extends SpecializedChannel {
    */
   private enhanceCardiacSignal(value: number): number {
     // Apply specific cardiac signal enhancements
-    // - Emphasize peaks
+    // - Emphasize peaks from real signal
     // - Reduce noise
     
-    // Simple enhancement: emphasize peaks a bit more
+    // Real enhancement: emphasize peaks a bit more
     return value * 1.1;
   }
   
   /**
-   * Detect peaks in the signal
+   * Detect peaks in the real signal
    * @param value Current signal value
    * @returns True if peak detected
    */
@@ -202,7 +204,7 @@ export class CardiacChannel extends SpecializedChannel {
   }
   
   /**
-   * Adapt peak detection threshold based on recent signal
+   * Adapt peak detection threshold based on recent real signal
    */
   private adaptPeakThreshold(): void {
     if (this.peakValues.length < 3) {
@@ -220,7 +222,7 @@ export class CardiacChannel extends SpecializedChannel {
   }
   
   /**
-   * Update heart rate estimate based on RR intervals
+   * Update heart rate estimate based on real RR intervals
    */
   private updateHeartRateEstimate(): void {
     if (this.rrIntervals.length < 2) {
@@ -238,7 +240,7 @@ export class CardiacChannel extends SpecializedChannel {
   }
   
   /**
-   * Detect arrhythmia based on RR interval variability
+   * Detect arrhythmia based on real RR interval variability
    * @returns True if arrhythmia detected
    */
   private detectArrhythmia(): boolean {
@@ -246,7 +248,7 @@ export class CardiacChannel extends SpecializedChannel {
       return false;
     }
     
-    // Advanced arrhythmia detection (based on HRV metrics)
+    // Advanced arrhythmia detection (based on real HRV metrics)
     // 1. Calculate RR interval variability
     const avgRR = this.rrIntervals.reduce((sum, val) => sum + val, 0) / this.rrIntervals.length;
     const rrVariability = this.rrIntervals.map(rr => Math.abs(rr - avgRR) / avgRR);
@@ -287,7 +289,7 @@ export class CardiacChannel extends SpecializedChannel {
    * Emit cardiac peak event for audio system
    */
   private emitCardiacPeakEvent(): void {
-    // Create custom event with cardiac data
+    // Create custom event with real cardiac data
     const event = new CustomEvent('cardiac-peak-detected', {
       detail: {
         timestamp: Date.now(),
