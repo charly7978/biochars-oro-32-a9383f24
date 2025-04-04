@@ -172,6 +172,7 @@ export function useArrhythmiaDetector(): UseArrhythmiaDetectorReturn {
     stabilityCounterRef,
     lastRRIntervalsRef,
     lastIsArrhythmiaRef,
-    currentBeatIsArrhythmiaRef
+    currentBeatIsArrhythmiaRef,
+    detectArrhythmia
   };
 }

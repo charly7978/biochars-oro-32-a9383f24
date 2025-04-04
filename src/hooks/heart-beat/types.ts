@@ -20,6 +20,7 @@ export interface HeartBeatProcessor {
   reset: () => void;
   getRRIntervals: () => { intervals: number[], lastPeakTime: number | null };
   getArrhythmiaCounter: () => number;
+  setMonitoring: (value: boolean) => void;
 }
 
 export interface UseHeartBeatReturn {
@@ -33,7 +34,6 @@ export interface UseHeartBeatReturn {
   stopMonitoring: () => void;
 }
 
-// Add this interface to fix type errors with arrhythmia-detector
 export interface UseArrhythmiaDetectorReturn {
   processRRIntervals: (intervals: number[]) => boolean;
   reset: () => void;
@@ -43,9 +43,9 @@ export interface UseArrhythmiaDetectorReturn {
   lastRRIntervalsRef: React.MutableRefObject<number[]>;
   lastIsArrhythmiaRef: React.MutableRefObject<boolean>;
   currentBeatIsArrhythmiaRef: React.MutableRefObject<boolean>;
+  detectArrhythmia?: (intervals: number[]) => RRAnalysisResult;
 }
 
-// Add ArrhythmiaState interface here since it's used above
 export interface ArrhythmiaState {
   isActive: boolean;
   lastDetectionTime: number;
@@ -53,10 +53,40 @@ export interface ArrhythmiaState {
   windows: Array<{start: number, end: number}>;
 }
 
-// Adding missing RRAnalysisResult interface
 export interface RRAnalysisResult {
   rmssd: number;
   rrVariation: number;
   timestamp: number;
   isArrhythmia: boolean;
+}
+
+export interface SignalProcessorOptions {
+  lowSignalThreshold?: number;
+  maxWeakSignalCount?: number;
+  amplificationFactor?: number;
+  filterStrength?: number;
+  useAdaptiveControl?: boolean;
+  qualityEnhancedByPrediction?: boolean;
+}
+
+export interface SignalProcessorReturn {
+  processSignal: (
+    value: number,
+    currentBPM: number,
+    confidence: number,
+    processor: any,
+    requestImmediateBeep: (value: number) => boolean,
+    isMonitoringRef: React.MutableRefObject<boolean>,
+    lastRRIntervalsRef: React.MutableRefObject<number[]>,
+    currentBeatIsArrhythmiaRef: React.MutableRefObject<boolean>
+  ) => HeartBeatResult;
+  reset: () => void;
+  lastPeakTimeRef: React.MutableRefObject<number | null>;
+  lastValidBpmRef: React.MutableRefObject<number>;
+  lastSignalQualityRef: React.MutableRefObject<number>;
+  consecutiveWeakSignalsRef: React.MutableRefObject<number>;
+  MAX_CONSECUTIVE_WEAK_SIGNALS: number;
+  signalDistributor: any;
+  visualizationBuffer?: number[];
+  amplificationFactor?: React.MutableRefObject<number>;
 }
