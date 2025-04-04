@@ -1,3 +1,4 @@
+
 /**
  * Peak detection and arrhythmia analysis module
  * Contains enhanced algorithms for cardiac signal analysis
@@ -12,6 +13,7 @@ interface DiagnosticEntry {
   qualityScore: number;
   isPeak: boolean;
   rrInterval: number | null;
+  processingPriority?: 'high' | 'medium' | 'low';
 }
 
 const diagnosticHistory: DiagnosticEntry[] = [];
@@ -267,4 +269,16 @@ export function getDetailedQualityStats(): {
  */
 export function getDiagnosticsData(): DiagnosticEntry[] {
   return [...diagnosticHistory];
+}
+
+/**
+ * Clear diagnostic data history
+ * Added to fix the missing export error
+ */
+export function clearDiagnosticsData(): void {
+  diagnosticHistory.length = 0;
+  qualityDistribution.high = 0;
+  qualityDistribution.medium = 0;
+  qualityDistribution.low = 0;
+  lastQualityTrend = [];
 }
