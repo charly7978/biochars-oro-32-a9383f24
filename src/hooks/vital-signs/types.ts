@@ -16,3 +16,11 @@ export interface DiagnosticDataPoint {
   signalQuality: number;
   beatConfidence: number;
 }
+
+// Interfaz para el estado de arritmia
+export interface ArrhythmiaState {
+  isActive: boolean;
+  lastDetectionTime: number;
+  recoveryTime: number; // Tiempo para resetear el estado de arritmia automáticamente
+  windows: ArrhythmiaWindow[];
+}
