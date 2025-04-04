@@ -15,7 +15,6 @@ let audioEnabledState: boolean = true;
 let beepVolume: number = 0.3; // Default volume
 let lastBeepTime: number = 0;
 const MIN_BEEP_INTERVAL_MS = 500; // Minimum time between beeps
-let vibrationEnabledState: boolean = true; // Vibration feedback state
 
 // Beep types
 type BeepType = 'normal' | 'arrhythmia' | 'alert';
@@ -61,33 +60,19 @@ function handleCardiacPeakEvent(event: CustomEvent): void {
   }
   
   // Extract heart rate and determine if it's an arrhythmia
-  const { heartRate, source, isArrhythmia } = event.detail;
+  const { heartRate, source } = event.detail;
   
-  // Choose beep type based on heart rate and arrhythmia status
+  // Choose beep type based on heart rate
   let beepType: BeepType = 'normal';
   
   if (heartRate > 100) {
     beepType = 'alert';
-  } else if (isArrhythmia) {
+  } else if (event.detail.isArrhythmia) {
     beepType = 'arrhythmia';
   }
   
   // Play appropriate beep
   playBeep(beepType);
-  
-  // Trigger vibration if enabled (different pattern based on beep type)
-  if (vibrationEnabledState && 'vibrate' in navigator) {
-    if (isArrhythmia) {
-      // More intense vibration for arrhythmia
-      navigator.vibrate([30, 30, 60]);
-    } else if (heartRate > 100) {
-      // Quick double vibration for high heart rate
-      navigator.vibrate([20, 20, 20]);
-    } else {
-      // Simple vibration for normal beats
-      navigator.vibrate(20);
-    }
-  }
   
   // Update last beep time
   lastBeepTime = now;
@@ -95,8 +80,7 @@ function handleCardiacPeakEvent(event: CustomEvent): void {
   console.log("AudioManager: Handled cardiac peak event", { 
     heartRate, 
     source,
-    beepType,
-    isArrhythmia
+    beepType
   });
 }
 
@@ -162,15 +146,6 @@ export function setAudioEnabled(enabled: boolean): void {
 }
 
 /**
- * Set vibration enabled state
- * New function to control vibration feedback
- */
-export function setVibrationEnabled(enabled: boolean): void {
-  vibrationEnabledState = enabled;
-  console.log(`AudioManager: Vibration ${enabled ? 'enabled' : 'disabled'}`);
-}
-
-/**
  * Set beep volume (0-1)
  */
 export function setBeepVolume(volume: number): void {
@@ -186,13 +161,6 @@ export function isAudioEnabled(): boolean {
 }
 
 /**
- * Check if vibration is enabled
- */
-export function isVibrationEnabled(): boolean {
-  return vibrationEnabledState;
-}
-
-/**
  * Test the audio system with each beep type
  */
 export function testAudioSystem(): void {
@@ -204,14 +172,7 @@ export function testAudioSystem(): void {
   setTimeout(() => playBeep('arrhythmia'), 700);
   setTimeout(() => playBeep('alert'), 1400);
   
-  // Test vibration if enabled
-  if (vibrationEnabledState && 'vibrate' in navigator) {
-    setTimeout(() => navigator.vibrate(20), 0);
-    setTimeout(() => navigator.vibrate([30, 30, 60]), 700);
-    setTimeout(() => navigator.vibrate([20, 20, 20]), 1400);
-  }
-  
-  console.log("AudioManager: Running audio test sequence with vibration");
+  console.log("AudioManager: Running audio test sequence");
 }
 
 /**
