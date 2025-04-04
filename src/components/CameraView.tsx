@@ -1,4 +1,3 @@
-
 import React, { useRef, useEffect, useState } from 'react';
 import { Fingerprint } from 'lucide-react';
 import { logError, ErrorLevel } from '@/utils/debugUtils';
@@ -141,7 +140,7 @@ const CameraView: React.FC<CameraViewProps> = ({
           videoRef.current.onerror = (e) => {
             logError(`Error en elemento video: ${e.type}`, ErrorLevel.ERROR, "CameraView");
             streamErrorRef.current = true;
-            handleCameraError(new Error("Error en elemento video"));
+            handleCameraError(e);
           };
         } catch (err) {
           throw new Error(`Error al configurar video: ${err instanceof Error ? err.message : String(err)}`);
@@ -172,9 +171,12 @@ const CameraView: React.FC<CameraViewProps> = ({
     }
   };
 
-  // Manejar errores de cámara con reintentos automáticos
-  const handleCameraError = (error: unknown): void => {
-    const errorMessage = error instanceof Error ? error.message : String(error);
+  // Función para manejar errores de cámara
+  const handleCameraError = (error: string | Event) => {
+    const errorMessage = typeof error === 'string' 
+      ? error 
+      : (error instanceof Error ? error.message : 'Error desconocido');
+    
     logError(`Error de cámara: ${errorMessage}`, ErrorLevel.ERROR, "CameraView");
     
     setCameraError(errorMessage);
