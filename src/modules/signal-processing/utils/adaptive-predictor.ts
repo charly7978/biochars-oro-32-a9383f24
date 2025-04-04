@@ -1,210 +1,128 @@
 /**
  * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
  * 
- * Predictor adaptativo para señales PPG y cardíacas
+ * Utilidades para predicción adaptativa de señales
+ * Implementa un filtro de Kalman adaptativo para predecir valores futuros
  */
-import { CircularBuffer } from './circular-buffer';
-import { logError, ErrorLevel } from '@/utils/debugUtils';
-
-// Export type for PredictionResult
-export type PredictionResult = {
-  predictedValue: number;
-  confidence: number;
-  predictedTimestamp?: number;
-};
 
 /**
- * Configuración del predictor adaptativo
+ * Interface for adaptive prediction of signal values
  */
-interface AdaptivePredictorConfig {
-  learningRate?: number; // Tasa de aprendizaje (0-1)
-  momentum?: number;     // Factor de momentum (0-1)
-  noiseTolerance?: number; // Tolerancia al ruido (0-1)
-  minObservations?: number; // Mínimo de observaciones para predecir
-  maxHistory?: number;    // Máximo de valores históricos a mantener
+export interface AdaptivePredictor {
+  predict(timestamp: number): { predictedValue: number; confidence: number };
+  update(timestamp: number, value: number, weight: number): void;
+  configure(options: any): void;
+  reset(): void;
+  getState(): any;
 }
 
 /**
- * Estado interno del predictor
+ * Implementación del filtro de Kalman adaptativo
  */
-interface PredictorState {
-  lastValue: number;
-  lastTimestamp: number;
-  trend: number;
-  confidence: number;
-  history: { value: number; timestamp: number; }[];
-}
-
-/**
- * Implementación de predictor adaptativo
- */
-class AdaptivePredictor {
-  private config: Required<AdaptivePredictorConfig>;
-  private state: PredictorState;
-  private valueBuffer: CircularBuffer<number>;
+class KalmanFilter implements AdaptivePredictor {
+  private processNoise: number = 0.01;
+  private measurementNoise: number = 0.1;
+  private errorEstimate: number = 1;
+  private kalmanGain: number = 0;
+  private currentValue: number = 0;
+  private lastTimestamp: number = 0;
+  private adaptationRate: number = 0.1;
+  private confidenceThreshold: number = 0.5;
   
   /**
-   * Constructor del predictor
+   * Predice el siguiente valor de la señal
    */
-  constructor(config?: AdaptivePredictorConfig) {
-    this.config = {
-      learningRate: config?.learningRate ?? 0.1,
-      momentum: config?.momentum ?? 0.8,
-      noiseTolerance: config?.noiseTolerance ?? 0.2,
-      minObservations: config?.minObservations ?? 5,
-      maxHistory: config?.maxHistory ?? 20
-    };
+  public predict(timestamp: number): { predictedValue: number; confidence: number } {
+    // Calcular el tiempo transcurrido desde la última actualización
+    const timeDiff = timestamp - this.lastTimestamp;
     
-    this.state = {
-      lastValue: 0,
-      lastTimestamp: 0,
-      trend: 0,
-      confidence: 0.5,
-      history: []
-    };
+    // Proyectar el estado actual hacia el futuro
+    const predictedValue = this.currentValue;
     
-    // Buffer circular para valores recientes
-    this.valueBuffer = new CircularBuffer<number>(this.config.maxHistory, true, true);
+    // La confianza es inversamente proporcional al tiempo transcurrido
+    let confidence = Math.max(0, 1 - (timeDiff / 1000));
+    
+    // Ajustar la confianza basada en el umbral
+    confidence = confidence > this.confidenceThreshold ? confidence : 0;
+    
+    return { predictedValue, confidence };
   }
   
   /**
-   * Actualiza el predictor con un nuevo valor
-   * @param timestamp Marca de tiempo del valor
-   * @param value Valor a agregar
-   * @param stability Estabilidad de la señal (0-1)
+   * Actualiza el filtro con un nuevo valor
    */
-  public update(timestamp: number, value: number, stability: number = 0.75): void {
-    try {
-      // Agregar al buffer
-      this.valueBuffer.push(value);
-      
-      // Calcular diferencia con el valor anterior
-      const delta = value - this.state.lastValue;
-      const timeDelta = timestamp - this.state.lastTimestamp;
-      
-      // Estimar tendencia
-      let currentTrend = timeDelta > 0 ? delta / timeDelta : 0;
-      
-      // Aplicar filtro de ruido
-      if (Math.abs(currentTrend) < this.config.noiseTolerance) {
-        currentTrend = 0;
-      }
-      
-      // Combinar tendencia actual con la anterior usando momentum
-      this.state.trend = this.config.momentum * this.state.trend +
-                         (1 - this.config.momentum) * currentTrend;
-      
-      // Ajustar confianza basada en la estabilidad
-      this.state.confidence = this.config.learningRate * stability +
-                              (1 - this.config.learningRate) * this.state.confidence;
-      
-      // Limitar confianza a 0-1
-      this.state.confidence = Math.max(0, Math.min(1, this.state.confidence));
-      
-      // Actualizar estado
-      this.state.lastValue = value;
-      this.state.lastTimestamp = timestamp;
-      
-      // Agregar al historial
-      this.state.history.push({ value, timestamp });
-      
-      // Limitar tamaño del historial
-      if (this.state.history.length > this.config.maxHistory) {
-        this.state.history.shift();
-      }
-    } catch (error) {
-      logError(
-        `Error al actualizar predictor adaptativo: ${error}`,
-        ErrorLevel.WARNING,
-        "AdaptivePredictor"
-      );
+  public update(timestamp: number, value: number, weight: number): void {
+    // Calcular la ganancia de Kalman
+    this.kalmanGain = this.errorEstimate / (this.errorEstimate + this.measurementNoise);
+    
+    // Corregir la estimación actual
+    this.currentValue += this.kalmanGain * (value - this.currentValue);
+    
+    // Actualizar la estimación del error
+    this.errorEstimate = (1 - this.kalmanGain) * this.errorEstimate + 
+                         Math.abs(value - this.currentValue) * this.processNoise;
+    
+    // Recordar el timestamp actual
+    this.lastTimestamp = timestamp;
+    
+    // Adaptar los parámetros del filtro
+    this.processNoise = this.processNoise * (1 - this.adaptationRate) + 0.001 * this.adaptationRate;
+    this.measurementNoise = this.measurementNoise * (1 - this.adaptationRate) + 0.01 * this.adaptationRate;
+    
+    // Limitar los valores de los parámetros
+    this.processNoise = Math.max(0.0001, Math.min(0.1, this.processNoise));
+    this.measurementNoise = Math.max(0.01, Math.min(1, this.measurementNoise));
+  }
+  
+  /**
+   * Configura el filtro con opciones personalizadas
+   */
+  public configure(options: any): void {
+    if (options.adaptationRate !== undefined) {
+      this.adaptationRate = Math.max(0.01, Math.min(0.5, options.adaptationRate));
+    }
+    
+    if (options.confidenceThreshold !== undefined) {
+      this.confidenceThreshold = Math.max(0.1, Math.min(0.9, options.confidenceThreshold));
     }
   }
   
   /**
-   * Predice el siguiente valor
-   * @param timestamp Marca de tiempo para la predicción
+   * Reinicia el filtro a su estado inicial
    */
-  public predict(timestamp: number): PredictionResult {
-    try {
-      // Verificar si hay suficientes observaciones
-      if (this.valueBuffer.getSize() < this.config.minObservations) {
-        return {
-          predictedValue: this.state.lastValue,
-          confidence: 0.2,
-          predictedTimestamp: timestamp
-        };
-      }
-      
-      // Estimar tiempo desde la última actualización
-      const timeSinceLastUpdate = timestamp - this.state.lastTimestamp;
-      
-      // Proyectar el valor basado en la tendencia
-      let predictedValue = this.state.lastValue + this.state.trend * timeSinceLastUpdate;
-      
-      // Aplicar corrección basada en el promedio reciente
-      const avgRecentValue = this.valueBuffer.getAverage();
-      const blendFactor = Math.min(1, this.state.confidence * 0.5);
-      
-      predictedValue = blendFactor * predictedValue +
-                       (1 - blendFactor) * avgRecentValue;
-      
-      return {
-        predictedValue,
-        confidence: this.state.confidence,
-        predictedTimestamp: timestamp
-      };
-    } catch (error) {
-      logError(
-        `Error al predecir valor: ${error}`,
-        ErrorLevel.WARNING,
-        "AdaptivePredictor"
-      );
-      
-      // Retornar fallback seguro
-      return {
-        predictedValue: this.state.lastValue,
-        confidence: 0.1,
-        predictedTimestamp: timestamp
-      };
-    }
+  public reset(): void {
+    this.errorEstimate = 1;
+    this.kalmanGain = 0;
+    this.currentValue = 0;
+    this.lastTimestamp = 0;
   }
   
   /**
-   * Obtiene el estado actual del predictor
+   * Obtiene el estado actual del filtro
    */
   public getState(): any {
     return {
-      lastValue: this.state.lastValue,
-      lastTimestamp: this.state.lastTimestamp,
-      trend: this.state.trend,
-      confidence: this.state.confidence,
-      historySize: this.state.history.length,
-      bufferState: this.valueBuffer.getState()
+      processNoise: this.processNoise,
+      measurementNoise: this.measurementNoise,
+      errorEstimate: this.errorEstimate,
+      kalmanGain: this.kalmanGain,
+      currentValue: this.currentValue,
+      lastTimestamp: this.lastTimestamp,
+      adaptationRate: this.adaptationRate,
+      confidenceThreshold: this.confidenceThreshold
     };
-  }
-  
-  /**
-   * Resetea el predictor a su estado inicial
-   */
-  public reset(): void {
-    this.state = {
-      lastValue: 0,
-      lastTimestamp: 0,
-      trend: 0,
-      confidence: 0.5,
-      history: []
-    };
-    this.valueBuffer.clear();
   }
 }
 
-// Crear instancia singleton
-const defaultPredictor = new AdaptivePredictor();
+// Singleton
+let adaptivePredictor: AdaptivePredictor | null = null;
 
 /**
- * Obtiene la instancia singleton del predictor adaptativo
+ * Obtiene una instancia del filtro de Kalman adaptativo
  */
 export function getAdaptivePredictor(): AdaptivePredictor {
-  return defaultPredictor;
+  if (!adaptivePredictor) {
+    adaptivePredictor = new KalmanFilter();
+  }
+  return adaptivePredictor;
 }

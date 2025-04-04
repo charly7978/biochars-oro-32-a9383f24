@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -209,7 +208,7 @@ const FingerDetectionMonitor: React.FC = () => {
         <CardTitle className="flex justify-between items-center">
           <span>Detección de Dedos</span>
           {detectionState && (
-            <Badge variant={detectionState.isFingerDetected ? "success" : "destructive"}>
+            <Badge variant={detectionState.isFingerDetected ? "outline" : "destructive"}>
               {detectionState.isFingerDetected ? "Dedo Detectado" : "No Detectado"}
             </Badge>
           )}

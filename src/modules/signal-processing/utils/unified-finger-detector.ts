@@ -1,4 +1,3 @@
-
 /**
  * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
  * 
@@ -15,7 +14,13 @@ export type DetectionSource =
   | 'signal-quality-amplitude'
   | 'image-analysis'
   | 'motion-detection'
-  | 'adaptive-system';
+  | 'adaptive-system'
+  | 'signal-quality-pattern'
+  | 'signal-quality-state'
+  | 'weak-signal-result'
+  | 'rhythm-pattern'
+  | 'brightness'
+  | 'camera-analysis';
 
 /**
  * Estado de detección
@@ -55,7 +60,9 @@ export interface UnifiedDetectorConfig {
 class UnifiedFingerDetector {
   private state: DetectionState;
   private config: Required<UnifiedDetectorConfig>;
-  
+  private stateChanges: Array<{time: number, state: boolean}> = [];
+  private diagnosticEvents: Array<{timestamp: number, type: string, data: any}> = [];
+
   constructor(config?: UnifiedDetectorConfig) {
     this.config = {
       baseThreshold: config?.baseThreshold ?? 0.6,
@@ -64,7 +71,13 @@ class UnifiedFingerDetector {
         'signal-quality-amplitude': 0.35,
         'image-analysis': 0.2,
         'motion-detection': 0.1,
-        'adaptive-system': 0.1
+        'adaptive-system': 0.1,
+        'signal-quality-pattern': 0.1,
+        'signal-quality-state': 0.1,
+        'weak-signal-result': 0.1,
+        'rhythm-pattern': 0.1,
+        'brightness': 0.1,
+        'camera-analysis': 0.1
       },
       adaptationRate: config?.adaptationRate ?? 0.2,
       expirationTime: config?.expirationTime ?? 3000
@@ -82,7 +95,13 @@ class UnifiedFingerDetector {
       'signal-quality-amplitude': { detected: false, confidence: 0, lastUpdate: 0 },
       'image-analysis': { detected: false, confidence: 0, lastUpdate: 0 },
       'motion-detection': { detected: false, confidence: 0, lastUpdate: 0 },
-      'adaptive-system': { detected: false, confidence: 0, lastUpdate: 0 }
+      'adaptive-system': { detected: false, confidence: 0, lastUpdate: 0 },
+      'signal-quality-pattern': { detected: false, confidence: 0, lastUpdate: 0 },
+      'signal-quality-state': { detected: false, confidence: 0, lastUpdate: 0 },
+      'weak-signal-result': { detected: false, confidence: 0, lastUpdate: 0 },
+      'rhythm-pattern': { detected: false, confidence: 0, lastUpdate: 0 },
+      'brightness': { detected: false, confidence: 0, lastUpdate: 0 },
+      'camera-analysis': { detected: false, confidence: 0, lastUpdate: 0 }
     };
     
     return {
@@ -334,6 +353,49 @@ class UnifiedFingerDetector {
    */
   public reset(): void {
     this.state = this.createInitialState();
+  }
+  
+  /**
+   * Get detailed diagnostic statistics for the detector
+   */
+  public getDetailedStats(): Record<string, any> {
+    return {
+      confidence: this.state.confidence,
+      sourceStates: { ...this.state.sources },
+      thresholds: { ...this.state.thresholds },
+      detectionHistory: {
+        lastDetection: this.state.isFingerDetected ? Date.now() : 0,
+        stateChanges: this.stateChanges || []
+      }
+    };
+  }
+  
+  /**
+   * Log a diagnostic event
+   */
+  public logDiagnosticEvent(eventType: string, data: any): void {
+    try {
+      console.log(`[UnifiedFingerDetector] ${eventType}:`, data);
+      
+      // Could be expanded to track events in a more structured way
+      if (!this.diagnosticEvents) {
+        this.diagnosticEvents = [];
+      }
+      
+      this.diagnosticEvents.push({
+        timestamp: Date.now(),
+        type: eventType,
+        data
+      });
+      
+      // Limit the number of stored events
+      if (this.diagnosticEvents.length > 100) {
+        this.diagnosticEvents.shift();
+      }
+    } catch (error) {
+      // Silently handle errors in diagnostic logging
+      console.error("Error logging diagnostic event:", error);
+    }
   }
 }
 

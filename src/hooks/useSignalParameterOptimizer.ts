@@ -6,7 +6,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { 
   SignalParameterOptimizer, 
-  OptimizationState
+  createSignalParameterOptimizer,
+  OptimizationState 
 } from '@/modules/signal-processing/utils/parameter-optimization';
 import { BayesianOptimizerConfig } from '@/modules/signal-processing/utils/bayesian-optimization';
 import { useErrorPrevention } from '@/utils/errorPrevention/integration';

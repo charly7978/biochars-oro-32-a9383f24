@@ -1,4 +1,3 @@
-
 /**
  * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
  * 
@@ -132,7 +131,11 @@ class AdaptiveCalibration {
     
     try {
       // Obtener estado del detector
-      const detectorState = unifiedFingerDetector.getDetailedStats();
+      const detectorStats = {
+        confidence: unifiedFingerDetector.getDetectionState().confidence,
+        isFingerDetected: unifiedFingerDetector.getDetectionState().isFingerDetected,
+        // Add any other properties you need from the detection state
+      };
       
       // Obtener estado de diagnóstico actual
       const diagnosticsState = fingerDiagnostics.getDiagnosticsState();

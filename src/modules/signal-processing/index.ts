@@ -25,17 +25,15 @@ export {
   createHeartbeatOptimizer,
   DEFAULT_PPG_PARAMETERS,
   DEFAULT_HEARTBEAT_PARAMETERS,
-  OptimizationParameter,
-  // Renombramos DataPoint para evitar conflicto
-  BayesianDataPoint
+  OptimizationParameter
 } from './utils/bayesian-optimization';
 
+// Use 'export type' for types when isolatedModules is enabled
+export type { BayesianDataPoint } from './utils/bayesian-optimization';
+
 // Exportar sistema adaptativo
-export {
-  getAdaptiveSystemCoordinator,
-  AdaptiveSystemCoordinator,
-  MessageType
-} from './utils/adaptive-system-coordinator';
+export { getAdaptiveSystemCoordinator, MessageType } from './utils/adaptive-system-coordinator';
+export type { AdaptiveSystemMessage } from './utils/adaptive-system-coordinator';
 
 // Exportar funciones de creación
 export { createPPGSignalProcessor } from './ppg-processor';

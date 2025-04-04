@@ -2,447 +2,203 @@
  * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
  * 
  * Coordinador del sistema adaptativo
- * Implementa comunicación entre componentes y adaptación de parámetros
+ * Maneja la comunicación y coordinación entre diferentes componentes
  */
-import { createDefaultPPGOptimizer, BayesianOptimizer } from './bayesian-optimization';
-import { unifiedFingerDetector, DetectionSource } from './unified-finger-detector';
-import { getAdaptivePredictor, PredictionResult } from './adaptive-predictor';
-import { AdaptiveSystemConfig, AdaptiveSystemMessage } from '../types';
+
 import { logError, ErrorLevel } from '@/utils/debugUtils';
 
 /**
- * Tipos de mensajes del sistema adaptativo
+ * Tipos de mensajes soportados
  */
 export enum MessageType {
-  CALIBRATION_REQUEST = 'calibration.request',
-  CALIBRATION_COMPLETE = 'calibration.complete',
-  OPTIMIZATION_REQUEST = 'optimization.request',
-  OPTIMIZATION_COMPLETE = 'optimization.complete',
-  QUALITY_UPDATE = 'quality.update',
-  MEMORY_WARNING = 'memory.warning',
-  DIAGNOSTICS_REQUEST = 'diagnostics.request',
-  DIAGNOSTICS_REPORT = 'diagnostics.report',
-  FINGER_DETECTION = 'finger.detection',
-  FINGER_LOST = 'finger.lost',
-  PARAMETER_UPDATE = 'parameter.update'
+  FINGER_DETECTED = 'finger-detected',
+  SIGNAL_QUALITY_UPDATE = 'signal-quality-update',
+  OPTIMIZATION_REQUEST = 'optimization-request',
+  OPTIMIZATION_RESULT = 'optimization-result',
+  ERROR = 'error',
+  DIAGNOSTIC = 'diagnostic'
 }
 
 /**
- * Estado del sistema
+ * Interfaz para mensajes del sistema adaptativo
  */
-export interface SystemState {
-  isCalibrated: boolean;
-  isOptimized: boolean;
-  fingerDetected: boolean;
-  signalQuality: number;
-  lastMessage: string;
-  messageQueueLength: number;
-  memoryUsage: number;
-  cpuUsage: number;
-  batteryLevel: number;
-  lastError: string;
+export interface AdaptiveSystemMessage {
+  type: MessageType;
+  source: string;
+  data: any;
+  timestamp: number;
 }
 
 /**
- * Interfaz para componentes adaptativos
+ * Interfaz para el coordinador del sistema adaptativo
  */
-interface AdaptiveComponent {
-  name: string;
-  process: (message: AdaptiveSystemMessage) => void;
+export interface AdaptiveSystemCoordinator {
+  sendMessage(message: AdaptiveSystemMessage): void;
+  registerComponent(componentName: string, messageTypes: MessageType[]): void;
+  unregisterComponent(componentName: string): void;
+  processMessage(message: AdaptiveSystemMessage): void;
+  configure(config: any): void;
+  reset(): void;
 }
 
 /**
- * Implementación del coordinador
+ * Implementación del coordinador del sistema adaptativo
  */
-class AdaptiveSystemCoordinator {
-  private config: Required<AdaptiveSystemConfig>;
-  private optimizer: BayesianOptimizer | null = null;
-  private messageQueue: AdaptiveSystemMessage[] = [];
-  private lastProcessedTimestamp: number = 0;
-  private messageCount: number = 0;
-  private memoryStats = {
-    lastCheck: 0,
-    usage: 0,
-    peak: 0,
-    warnings: 0
-  };
-  
-  constructor(config?: Partial<AdaptiveSystemConfig>) {
-    this.config = {
-      enableOptimization: config?.enableOptimization ?? true,
-      optimizationInterval: config?.optimizationInterval ?? 60000,
-      adaptationRate: config?.adaptationRate ?? 0.2,
-      fingerDetectionThreshold: config?.fingerDetectionThreshold ?? 0.5,
-      qualityThreshold: config?.qualityThreshold ?? 30,
-      memoryManagement: {
-        maxObservations: config?.memoryManagement?.maxObservations ?? 100,
-        gcInterval: config?.memoryManagement?.gcInterval ?? 30000,
-        maxBufferSize: config?.memoryManagement?.maxBufferSize ?? 1000
-      },
-      diagnostics: {
-        enableDetailedLogs: config?.diagnostics?.enableDetailedLogs ?? false,
-        logLevel: config?.diagnostics?.logLevel ?? 'info',
-        collectMetrics: config?.diagnostics?.collectMetrics ?? true
-      }
-    };
-    
-    // Inicializar optimizador
-    if (this.config.enableOptimization) {
-      try {
-        this.optimizer = createDefaultPPGOptimizer();
-      } catch (error) {
-        logError(
-          `Error al inicializar optimizador: ${error}`,
-          ErrorLevel.ERROR,
-          "AdaptiveSystem"
-        );
-      }
-    }
-    
-    // Iniciar intervalo de optimización
-    if (this.config.enableOptimization && this.config.optimizationInterval > 0) {
-      setInterval(() => {
-        this.optimizeParameters();
-      }, this.config.optimizationInterval);
-    }
-  }
+class AdaptiveSystemCoordinatorImpl implements AdaptiveSystemCoordinator {
+  private components: Record<string, MessageType[]> = {};
+  private config: any = {};
   
   /**
-   * Procesa un valor con el sistema adaptativo
-   */
-  public processValue(value: number, quality: number, timestamp: number): any {
-    // Verificar uso de memoria
-    this.checkMemoryUsage();
-    
-    // Actualizar detector de dedos
-    this.updateFingerDetector(value, quality);
-    
-    // Adaptar umbrales
-    unifiedFingerDetector.adaptThresholds(quality);
-    
-    // Predecir valor
-    const prediction: PredictionResult = getAdaptivePredictor().predict(timestamp);
-    
-    // Enviar mensaje de actualización de calidad
-    this.sendMessage({
-      source: 'adaptive-coordinator',
-      destination: 'any',
-      type: MessageType.QUALITY_UPDATE,
-      payload: {
-        value,
-        quality,
-        timestamp,
-        prediction
-      }
-    });
-    
-    // Procesar mensajes en cola
-    this.processMessageQueue();
-    
-    // Guardar timestamp
-    this.lastProcessedTimestamp = timestamp;
-    
-    return {
-      processedValue: value,
-      prediction,
-      optimizationStatus: null
-    };
-  }
-  
-  /**
-   * Envía un mensaje al sistema
+   * Envía un mensaje a todos los componentes registrados
    */
   public sendMessage(message: AdaptiveSystemMessage): void {
-    message.timestamp = Date.now();
-    message.id = `msg-${this.messageCount++}`;
-    this.messageQueue.push(message);
-  }
-  
-  /**
-   * Procesa la cola de mensajes
-   */
-  private processMessageQueue(): void {
-    while (this.messageQueue.length > 0) {
-      const message = this.messageQueue.shift();
+    try {
+      message.timestamp = Date.now();
       
-      if (message) {
-        this.processMessage(message);
+      for (const componentName in this.components) {
+        if (this.components.hasOwnProperty(componentName)) {
+          const supportedTypes = this.components[componentName];
+          
+          if (supportedTypes.includes(message.type)) {
+            this.processMessage({ ...message, destination: componentName });
+          }
+        }
       }
+    } catch (error) {
+      logError(
+        `Error al enviar mensaje: ${error}`,
+        ErrorLevel.ERROR,
+        "AdaptiveSystemCoordinator"
+      );
     }
   }
   
   /**
-   * Realiza la optimización de parámetros
+   * Registra un componente en el sistema
    */
-  private optimizeParameters(): void {
-    if (!this.optimizer) return;
-    
+  public registerComponent(componentName: string, messageTypes: MessageType[]): void {
     try {
-      // Simular una función de evaluación
-      const simulatedQuality = Math.random() * 100;
-      
-      // Obtener los parámetros actuales
-      const currentParams = this.optimizer.getBestParameters() || {};
-      
-      // Añadir observación
-      this.optimizer.addObservation(currentParams, simulatedQuality);
-      
-      // Obtener los próximos parámetros a probar
-      const nextParams = this.optimizer.nextPointToEvaluate();
-      
-      // Enviar mensaje de actualización de parámetros
-      this.sendMessage({
-        source: 'adaptive-coordinator',
-        destination: 'ppg-processor',
-        type: MessageType.PARAMETER_UPDATE,
-        payload: nextParams
-      });
-      
+      this.components[componentName] = messageTypes;
       logError(
-        `Optimizando parámetros: ${simulatedQuality.toFixed(2)}`,
+        `Componente registrado: ${componentName} - Tipos: ${messageTypes.join(', ')}`,
         ErrorLevel.INFO,
-        "AdaptiveSystem"
+        "AdaptiveSystemCoordinator"
       );
     } catch (error) {
       logError(
-        `Error durante la optimización: ${error}`,
-        ErrorLevel.WARNING,
-        "AdaptiveSystem"
+        `Error al registrar componente: ${componentName} - ${error}`,
+        ErrorLevel.ERROR,
+        "AdaptiveSystemCoordinator"
       );
     }
   }
   
   /**
-   * Verifica el uso de memoria
+   * Elimina un componente del sistema
    */
-  private checkMemoryUsage(): void {
-    const now = Date.now();
-    
-    // Verificar memoria solo cada cierto intervalo
-    if (now - this.memoryStats.lastCheck < 1000) {
-      return;
-    }
-    
+  public unregisterComponent(componentName: string): void {
     try {
-      // Obtener uso aproximado de memoria usando performance.now()
-      // como sustituto (no podemos usar performance.memory en todos los navegadores)
-      const approximateUsage = performance.now() / 100000;
-      const normalizedUsage = Math.min(100, approximateUsage);
-      
-      this.memoryStats.usage = normalizedUsage;
-      this.memoryStats.lastCheck = now;
-      
-      if (normalizedUsage > this.memoryStats.peak) {
-        this.memoryStats.peak = normalizedUsage;
-      }
-      
-      // Si el uso es alto, enviar advertencia
-      if (normalizedUsage > 80) {
-        this.memoryStats.warnings++;
-        
-        this.sendMessage({
-          source: 'adaptive-coordinator',
-          destination: 'system',
-          type: MessageType.MEMORY_WARNING,
-          payload: {
-            usage: normalizedUsage,
-            peak: this.memoryStats.peak,
-            timestamp: now
-          },
-          priority: 'high'
-        });
-      }
-    } catch (error) {
-      // Silenciar errores - esta función es solo para monitoreo
-    }
-  }
-  
-  /**
-   * Actualiza unifiedFingerDetector
-   */
-  private updateFingerDetector(value: number, quality: number): void {
-    try {
-      // Actualizar detector unificado
-      unifiedFingerDetector.updateSource('adaptive-system' as DetectionSource, quality > 40, quality / 100);
+      delete this.components[componentName];
+      logError(
+        `Componente eliminado: ${componentName}`,
+        ErrorLevel.INFO,
+        "AdaptiveSystemCoordinator"
+      );
     } catch (error) {
       logError(
-        `Error actualizando detector de dedos unificado: ${error}`,
-        ErrorLevel.WARNING,
-        "AdaptiveSystem"
+        `Error al eliminar componente: ${componentName} - ${error}`,
+        ErrorLevel.ERROR,
+        "AdaptiveSystemCoordinator"
       );
     }
   }
   
   /**
-   * Obtiene el estado actual del sistema
+   * Procesa un mensaje específico para un componente
    */
-  public getSystemState(): SystemState {
-    return {
-      isCalibrated: false,
-      isOptimized: false,
-      fingerDetected: unifiedFingerDetector.getDetectionState().isFingerDetected,
-      signalQuality: 0,
-      lastMessage: 'N/A',
-      messageQueueLength: this.messageQueue.length,
-      memoryUsage: this.memoryStats.usage,
-      cpuUsage: 0,
-      batteryLevel: 100,
-      lastError: 'N/A'
-    };
-  }
-  
-  /**
-   * Actualiza la configuración del sistema
-   */
-  public updateConfig(newConfig: Partial<AdaptiveSystemConfig>): void {
-    this.config = {
-      enableOptimization: newConfig?.enableOptimization ?? this.config.enableOptimization,
-      optimizationInterval: newConfig?.optimizationInterval ?? this.config.optimizationInterval,
-      adaptationRate: newConfig?.adaptationRate ?? this.config.adaptationRate,
-      fingerDetectionThreshold: newConfig?.fingerDetectionThreshold ?? this.config.fingerDetectionThreshold,
-      qualityThreshold: newConfig?.qualityThreshold ?? this.config.qualityThreshold,
-      memoryManagement: {
-        maxObservations: newConfig?.memoryManagement?.maxObservations ?? this.config.memoryManagement.maxObservations,
-        gcInterval: newConfig?.memoryManagement?.gcInterval ?? this.config.memoryManagement.gcInterval,
-        maxBufferSize: newConfig?.memoryManagement?.maxBufferSize ?? this.config.memoryManagement.maxBufferSize
-      },
-      diagnostics: {
-        enableDetailedLogs: newConfig?.diagnostics?.enableDetailedLogs ?? this.config.diagnostics.enableDetailedLogs,
-        logLevel: newConfig?.diagnostics?.logLevel ?? this.config.diagnostics.logLevel,
-        collectMetrics: newConfig?.diagnostics?.collectMetrics ?? this.config.diagnostics.collectMetrics
+  public processMessage(message: AdaptiveSystemMessage): void {
+    try {
+      if (!message.destination) {
+        logError(
+          `Mensaje sin destino: ${message.type} from ${message.source}`,
+          ErrorLevel.WARNING,
+          "AdaptiveSystemCoordinator"
+        );
+        return;
       }
-    };
+      
+      // Simular procesamiento (reemplazar con lógica real)
+      logError(
+        `Mensaje procesado: ${message.type} from ${message.source} to ${message.destination}`,
+        ErrorLevel.DEBUG,
+        "AdaptiveSystemCoordinator"
+      );
+      
+      // Aquí se podría invocar una función específica del componente
+      // o actualizar el estado del componente directamente
+      
+    } catch (error) {
+      logError(
+        `Error al procesar mensaje: ${message.type} - ${error}`,
+        ErrorLevel.ERROR,
+        "AdaptiveSystemCoordinator"
+      );
+    }
   }
   
   /**
-   * Reinicia el sistema
+   * Configura el coordinador con opciones personalizadas
+   */
+  public configure(config: any): void {
+    try {
+      this.config = { ...this.config, ...config };
+      logError(
+        `Sistema adaptativo configurado: ${JSON.stringify(this.config)}`,
+        ErrorLevel.INFO,
+        "AdaptiveSystemCoordinator"
+      );
+    } catch (error) {
+      logError(
+        `Error al configurar sistema adaptativo: ${error}`,
+        ErrorLevel.ERROR,
+        "AdaptiveSystemCoordinator"
+      );
+    }
+  }
+  
+  /**
+   * Reinicia el coordinador y todos sus componentes
    */
   public reset(): void {
-    this.messageQueue = [];
-    this.lastProcessedTimestamp = 0;
-    this.messageCount = 0;
-    this.memoryStats = {
-      lastCheck: 0,
-      usage: 0,
-      peak: 0,
-      warnings: 0
-    };
-  }
-  
-  /**
-   * Genera un informe de diagnóstico
-   */
-  private generateDiagnosticsReport(): any {
     try {
-      // Obtener estado de memoria
-      const memReport = {
-        usage: this.memoryStats.usage,
-        peak: this.memoryStats.peak,
-        warnings: this.memoryStats.warnings,
-        lastCheck: this.memoryStats.lastCheck
-      };
-      
-      // Otros diagnósticos
-      return {
-        timestamp: Date.now(),
-        memory: memReport,
-        optimizer: this.optimizer ? {
-          active: true,
-          state: this.optimizer.getState()
-        } : { active: false },
-        messages: {
-          processed: this.messageCount,
-          queued: this.messageQueue.length
-        },
-        configuration: this.config
-      };
-    } catch (error) {
-      return {
-        error: `Error generando diagnósticos: ${error}`,
-        timestamp: Date.now()
-      };
-    }
-  }
-  
-  /**
-   * Procesa un mensaje específico
-   */
-  private processMessage(message: AdaptiveSystemMessage): void {
-    try {
-      switch (message.type) {
-        case MessageType.CALIBRATION_REQUEST:
-          // Lógica para manejar la solicitud de calibración
-          logError(
-            `Solicitud de calibración recibida`,
-            ErrorLevel.INFO,
-            "AdaptiveSystem"
-          );
-          break;
-          
-        case MessageType.OPTIMIZATION_REQUEST:
-          // Lógica para manejar la solicitud de optimización
-          logError(
-            `Solicitud de optimización recibida`,
-            ErrorLevel.INFO,
-            "AdaptiveSystem"
-          );
-          this.optimizeParameters();
-          break;
-          
-        case MessageType.DIAGNOSTICS_REQUEST:
-          // Generar y enviar informe de diagnóstico
-          const report = this.generateDiagnosticsReport();
-          
-          this.sendMessage({
-            source: 'adaptive-coordinator',
-            destination: message.source || 'any',
-            type: MessageType.DIAGNOSTICS_REPORT,
-            payload: report
-          });
-          break;
-          
-        case MessageType.FINGER_DETECTION:
-          // Actualizar detector unificado
-          if (message.payload && typeof message.payload.source === 'string') {
-            unifiedFingerDetector.updateSource(
-              message.payload.source as DetectionSource,
-              message.payload.detected,
-              message.payload.confidence || 0.5
-            );
-          }
-          break;
-          
-        // Otros casos
-        default:
-          logError(
-            `Mensaje desconocido: ${message.type}`,
-            ErrorLevel.WARNING,
-            "AdaptiveSystem"
-          );
-          break;
-      }
+      this.components = {};
+      this.config = {};
+      logError(
+        "Sistema adaptativo reiniciado",
+        ErrorLevel.INFO,
+        "AdaptiveSystemCoordinator"
+      );
     } catch (error) {
       logError(
-        `Error procesando mensaje ${message.type}: ${error}`,
+        `Error al reiniciar sistema adaptativo: ${error}`,
         ErrorLevel.ERROR,
-        "AdaptiveSystem"
+        "AdaptiveSystemCoordinator"
       );
     }
   }
 }
 
-// Singleton
-let adaptiveCoordinator: AdaptiveSystemCoordinator | null = null;
+// Singleton instance
+let adaptiveSystemCoordinator: AdaptiveSystemCoordinator | null = null;
 
 /**
- * Obtiene el coordinador del sistema adaptativo
+ * Obtiene la instancia del coordinador del sistema adaptativo
  */
-export function getAdaptiveSystemCoordinator(config?: Partial<AdaptiveSystemConfig>): AdaptiveSystemCoordinator {
-  if (!adaptiveCoordinator) {
-    adaptiveCoordinator = new AdaptiveSystemCoordinator(config);
-  } else if (config) {
-    adaptiveCoordinator.updateConfig(config);
+export function getAdaptiveSystemCoordinator(): AdaptiveSystemCoordinator {
+  if (!adaptiveSystemCoordinator) {
+    adaptiveSystemCoordinator = new AdaptiveSystemCoordinatorImpl();
   }
-  
-  return adaptiveCoordinator;
+  return adaptiveSystemCoordinator;
 }
+
+export type { AdaptiveSystemCoordinator };
