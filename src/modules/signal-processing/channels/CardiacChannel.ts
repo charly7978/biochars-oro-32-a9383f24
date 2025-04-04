@@ -9,7 +9,7 @@
  */
 
 import { SpecializedChannel } from './SpecializedChannel';
-import { ChannelConfig, ChannelFeedback } from '../../../types/signal';
+import { ChannelFeedback, VitalSignType } from '../../../types/signal';
 import { TensorFlowMLProcessor } from '../../ml/TensorFlowMLProcessor';
 
 /**
@@ -25,6 +25,13 @@ export class CardiacChannel extends SpecializedChannel {
   private latestPeakDetected: boolean = false;
   private peakThreshold: number = 0.2;
   
+  // Buffer for recent values
+  protected buffer: number[] = [];
+  
+  // Frequency range for cardiac signals
+  private frequencyMin: number = 0.5;
+  private frequencyMax: number = 5.0;
+  
   // ML processor for enhanced signal analysis
   private mlProcessor: TensorFlowMLProcessor | null = null;
   private mlEnabled: boolean = false;
@@ -37,8 +44,8 @@ export class CardiacChannel extends SpecializedChannel {
    * Constructor
    * @param config Channel configuration
    */
-  constructor(config: ChannelConfig) {
-    super('cardiac-channel', config);
+  constructor(config: any) {
+    super(VitalSignType.CARDIAC, config);
     
     // Initialize ML processor if available
     try {
@@ -51,9 +58,17 @@ export class CardiacChannel extends SpecializedChannel {
     }
     
     // Set cardiac-specific configuration
-    this.setFrequencyRange(0.5, 5.0); // Target heart rate range (30 - 300 bpm)
+    this.setCardiacFrequencyRange(0.5, 5.0); // Target heart rate range (30 - 300 bpm)
     
     console.log("CardiacChannel: Initialized with specialized cardiac parameters");
+  }
+
+  /**
+   * Set frequency range for cardiac processing
+   */
+  private setCardiacFrequencyRange(min: number, max: number): void {
+    this.frequencyMin = min;
+    this.frequencyMax = max;
   }
   
   /**
@@ -62,8 +77,14 @@ export class CardiacChannel extends SpecializedChannel {
    * @returns Processed value
    */
   public processValue(value: number): number {
-    // Apply base processing from parent class
-    const processedValue = super.processValue(value);
+    // Store in buffer
+    this.buffer.push(value);
+    if (this.buffer.length > 50) {
+      this.buffer.shift();
+    }
+    
+    // Apply channel-specific optimization
+    const processedValue = this.applyChannelSpecificOptimization(value);
     
     // Enhanced cardiac processing
     const enhancedValue = this.enhanceCardiacSignal(processedValue);
@@ -122,6 +143,19 @@ export class CardiacChannel extends SpecializedChannel {
     }
     
     return mlEnhancedValue;
+  }
+  
+  /**
+   * Apply channel-specific optimization to the signal
+   * Required implementation from SpecializedChannel
+   */
+  protected applyChannelSpecificOptimization(value: number): number {
+    // Cardiac-specific optimization
+    // - Focus on frequency range of interest for heart rate
+    // - Emphasize cardiac features
+    
+    // Simple implementation for now
+    return value * 1.2;
   }
   
   /**
@@ -354,6 +388,7 @@ export class CardiacChannel extends SpecializedChannel {
     this.heartRateEstimate = 0;
     this.latestPeakDetected = false;
     this.isCurrentBeatArrhythmia = false;
+    this.buffer = [];
     
     // Don't reset arrhythmia counter on normal reset
     // Users typically want to track this across measurement sessions
