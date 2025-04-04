@@ -1,253 +1,262 @@
-
 /**
- * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
- * 
- * Sistema de calibración adaptativa para detección de dedos
- * Ajusta umbrales basados en condiciones ambientales y calidad de señal
+ * Módulo de calibración adaptativa para el detector de dedos
+ * Ajusta los umbrales de detección según las condiciones ambientales
  */
 
-import { 
-  AdaptiveCalibrationParams, 
-  DetectionSource,
-  DiagnosticEventType,
-  EnvironmentalState 
-} from './finger-detection-types';
-import { reportDiagnosticEvent } from './finger-diagnostics';
 import { logError, ErrorLevel } from '@/utils/debugUtils';
+import { reportDiagnosticEvent } from './finger-diagnostics';
+import { DiagnosticEventType } from './finger-detection-types';
+import type { AdaptiveCalibrationParams, EnvironmentalState } from './finger-detection-types';
 
-// Parámetros iniciales de calibración
-const initialCalibrationParams: AdaptiveCalibrationParams = {
-  baseThreshold: 0.25,
-  noiseMultiplier: 1.2,
-  lightingCompensation: 0.9,
-  motionCompensation: 1.1,
-  adaptationRate: 0.05,
-  stabilityFactor: 0.8,
-  amplitudeThreshold: 0.15,
-  environmentQualityFactor: 1.0,
-  environmentalState: {
-    noise: 0,
-    lighting: 50,
-    motion: 0,
-    brightness: 100,
-    deviceInfo: {
-      type: 'unknown',
-      resolution: 'unknown',
-      fps: 30,
-      capabilities: [],
-      quality: 100
-    }
-  }
+/**
+ * Estado interno de calibración
+ */
+interface CalibrationState {
+  noise: number;
+  lighting: number;
+  motion: number;
+  device?: {
+    type: string;
+    model?: string;
+    capabilities?: string[];
+  };
+  lastUpdate: number;
+}
+
+// Estado inicial de calibración
+const initialCalibrationState: CalibrationState = {
+  noise: 0.05,
+  lighting: 50,
+  motion: 0.02,
+  lastUpdate: Date.now()
+};
+
+// Parámetros iniciales
+const initialParams: AdaptiveCalibrationParams = {
+  baseThreshold: 0.32,
+  noiseMultiplier: 1.5,
+  lightingCompensation: 0.4,
+  motionCompensation: 2.0,
+  adaptationRate: 0.15,
+  stabilityFactor: 0.75
 };
 
 // Estado actual de calibración
-let currentCalibrationParams: AdaptiveCalibrationParams = { ...initialCalibrationParams };
+let currentState: CalibrationState = { ...initialCalibrationState };
 
-// Historia de calidades recientes para estabilidad
-const signalQualityHistory: number[] = [];
-const MAX_QUALITY_HISTORY = 30;
+// Parámetros actuales
+let currentParams: AdaptiveCalibrationParams = { ...initialParams };
+
+// Historial de actualizaciones para análisis de tendencias
+let updateHistory: Array<{
+  timestamp: number;
+  state: Partial<CalibrationState>;
+  params: Partial<AdaptiveCalibrationParams>;
+}> = [];
 
 /**
- * Actualiza el estado ambiental para ajustar calibración
+ * Actualiza el estado ambiental
  */
 export function updateEnvironmentalState(newState: Partial<EnvironmentalState>): void {
-  const prevState = { ...currentCalibrationParams.environmentalState };
+  const timestamp = Date.now();
   
-  // Actualizar solo los valores proporcionados
-  currentCalibrationParams.environmentalState = {
-    ...currentCalibrationParams.environmentalState,
-    ...newState
-  };
+  // Actualizar cada propiedad si está presente
+  if (newState.noise !== undefined) {
+    const oldNoise = currentState.noise;
+    currentState.noise = newState.noise;
+    
+    // Adaptar umbral según cambio de ruido
+    adaptToNoiseChange(oldNoise, newState.noise);
+  }
   
-  // Recalcular factor de calidad ambiental
-  recalculateEnvironmentQualityFactor();
+  if (newState.lighting !== undefined) {
+    const oldLighting = currentState.lighting;
+    currentState.lighting = newState.lighting;
+    
+    // Adaptar umbral según cambio de iluminación
+    adaptToLightingChange(oldLighting, newState.lighting);
+  }
   
-  // Registrar cambio significativo
-  if (
-    Math.abs((prevState.noise || 0) - (currentCalibrationParams.environmentalState.noise || 0)) > 5 ||
-    Math.abs((prevState.lighting || 0) - (currentCalibrationParams.environmentalState.lighting || 0)) > 10 ||
-    Math.abs((prevState.motion || 0) - (currentCalibrationParams.environmentalState.motion || 0)) > 5
-  ) {
+  if (newState.motion !== undefined) {
+    const oldMotion = currentState.motion;
+    currentState.motion = newState.motion;
+    
+    // Adaptar umbral según cambio de movimiento
+    adaptToMotionChange(oldMotion, newState.motion);
+  }
+  
+  if (newState.device) {
+    currentState.device = { ...currentState.device, ...newState.device };
+    
+    // Adaptar según dispositivo
+    if (currentState.device.type !== currentState.device.type) {
+      adaptToDeviceChange();
+    }
+  }
+  
+  currentState.lastUpdate = timestamp;
+  
+  // Registrar para diagnóstico
+  reportDiagnosticEvent({
+    type: DiagnosticEventType.ENVIRONMENTAL_CHANGE,
+    message: `Environmental state updated: noise=${currentState.noise}, lighting=${currentState.lighting}, motion=${currentState.motion}`,
+  });
+  
+  // Guardar en historial
+  updateHistory.push({
+    timestamp,
+    state: { ...newState },
+    params: { ...currentParams }
+  });
+  
+  // Limitar tamaño del historial
+  if (updateHistory.length > 100) {
+    updateHistory.shift();
+  }
+}
+
+/**
+ * Adapta umbrales según cambio de ruido
+ */
+function adaptToNoiseChange(oldNoise: number, newNoise: number): void {
+  // Aumentar umbral si aumenta el ruido
+  if (newNoise > oldNoise) {
+    const increase = (newNoise - oldNoise) * currentParams.noiseMultiplier;
+    updateParameter('baseThreshold', currentParams.baseThreshold + increase);
+  } 
+  // Reducir umbral si disminuye el ruido
+  else if (newNoise < oldNoise) {
+    const decrease = (oldNoise - newNoise) * currentParams.noiseMultiplier * 0.7;
+    updateParameter('baseThreshold', Math.max(
+      initialParams.baseThreshold * 0.5,
+      currentParams.baseThreshold - decrease
+    ));
+  }
+}
+
+/**
+ * Adapta umbrales según cambio de iluminación
+ */
+function adaptToLightingChange(oldLighting: number, newLighting: number): void {
+  // Solo si el cambio es significativo
+  if (Math.abs(newLighting - oldLighting) < 5) return;
+  
+  const lightingFactor = newLighting / 100; // Normalizar a 0-1
+  
+  // La iluminación óptima es de aproximadamente 50%
+  const optimalLighting = 0.5;
+  const lightingDeviation = Math.abs(lightingFactor - optimalLighting);
+  
+  // Umbral más alto para iluminaciones extremas
+  const compensation = lightingDeviation * currentParams.lightingCompensation;
+  updateParameter('lightingCompensation', compensation);
+}
+
+/**
+ * Adapta umbrales según cambio de movimiento
+ */
+function adaptToMotionChange(oldMotion: number, newMotion: number): void {
+  // Solo adaptar si hay un cambio significativo
+  if (Math.abs(newMotion - oldMotion) < 0.01) return;
+  
+  // Aumentar umbral para movimiento alto
+  const motionCompensation = newMotion * currentParams.motionCompensation;
+  updateParameter('motionCompensation', motionCompensation);
+  
+  // Ajustar factor de estabilidad a la inversa del movimiento
+  // Mayor movimiento = menor factor de estabilidad
+  const stabilityFactor = Math.max(
+    0.2,
+    Math.min(0.9, 1 - (newMotion * 2))
+  );
+  updateParameter('stabilityFactor', stabilityFactor);
+}
+
+/**
+ * Adapta según cambio de dispositivo
+ */
+function adaptToDeviceChange(): void {
+  // Resetear a valores predeterminados y dejar que se adapte
+  currentParams = { ...initialParams };
+  
+  reportDiagnosticEvent({
+    type: DiagnosticEventType.CALIBRATION_UPDATE,
+    message: `Calibration reset due to device change: ${JSON.stringify(currentState.device)}`,
+  });
+}
+
+/**
+ * Actualiza un parámetro con suavizado
+ */
+function updateParameter(paramName: keyof AdaptiveCalibrationParams, newValue: number): void {
+  if (currentParams[paramName] === undefined) {
     logError(
-      `Actualización ambiental: Ruido=${currentCalibrationParams.environmentalState.noise}, ` +
-      `Iluminación=${currentCalibrationParams.environmentalState.lighting}, ` +
-      `Movimiento=${currentCalibrationParams.environmentalState.motion}`,
-      ErrorLevel.INFO,
+      `Parameter ${paramName} does not exist in calibration parameters`,
+      ErrorLevel.WARNING,
       "AdaptiveCalibration"
     );
-    
-    reportDiagnosticEvent(
-      DiagnosticEventType.CALIBRATION_CHANGED,
-      DetectionSource.COMBINED,
-      `Calibración adaptada a cambio ambiental`,
-      1.0,
-      { 
-        prevState, 
-        newState: currentCalibrationParams.environmentalState
-      }
-    );
-  }
-}
-
-/**
- * Recalcula el factor de calidad ambiental
- */
-function recalculateEnvironmentQualityFactor(): void {
-  const env = currentCalibrationParams.environmentalState;
-  let factor = 1.0;
-  
-  // Ajuste por ruido (si existe)
-  if (typeof env.noise === 'number') {
-    // Más ruido = menor calidad
-    const noisePenalty = (env.noise / 100) * 0.3;
-    factor -= noisePenalty;
+    return;
   }
   
-  // Ajuste por iluminación (si existe)
-  if (typeof env.lighting === 'number') {
-    // Iluminación óptima alrededor de 60-70
-    const optimalLighting = 65;
-    const lightingDiff = Math.abs(env.lighting - optimalLighting) / 100;
-    const lightingPenalty = lightingDiff * 0.2;
-    factor -= lightingPenalty;
-  }
+  const oldValue = currentParams[paramName];
   
-  // Ajuste por movimiento (si existe)
-  if (typeof env.motion === 'number') {
-    // Más movimiento = menor calidad
-    const motionPenalty = (env.motion / 100) * 0.4;
-    factor -= motionPenalty;
-  }
+  // Usar tasa de adaptación para suavizar cambios
+  currentParams[paramName] = (1 - currentParams.adaptationRate) * oldValue + 
+                            currentParams.adaptationRate * newValue;
   
-  // Ajuste por brillo (si existe)
-  if (typeof env.brightness === 'number') {
-    // Brillo muy bajo o muy alto = menor calidad
-    const optimalBrightness = 120;
-    const brightnessDiff = Math.abs(env.brightness - optimalBrightness) / 200;
-    const brightnessPenalty = brightnessDiff * 0.2;
-    factor -= brightnessPenalty;
-  }
-  
-  // Asegurar que el factor esté entre 0.5 y 1.2
-  factor = Math.min(1.2, Math.max(0.5, factor));
-  
-  // Actualizar factor de calidad ambiental
-  currentCalibrationParams.environmentQualityFactor = factor;
-  
-  // Actualizar umbral de amplitud basado en factor de calidad
-  currentCalibrationParams.amplitudeThreshold = 
-    initialCalibrationParams.amplitudeThreshold * (1 / factor);
-}
-
-/**
- * Obtiene el estado ambiental actual
- */
-export function getEnvironmentalState(): EnvironmentalState {
-  return { ...currentCalibrationParams.environmentalState };
+  reportDiagnosticEvent({
+    type: DiagnosticEventType.CALIBRATION_UPDATE,
+    message: `Parameter ${paramName} updated: ${oldValue.toFixed(4)} -> ${currentParams[paramName].toFixed(4)}`
+  });
 }
 
 /**
  * Obtiene los parámetros de calibración actuales
  */
-export function getCalibrationParameters(): AdaptiveCalibrationParams {
-  return { ...currentCalibrationParams };
+export function getCalibrationParameters(): AdaptiveCalibrationParams & { environmentalState: EnvironmentalState } {
+  return {
+    ...currentParams,
+    environmentalState: {
+      noise: currentState.noise,
+      lighting: currentState.lighting,
+      motion: currentState.motion,
+      device: currentState.device,
+      lastUpdate: currentState.lastUpdate
+    }
+  };
 }
 
 /**
- * Adapta los umbrales de detección basado en la calidad de señal
- */
-export function adaptDetectionThresholds(
-  signalQuality: number,
-  brightness?: number
-): void {
-  // Actualizar historial de calidad
-  signalQualityHistory.push(signalQuality);
-  if (signalQualityHistory.length > MAX_QUALITY_HISTORY) {
-    signalQualityHistory.shift();
-  }
-  
-  // Si se proporciona brillo, actualizar estado ambiental
-  if (typeof brightness === 'number') {
-    updateEnvironmentalState({ brightness });
-  }
-  
-  // Calcular calidad media para estabilidad
-  const avgQuality = signalQualityHistory.reduce((sum, q) => sum + q, 0) / 
-                    Math.max(1, signalQualityHistory.length);
-  
-  // Adaptar umbral de amplitud basado en calidad
-  const qualityFactor = Math.max(0.6, Math.min(1.5, 100 / Math.max(1, avgQuality)));
-  const adaptedThreshold = initialCalibrationParams.baseThreshold * qualityFactor * 
-                          currentCalibrationParams.environmentQualityFactor;
-  
-  // Aplicar adaptación gradual
-  const oldThreshold = currentCalibrationParams.amplitudeThreshold;
-  const newThreshold = (oldThreshold * (1 - currentCalibrationParams.adaptationRate)) + 
-                       (adaptedThreshold * currentCalibrationParams.adaptationRate);
-  
-  // Actualizar umbral de amplitud
-  currentCalibrationParams.amplitudeThreshold = newThreshold;
-  
-  // Registrar cambios significativos
-  if (Math.abs(oldThreshold - newThreshold) > 0.05) {
-    logError(
-      `Umbral adaptado: ${oldThreshold.toFixed(3)} → ${newThreshold.toFixed(3)} ` +
-      `(Q=${signalQuality.toFixed(0)}, Fact=${qualityFactor.toFixed(2)})`,
-      ErrorLevel.INFO,
-      "AdaptiveCalibration"
-    );
-    
-    reportDiagnosticEvent(
-      DiagnosticEventType.CALIBRATION_CHANGED,
-      DetectionSource.COMBINED,
-      `Calibración adaptada a calidad ${signalQuality.toFixed(0)}`,
-      1.0,
-      { 
-        oldThreshold, 
-        newThreshold,
-        signalQuality,
-        qualityFactor,
-        environmentQualityFactor: currentCalibrationParams.environmentQualityFactor
-      }
-    );
-  }
-}
-
-/**
- * Calcula un umbral adaptativo para la señal
- */
-export function calculateAdaptiveThreshold(baseValue: number): number {
-  return baseValue * currentCalibrationParams.environmentQualityFactor;
-}
-
-/**
- * Reinicia la calibración a valores por defecto
+ * Reinicia la calibración
  */
 export function resetCalibration(): void {
-  currentCalibrationParams = { ...initialCalibrationParams };
-  signalQualityHistory.length = 0;
+  currentState = { ...initialCalibrationState };
+  currentParams = { ...initialParams };
+  updateHistory = [];
   
-  logError(
-    "Calibración adaptativa reseteada a valores por defecto",
-    ErrorLevel.INFO,
-    "AdaptiveCalibration"
-  );
-  
-  reportDiagnosticEvent(
-    DiagnosticEventType.CALIBRATION_CHANGED,
-    DetectionSource.COMBINED,
-    "Calibración reseteada a valores por defecto",
-    1.0,
-    { resetParams: { ...currentCalibrationParams } }
+  reportDiagnosticEvent({
+    type: DiagnosticEventType.CALIBRATION_UPDATE,
+    message: "Calibration parameters reset to default values"
+  });
+}
+
+/**
+ * Calcula umbral adaptativo basado en estado actual
+ */
+export function calculateAdaptiveThreshold(): number {
+  return currentParams.baseThreshold * (1 + 
+    (currentState.noise * currentParams.noiseMultiplier) + 
+    (Math.abs(currentState.lighting - 50) / 50 * currentParams.lightingCompensation) +
+    (currentState.motion * currentParams.motionCompensation)
   );
 }
 
-// Exportar objeto para compatibilidad
+/**
+ * Exportación del módulo
+ */
 export const adaptiveCalibration = {
   updateEnvironmentalState,
-  getEnvironmentalState,
   getCalibrationParameters,
   resetCalibration,
-  calculateAdaptiveThreshold,
-  adaptDetectionThresholds
+  calculateAdaptiveThreshold
 };

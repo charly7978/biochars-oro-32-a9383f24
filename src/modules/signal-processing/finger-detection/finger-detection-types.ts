@@ -1,72 +1,78 @@
 
 /**
- * Tipos para la detección de dedos
+ * Tipos para el sistema de detección de dedos unificado
  */
 
-// Fuentes de detección válidas
+/**
+ * Fuentes de detección disponibles
+ */
 export enum DetectionSource {
   AMPLITUDE = 'amplitude',
   RHYTHM = 'rhythm',
-  PPG_EXTRACTOR = 'ppg-extractor',
-  SIGNAL_QUALITY_AMPLITUDE = 'signal-quality-amplitude',
-  SIGNAL_QUALITY_STATE = 'signal-quality-state',
-  BRIGHTNESS = 'brightness',
-  WEAK_SIGNAL_RESULT = 'weak-signal-result',
-  RHYTHM_PATTERN = 'rhythm-pattern',
-  CAMERA_ANALYSIS = 'camera-analysis',
-  UNIFIED_DETECTION = 'unified-detection',
   COMBINED = 'combined'
 }
 
-// Tipos de eventos diagnósticos
-export enum DiagnosticEventType {
-  FINGER_DETECTED = 'finger-detected',
-  FINGER_LOST = 'finger-lost',
-  DETECTOR_RESET = 'detector-reset',
-  CALIBRATION_CHANGED = 'calibration-changed',
-  SIGNAL_QUALITY_CHANGE = 'signal-quality-change',
-  PATTERN_DETECTED = 'pattern-detected',
-  PATTERN_LOST = 'pattern-lost',
-  PATTERN_TIMEOUT = 'pattern-timeout'
-}
-
-// Resultado de detección para una fuente específica
+/**
+ * Resultados de detección por fuente
+ */
 export interface SourceDetectionResult {
   detected: boolean;
   confidence: number;
-  timestamp: number;
+  timestamp?: number;
 }
 
-// Estado global de detección
+/**
+ * Estado de detección completo
+ */
 export interface DetectionState {
-  isFingerDetected: boolean;
+  detected: boolean;
   confidence: number;
-  sources: Record<string, SourceDetectionResult>;
   amplitude: SourceDetectionResult;
   rhythm: SourceDetectionResult;
   lastUpdate: number;
 }
 
-// Evento de diagnóstico
+/**
+ * Tipos de eventos de diagnóstico
+ */
+export enum DiagnosticEventType {
+  DETECTION_CHANGE = 'detection_change',
+  THRESHOLD_ADAPTATION = 'threshold_adaptation',
+  CALIBRATION_UPDATE = 'calibration_update',
+  ENVIRONMENTAL_CHANGE = 'environmental_change',
+  SIGNAL_QUALITY = 'signal_quality',
+  ERROR = 'error',
+  INFO = 'info'
+}
+
+/**
+ * Eventos de diagnóstico
+ */
 export interface DiagnosticEvent {
   type: DiagnosticEventType;
-  source: DetectionSource;
   message: string;
+  details?: Record<string, any>;
   timestamp: number;
-  data?: any;
 }
 
-// Estadísticas de diagnóstico
-export interface DiagnosticStats {
-  totalEvents: number;
-  detectionRate: number;
-  falsePositives: number;
-  falseNegatives: number;
-  averageConfidence: number;
-  events: DiagnosticEvent[];
+/**
+ * Estado ambiental para calibración adaptativa
+ */
+export interface EnvironmentalState {
+  noise: number;
+  lighting: number;
+  motion: number;
+  device?: {
+    type: string;
+    model?: string;
+    capabilities?: string[];
+  };
+  lastUpdate?: number;
 }
 
-// Parámetros de calibración adaptativa
+/**
+ * Parámetros de calibración adaptativa
+ */
 export interface AdaptiveCalibrationParams {
   baseThreshold: number;
   noiseMultiplier: number;
@@ -74,22 +80,5 @@ export interface AdaptiveCalibrationParams {
   motionCompensation: number;
   adaptationRate: number;
   stabilityFactor: number;
-  amplitudeThreshold: number;
-  environmentQualityFactor: number;
-  environmentalState: EnvironmentalState;
-}
-
-// Estado ambiental para calibración
-export interface EnvironmentalState {
-  noise?: number;
-  lighting?: number;
-  motion?: number;
-  brightness?: number;
-  deviceInfo?: {
-    type?: string;
-    resolution?: string;
-    fps?: number;
-    capabilities?: string[];
-    quality?: number;
-  };
+  [key: string]: number;
 }
