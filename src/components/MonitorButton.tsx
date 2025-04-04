@@ -1,48 +1,38 @@
 
-import React from "react";
-import { Button } from "./ui/button";
-import { Activity, RotateCcw, Gauge } from "lucide-react";
+import React from 'react';
+import { cn } from '@/lib/utils';
+import { Button } from './ui/button';
 
 interface MonitorButtonProps {
   isMonitoring: boolean;
   onToggle: () => void;
-  variant: "monitor" | "reset" | "debug";
+  variant?: "monitor" | "reset";
 }
 
-const MonitorButton: React.FC<MonitorButtonProps> = ({ isMonitoring, onToggle, variant }) => {
-  let buttonClass = "";
-  let buttonText = "";
-  let icon = null;
-
-  switch (variant) {
-    case "monitor":
-      buttonClass = isMonitoring ? "bg-red-600 hover:bg-red-700" : "bg-green-600 hover:bg-green-700";
-      buttonText = isMonitoring ? "DETENER" : "MONITOREAR";
-      icon = <Activity size={20} className="mr-2" />;
-      break;
-    case "reset":
-      buttonClass = "bg-blue-600 hover:bg-blue-700";
-      buttonText = "REINICIAR";
-      icon = <RotateCcw size={20} className="mr-2" />;
-      break;
-    case "debug":
-      buttonClass = "bg-purple-600 hover:bg-purple-700";
-      buttonText = "MONITOR TÉCNICO";
-      icon = <Gauge size={20} className="mr-2" />;
-      break;
-    default:
-      buttonClass = "bg-gray-600 hover:bg-gray-700";
-      buttonText = "ACCIÓN";
-      break;
-  }
-
+const MonitorButton: React.FC<MonitorButtonProps> = ({ 
+  isMonitoring, 
+  onToggle, 
+  variant = "monitor" 
+}) => {
+  const baseClass = "w-full animation-smooth";
+  
+  // Get the button variant accepted by shadcn/ui Button component
+  const getButtonVariant = () => {
+    if (variant === "reset") return "secondary";
+    return isMonitoring ? "destructive" : "default"; // Using 'default' instead of 'primary'
+  };
+  
   return (
-    <Button
-      onClick={onToggle}
-      className={`w-full px-4 py-2 text-white rounded-lg text-sm font-medium flex items-center justify-center ${buttonClass}`}
+    <Button 
+      onClick={onToggle} 
+      variant={getButtonVariant()}
+      className={cn(
+        baseClass,
+        isMonitoring && variant === "monitor" && "bg-[var(--medical-danger-direct)] hover:bg-[var(--medical-danger-direct)]/90",
+        !isMonitoring && variant === "monitor" && "bg-[var(--medical-info-direct)] hover:bg-[var(--medical-info-direct)]/90"
+      )}
     >
-      {icon}
-      {buttonText}
+      {variant === "monitor" ? (isMonitoring ? 'Detener' : 'Iniciar') : 'Reset'}
     </Button>
   );
 };
