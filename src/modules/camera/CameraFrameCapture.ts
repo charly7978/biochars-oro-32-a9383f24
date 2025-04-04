@@ -13,36 +13,50 @@ export async function configureCameraForDevice(
     const capabilities = videoTrack.getCapabilities();
     console.log("Capacidades del video track:", capabilities);
     
+    // Verificar si el track sigue activo
+    if (videoTrack.readyState !== 'live') {
+      throw new Error("Video track no está activo durante la configuración");
+    }
+    
     const constraints: MediaTrackConstraintSet = {};
     
     // Configuración común para todos los dispositivos
-    if (capabilities.whiteBalanceMode && capabilities.whiteBalanceMode.includes('continuous')) {
+    if (capabilities?.whiteBalanceMode && capabilities.whiteBalanceMode.includes('continuous')) {
       constraints.whiteBalanceMode = 'continuous';
     }
     
-    if (capabilities.exposureMode && capabilities.exposureMode.includes('continuous')) {
+    if (capabilities?.exposureMode && capabilities.exposureMode.includes('continuous')) {
       constraints.exposureMode = 'continuous';
     }
     
-    if (capabilities.focusMode && capabilities.focusMode.includes('continuous')) {
+    if (capabilities?.focusMode && capabilities.focusMode.includes('continuous')) {
       constraints.focusMode = 'continuous';
     }
     
     // Optimizaciones específicas para Android
     if (isAndroid) {
-      if (capabilities.exposureTime) {
-        constraints.exposureTime = capabilities.exposureTime.max / 2;
+      // Activar linterna si está disponible
+      if (capabilities?.torch) {
+        constraints.torch = true;
       }
       
-      if (capabilities.colorTemperature) {
-        constraints.colorTemperature = 3500; // Optimizado para iluminación cálida
+      // Ajustar exposición para Android
+      if (capabilities?.exposureTime) {
+        // Valores más bajos para dispositivos Android
+        constraints.exposureTime = capabilities.exposureTime.max / 3;
       }
     }
     
     // Optimizaciones específicas para iOS
     if (isIOS) {
-      if (capabilities.exposureTime) {
-        constraints.exposureTime = capabilities.exposureTime.max / 3;
+      // Activar linterna si está disponible
+      if (capabilities?.torch) {
+        constraints.torch = true;
+      }
+      
+      // Configuraciones específicas para iOS
+      if (capabilities?.exposureTime) {
+        constraints.exposureTime = capabilities.exposureTime.max / 4;
       }
     }
     
@@ -52,7 +66,11 @@ export async function configureCameraForDevice(
       console.log("Restricciones aplicadas a la cámara:", constraints);
     }
   } catch (err) {
-    console.warn("No se pudieron aplicar algunas configuraciones a la cámara:", err);
+    logError(
+      `No se pudieron aplicar algunas configuraciones a la cámara: ${err instanceof Error ? err.message : String(err)}`, 
+      ErrorLevel.WARNING, 
+      "CameraFrameCapture"
+    );
   }
 }
 
@@ -69,10 +87,12 @@ export function processFramesControlled(
   let frameCount = 0;
   let lastProcessTime = 0;
   let consecutiveErrors = 0;
+  let successiveFrames = 0;
   const maxConsecutiveErrors = 5; // Límite para detección de problemas persistentes
   const frameInterval = 1000 / targetFps;
   let isProcessing = true;
   let animationFrameId: number | null = null;
+  let lastErrorTime = 0;
   
   // Función que procesa un frame
   const processFrame = async () => {
@@ -90,6 +110,11 @@ export function processFramesControlled(
     }
     
     try {
+      // Verificar si imageCapture está disponible
+      if (!imageCapture) {
+        throw new Error("ImageCapture no está disponible");
+      }
+      
       // Capturar frame
       const imageBitmap = await imageCapture.grabFrame();
       
@@ -97,40 +122,76 @@ export function processFramesControlled(
       const canvas = new OffscreenCanvas(imageBitmap.width, imageBitmap.height);
       const ctx = canvas.getContext('2d');
       
-      if (ctx) {
-        // Dibujar imagen en el canvas
-        ctx.drawImage(imageBitmap, 0, 0);
-        
-        // Obtener datos de la imagen
-        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        
-        // Procesar frame
-        if (onFrameCallback) {
-          onFrameCallback(imageData);
-        }
-        
-        // Actualizar contadores
-        frameCount++;
-        lastProcessTime = now;
-        consecutiveErrors = 0; // Resetear contador de errores
+      if (!ctx) {
+        throw new Error("No se pudo obtener contexto 2D");
+      }
+      
+      // Dibujar imagen en el canvas
+      ctx.drawImage(imageBitmap, 0, 0);
+      
+      // Obtener datos de la imagen
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      
+      // Procesar frame
+      if (onFrameCallback) {
+        onFrameCallback(imageData);
+      }
+      
+      // Actualizar contadores
+      frameCount++;
+      successiveFrames++;
+      lastProcessTime = now;
+      consecutiveErrors = 0; // Resetear contador de errores
+      
+      // Log de rendimiento cada 100 frames
+      if (frameCount % 100 === 0) {
+        const fps = 1000 / elapsed;
+        logError(
+          `Procesamiento estable: ${frameCount} frames, ${fps.toFixed(1)} FPS, ${successiveFrames} frames consecutivos`, 
+          ErrorLevel.DEBUG, 
+          "FrameCapture"
+        );
       }
     } catch (err) {
-      consecutiveErrors++;
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      const now = Date.now();
       
-      if (err instanceof DOMException && err.name === 'InvalidStateError') {
-        logError(`Error de estado inválido en track (${consecutiveErrors}/${maxConsecutiveErrors})`, 
-          ErrorLevel.WARNING, "FrameCapture");
-      } else {
-        logError(`Error capturando frame: ${err}`, ErrorLevel.ERROR, "FrameCapture");
+      // Incrementar contador de errores consecutivos
+      consecutiveErrors++;
+      successiveFrames = 0;
+      
+      // Limitar frecuencia de logs para no saturar
+      if (now - lastErrorTime > 1000) {
+        if (err instanceof DOMException && err.name === 'InvalidStateError') {
+          logError(
+            `Error de estado inválido en track (${consecutiveErrors}/${maxConsecutiveErrors}): ${errorMessage}`, 
+            ErrorLevel.WARNING, 
+            "FrameCapture"
+          );
+        } else {
+          logError(
+            `Error capturando frame (${consecutiveErrors}/${maxConsecutiveErrors}): ${errorMessage}`, 
+            ErrorLevel.ERROR, 
+            "FrameCapture"
+          );
+        }
+        lastErrorTime = now;
       }
       
-      // Si hay demasiados errores consecutivos, parar el procesamiento
+      // Si hay demasiados errores consecutivos, aplicar backoff
       if (consecutiveErrors >= maxConsecutiveErrors) {
-        logError(`Demasiados errores consecutivos (${consecutiveErrors}). Deteniendo procesamiento de frames.`, 
-          ErrorLevel.ERROR, "FrameCapture");
+        logError(
+          `Demasiados errores consecutivos (${consecutiveErrors}). Aplicando backoff.`, 
+          ErrorLevel.ERROR, 
+          "FrameCapture"
+        );
         
-        // Notificar problema pero no detener completamente para permitir recuperación
-        isProcessing = false;
+        // Pausa breve antes de reintentar
+        setTimeout(() => {
+          if (isProcessing && isActive) {
+            animationFrameId = requestAnimationFrame(processFrame);
+          }
+        }, 500);
         return;
       }
     } finally {
@@ -151,7 +212,10 @@ export function processFramesControlled(
       cancelAnimationFrame(animationFrameId);
       animationFrameId = null;
     }
-    logError(`Procesamiento de frames detenido (${frameCount} frames procesados)`, 
-      ErrorLevel.INFO, "FrameCapture");
+    logError(
+      `Procesamiento de frames detenido (${frameCount} frames procesados)`, 
+      ErrorLevel.INFO, 
+      "FrameCapture"
+    );
   };
 }
