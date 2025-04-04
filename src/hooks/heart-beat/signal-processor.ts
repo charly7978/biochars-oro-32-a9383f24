@@ -145,7 +145,6 @@ export function useSignalProcessor() {
               const optimizedBPM = calculateHeartRateOptimized(lastRRIntervalsRef.current);
               if (optimizedBPM > 0) {
                 lastValidBpmRef.current = optimizedBPM;
-                
                 console.log("SignalProcessor: Optimized BPM calculation", {
                   optimizedBPM,
                   intervals: lastRRIntervalsRef.current,
@@ -181,7 +180,9 @@ export function useSignalProcessor() {
       handlePeakDetection(
         result, 
         lastPeakTimeRef, 
-        requestImmediateBeep
+        requestImmediateBeep,
+        isMonitoringRef,
+        optimizedValue * 1.15
       );
       
       updateLastValidBpm(result, lastValidBpmRef);
@@ -215,6 +216,27 @@ export function useSignalProcessor() {
         }
       }
       
+      if (processedResult.diagnosticData === undefined) {
+        processedResult.diagnosticData = {};
+      }
+      
+      processedResult.diagnosticData = {
+        ...processedResult.diagnosticData,
+        signalStrength: Math.abs(optimizedValue) * 100,
+        signalQuality: result.confidence > 0.7 ? 'excellent' : result.confidence > 0.5 ? 'good' : result.confidence > 0.3 ? 'moderate' : 'weak',
+        lastProcessedTime: Date.now(),
+        lastPeakDetected: lastPeakTimeRef.current,
+        peakStrength: Math.abs(optimizedValue) * 1.15,
+        lastValidBpmTime: lastValidBpmRef.current > 0 ? Date.now() : 0,
+        bpmReliability: result.confidence * 100,
+        confidenceStatus: result.confidence > 0.7 ? 'high' : result.confidence > 0.4 ? 'moderate' : 'low',
+        processingStatus: 'optimized',
+        rhythmAnalysis: {
+          regularity: lastRRIntervalsRef.current.length > 3 ? 100 - calculateVariability(lastRRIntervalsRef.current) * 100 : 0,
+          variability: lastRRIntervalsRef.current.length > 3 ? calculateVariability(lastRRIntervalsRef.current) * 100 : 0
+        }
+      };
+      
       if (processedResult.bpm === 0) {
         processedResult.bpm = lastValidBpmRef.current > 0 ? lastValidBpmRef.current : 72;
         processedResult.confidence = 0.3;
@@ -236,6 +258,14 @@ export function useSignalProcessor() {
       return fallbackResult;
     }
   }, []);
+
+  const calculateVariability = (intervals: number[]): number => {
+    if (intervals.length < 2) return 0;
+    
+    const avgInterval = intervals.reduce((sum, val) => sum + val, 0) / intervals.length;
+    const differences = intervals.map(interval => Math.abs(interval - avgInterval) / avgInterval);
+    return differences.reduce((sum, val) => sum + val, 0) / differences.length;
+  };
 
   const reset = useCallback(() => {
     lastPeakTimeRef.current = null;
