@@ -6,7 +6,21 @@ import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Progress } from "@/components/ui/progress";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { OptimizationState, OptimizationMetrics } from '@/modules/signal-processing/utils/parameter-optimization';
+import { OptimizationState } from '@/modules/signal-processing/utils/parameter-optimization';
+
+// Define OptimizationMetrics interface to match useSignalParameterOptimizer
+interface OptimizationMetrics {
+  currentScore: number;
+  bestScore: number;
+  improvementPercentage: number;
+  optimizationCycles: number;
+  lastOptimizationTime: number | null;
+  paramsHistory: Array<{
+    timestamp: number;
+    score: number;
+    params: Record<string, any>;
+  }>;
+}
 
 interface OptimizerMonitorProps {
   metrics: OptimizationMetrics | null;
@@ -41,13 +55,13 @@ const OptimizerMonitor: React.FC<OptimizerMonitorProps> = ({
   
   const getStateColor = (state: OptimizationState): string => {
     switch (state) {
-      case OptimizationState.COLLECTING:
+      case OptimizationState.IDLE:
         return 'bg-blue-500';
       case OptimizationState.OPTIMIZING:
         return 'bg-purple-500';
-      case OptimizationState.APPLYING:
+      case OptimizationState.COMPLETED:
         return 'bg-amber-500';
-      case OptimizationState.EVALUATING:
+      case OptimizationState.FAILED:
         return 'bg-green-500';
       default:
         return 'bg-gray-500';
@@ -124,7 +138,7 @@ const OptimizerMonitor: React.FC<OptimizerMonitorProps> = ({
                           {Object.entries(entry.params).map(([key, value]) => (
                             <div key={key} className="flex justify-between">
                               <span className="text-gray-500">{key}:</span>
-                              <span>{typeof value === 'number' ? value.toFixed(3) : value}</span>
+                              <span>{typeof value === 'number' ? value.toFixed(3) : String(value)}</span>
                             </div>
                           ))}
                         </div>

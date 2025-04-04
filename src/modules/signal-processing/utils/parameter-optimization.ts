@@ -21,7 +21,26 @@ export enum OptimizationState {
   IDLE = 'idle',
   OPTIMIZING = 'optimizing',
   COMPLETED = 'completed',
-  FAILED = 'failed'
+  FAILED = 'failed',
+  COLLECTING = 'collecting',
+  EVALUATING = 'evaluating',
+  APPLYING = 'applying'
+}
+
+/**
+ * Métricas de optimización para monitoreo
+ */
+export interface OptimizationMetrics {
+  currentScore: number;
+  bestScore: number;
+  improvementPercentage: number;
+  optimizationCycles: number;
+  lastOptimizationTime: number | null;
+  paramsHistory: Array<{
+    timestamp: number;
+    score: number;
+    params: Record<string, any>;
+  }>;
 }
 
 /**
@@ -29,7 +48,7 @@ export enum OptimizationState {
  */
 export interface SignalParameterOptimizer {
   // Comienza optimización
-  startOptimization(objectiveFunction: (params: Record<string, number>) => number): Promise<Record<string, number>>;
+  startOptimization(objectiveFunction?: (params: Record<string, number>) => number): Promise<Record<string, number>>;
   
   // Detiene optimización en curso
   stopOptimization(): void;
@@ -49,6 +68,27 @@ export interface SignalParameterOptimizer {
   
   // Reinicia optimizador
   reset(): void;
+  
+  // Obtiene métricas de optimización
+  getMetrics(): OptimizationMetrics;
+  
+  // Configura función de puntuación
+  setScoreFunction(scoreFunction: (params: Record<string, number>) => number): void;
+  
+  // Configura función para aplicar parámetros
+  setApplyFunction(applyFunction: (params: Record<string, number>) => void): void;
+  
+  // Configura observación
+  configureObservation(observationsNeeded: number): void;
+  
+  // Añade observación
+  addObservation(qualityScore: number): void;
+  
+  // Añade puntuación de evaluación
+  addEvaluationScore(qualityScore: number): void;
+  
+  // Obtiene mejores parámetros
+  getBestParameters(): Record<string, number>;
 }
 
 /**
@@ -65,6 +105,18 @@ class DefaultSignalParameterOptimizer implements SignalParameterOptimizer {
   }> = [];
   private stopRequested: boolean = false;
   private parameters: OptimizationParameter[];
+  private scoreFunction: (params: Record<string, number>) => number = () => 0;
+  private applyFunction: (params: Record<string, number>) => void = () => {};
+  private observationsNeeded: number = 5;
+  private observations: number[] = [];
+  private lastOptimizationTime: number | null = null;
+  private optimizationCycles: number = 0;
+  private bestScore: number = 0;
+  private paramsHistory: Array<{
+    timestamp: number;
+    score: number;
+    params: Record<string, any>;
+  }> = [];
   
   /**
    * Constructor
@@ -84,15 +136,103 @@ class DefaultSignalParameterOptimizer implements SignalParameterOptimizer {
   }
   
   /**
+   * Configura función de puntuación
+   */
+  public setScoreFunction(scoreFunction: (params: Record<string, number>) => number): void {
+    this.scoreFunction = scoreFunction;
+  }
+  
+  /**
+   * Configura función para aplicar parámetros
+   */
+  public setApplyFunction(applyFunction: (params: Record<string, number>) => void): void {
+    this.applyFunction = applyFunction;
+  }
+  
+  /**
+   * Configura observación
+   */
+  public configureObservation(observationsNeeded: number): void {
+    this.observationsNeeded = observationsNeeded;
+  }
+  
+  /**
+   * Añade observación
+   */
+  public addObservation(qualityScore: number): void {
+    this.observations.push(qualityScore);
+    
+    if (this.observations.length >= this.observationsNeeded) {
+      this.state = OptimizationState.IDLE;
+    }
+  }
+  
+  /**
+   * Añade puntuación de evaluación
+   */
+  public addEvaluationScore(qualityScore: number): void {
+    // Log for debugging
+    logError(
+      `Evaluation score added: ${qualityScore}`,
+      ErrorLevel.INFO,
+      "ParameterOptimizer"
+    );
+    
+    // Add to history
+    this.paramsHistory.push({
+      timestamp: Date.now(),
+      score: qualityScore,
+      params: { ...this.currentParams }
+    });
+    
+    // Update best score if better
+    if (qualityScore > this.bestScore) {
+      this.bestScore = qualityScore;
+    }
+    
+    // Reset state
+    this.state = OptimizationState.IDLE;
+  }
+  
+  /**
+   * Obtiene métricas de optimización
+   */
+  public getMetrics(): OptimizationMetrics {
+    // Calculate improvement percentage
+    const initialScore = this.paramsHistory.length > 0 ? this.paramsHistory[0].score : 0;
+    const improvementPercentage = initialScore > 0 
+      ? ((this.bestScore - initialScore) / initialScore) * 100
+      : 0;
+    
+    return {
+      currentScore: this.paramsHistory.length > 0 
+        ? this.paramsHistory[this.paramsHistory.length - 1].score 
+        : 0,
+      bestScore: this.bestScore,
+      improvementPercentage,
+      optimizationCycles: this.optimizationCycles,
+      lastOptimizationTime: this.lastOptimizationTime,
+      paramsHistory: [...this.paramsHistory]
+    };
+  }
+  
+  /**
+   * Obtiene mejores parámetros
+   */
+  public getBestParameters(): Record<string, number> {
+    return { ...this.currentParams };
+  }
+  
+  /**
    * Inicia proceso de optimización
    */
   public async startOptimization(
-    objectiveFunction: (params: Record<string, number>) => number
+    objectiveFunction?: (params: Record<string, number>) => number
   ): Promise<Record<string, number>> {
     if (this.state === OptimizationState.OPTIMIZING) {
       logError(
         "Ya hay una optimización en curso",
-        ErrorLevel.WARN,
+        ErrorLevel.INFO,
         "ParameterOptimizer"
       );
       return this.currentParams;
@@ -102,6 +242,9 @@ class DefaultSignalParameterOptimizer implements SignalParameterOptimizer {
     this.stopRequested = false;
     
     try {
+      // Usar función proporcionada o la configurada previamente
+      const objFunction = objectiveFunction || this.scoreFunction;
+      
       // Ejecutar optimización bayesiana
       const bestResult = await this.optimizer.optimize(
         (params) => {
@@ -111,7 +254,7 @@ class DefaultSignalParameterOptimizer implements SignalParameterOptimizer {
           }
           
           // Evaluar función objetivo
-          return objectiveFunction(params);
+          return objFunction(params);
         },
         30, // Iteraciones máximas
         (iteration, params, value) => {
@@ -135,6 +278,8 @@ class DefaultSignalParameterOptimizer implements SignalParameterOptimizer {
       
       // Actualizar estado y parámetros finales
       this.state = OptimizationState.COMPLETED;
+      this.lastOptimizationTime = Date.now();
+      this.optimizationCycles++;
       
       if (bestResult && bestResult.params) {
         this.currentParams = { ...bestResult.params };

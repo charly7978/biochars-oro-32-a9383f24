@@ -24,6 +24,7 @@ export {
   getDetectionConfidence
 } from './finger-detection/unified-finger-detector';
 
+// Usar 'export type' para tipos en lugar de 'export' directo
 export type {
   DetectionSource,
   DetectionState,
@@ -97,7 +98,8 @@ export { createHeartbeatProcessor } from './heartbeat-processor';
 export {
   SignalParameterOptimizer,
   createSignalParameterOptimizer,
-  OptimizationState
+  OptimizationState,
+  OptimizationMetrics
 } from './utils/parameter-optimization';
 
 // Exportar utilidades de buffer circular optimizado

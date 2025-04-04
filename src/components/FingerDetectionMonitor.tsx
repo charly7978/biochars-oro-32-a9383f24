@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -6,7 +7,7 @@ import { Slider } from '@/components/ui/slider';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { unifiedFingerDetector, DetectionState } from '@/modules/signal-processing/utils/unified-finger-detector';
+import { unifiedFingerDetector, DetectionState } from '@/modules/signal-processing/finger-detection/unified-finger-detector';
 import { CircularBuffer } from '@/modules/signal-processing/utils/circular-buffer';
 import { useToast } from '@/hooks/use-toast';
 

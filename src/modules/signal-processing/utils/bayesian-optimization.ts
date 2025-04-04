@@ -1,10 +1,12 @@
 /**
  * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
  * 
- * Optimización bayesiana para parámetros de señal
- * Utiliza gaussian processes para encontrar los mejores parámetros
+ * Optimizador Bayesiano para ajuste de parámetros
  */
 import { logError, ErrorLevel } from '@/utils/debugUtils';
+import { 
+  unifiedFingerDetector 
+} from '../finger-detection/unified-finger-detector';
 
 // Forward export the DetectionState interface to keep compatibility
 export type { DetectionState } from './unified-finger-detector';
