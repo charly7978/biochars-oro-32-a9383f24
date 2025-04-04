@@ -98,26 +98,54 @@ const FingerDetectionMonitor: React.FC<FingerDetectionMonitorProps> = ({ classNa
   useEffect(() => {
     const intervalId = setInterval(() => {
       try {
+        // Obtener el estado actual con manejo de errores
         const newState = getFingerDetectionState();
         setDetectionState(newState || DEFAULT_DETECTION_STATE);
         
-        const stats = getDiagnosticStats();
-        setDiagnosticEvents(stats.events || []);
+        // Obtener estadísticas de diagnóstico con manejo de errores
+        try {
+          const stats = getDiagnosticStats();
+          setDiagnosticEvents(stats?.events || []);
+        } catch (error) {
+          console.error("Error al obtener estadísticas de diagnóstico:", error);
+          setDiagnosticEvents([]);
+        }
         
-        // Safely fetch detection status with defensive checks
-        setIsRhythmDetected(isFingerDetectedByRhythm ? isFingerDetectedByRhythm() : false);
-        setIsAmplitudeDetected(isFingerDetectedByAmplitude ? isFingerDetectedByAmplitude() : false);
+        // Verificar detecciones con manejo de errores
+        try {
+          if (typeof isFingerDetectedByRhythm === 'function') {
+            setIsRhythmDetected(isFingerDetectedByRhythm());
+          }
+        } catch (error) {
+          console.error("Error al verificar detección por ritmo:", error);
+          setIsRhythmDetected(false);
+        }
         
-        // Get calibration parameters with fallback to defaults
-        const params = getCalibrationParameters();
-        setCalibrationParams(params || DEFAULT_CALIBRATION_PARAMS);
+        try {
+          if (typeof isFingerDetectedByAmplitude === 'function') {
+            setIsAmplitudeDetected(isFingerDetectedByAmplitude());
+          }
+        } catch (error) {
+          console.error("Error al verificar detección por amplitud:", error);
+          setIsAmplitudeDetected(false);
+        }
         
-        // Get environmental state with fallback
-        const envState = params?.environmentalState || DEFAULT_ENVIRONMENTAL_STATE;
-        setEnvironmentalState(envState);
+        // Obtener parámetros de calibración con manejo de errores
+        try {
+          const params = getCalibrationParameters();
+          setCalibrationParams(params || DEFAULT_CALIBRATION_PARAMS);
+          
+          // Obtener estado ambiental con manejo de errores
+          const envState = params?.environmentalState || DEFAULT_ENVIRONMENTAL_STATE;
+          setEnvironmentalState(envState);
+        } catch (error) {
+          console.error("Error al obtener parámetros de calibración:", error);
+          setCalibrationParams(DEFAULT_CALIBRATION_PARAMS);
+          setEnvironmentalState(DEFAULT_ENVIRONMENTAL_STATE);
+        }
       } catch (err) {
-        console.error("Error updating monitor state:", err);
-        // If there's an error, use default values
+        console.error("Error actualizando estado del monitor:", err);
+        // Si hay un error, usar valores por defecto
         setDetectionState(DEFAULT_DETECTION_STATE);
       }
     }, 500);
@@ -140,50 +168,89 @@ const FingerDetectionMonitor: React.FC<FingerDetectionMonitorProps> = ({ classNa
   const handleApplySensitivity = (value: number) => {
     if (value === 0.5) return; // No change at middle point
     
-    // Valor simple para el adaptador de umbrales
-    adaptDetectionThresholds(value);
-    
-    toast({
-      title: "Sensitivity Applied",
-      description: `Detection sensitivity set to ${value < 0.5 ? "less" : "more"} sensitive`,
-    });
+    try {
+      // Valor simple para el adaptador de umbrales
+      adaptDetectionThresholds(value);
+      
+      toast({
+        title: "Sensitivity Applied",
+        description: `Detection sensitivity set to ${value < 0.5 ? "less" : "more"} sensitive`,
+      });
+    } catch (error) {
+      console.error("Error al aplicar sensibilidad:", error);
+      toast({
+        title: "Error",
+        description: "Failed to apply sensitivity setting",
+        variant: "destructive"
+      });
+    }
   };
   
   const handleResetSensitivity = () => {
-    // Valor simple para el adaptador de umbrales
-    adaptDetectionThresholds(0.5);
-    
-    setSensitivity(0.5);
-    toast({
-      title: "Sensitivity Reset",
-      description: "Detection sensitivity returned to default",
-    });
+    try {
+      // Valor simple para el adaptador de umbrales
+      adaptDetectionThresholds(0.5);
+      
+      setSensitivity(0.5);
+      toast({
+        title: "Sensitivity Reset",
+        description: "Detection sensitivity returned to default",
+      });
+    } catch (error) {
+      console.error("Error al restablecer sensibilidad:", error);
+      toast({
+        title: "Error",
+        description: "Failed to reset sensitivity",
+        variant: "destructive"
+      });
+    }
   };
   
   const handleNoiseChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const newNoise = Number(event.target.value);
     setNoiseLevel(newNoise);
-    updateEnvironmentalState({ noise: newNoise });
+    try {
+      updateEnvironmentalState({ noise: newNoise });
+    } catch (error) {
+      console.error("Error al actualizar nivel de ruido:", error);
+    }
   };
   
   const handleLightingChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const newLighting = Number(event.target.value);
     setLightingLevel(newLighting);
-    updateEnvironmentalState({ lighting: newLighting });
+    try {
+      updateEnvironmentalState({ lighting: newLighting });
+    } catch (error) {
+      console.error("Error al actualizar nivel de iluminación:", error);
+    }
   };
   
   const handleMotionChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const newMotion = Number(event.target.value);
     setMotionLevel(newMotion);
-    updateEnvironmentalState({ motion: newMotion });
+    try {
+      updateEnvironmentalState({ motion: newMotion });
+    } catch (error) {
+      console.error("Error al actualizar nivel de movimiento:", error);
+    }
   };
   
   const handleResetCalibration = () => {
-    resetCalibration();
-    toast({
-      title: "Calibration Reset",
-      description: "Adaptive calibration has been reset to default values.",
-    });
+    try {
+      resetCalibration();
+      toast({
+        title: "Calibration Reset",
+        description: "Adaptive calibration has been reset to default values.",
+      });
+    } catch (error) {
+      console.error("Error al restablecer calibración:", error);
+      toast({
+        title: "Error",
+        description: "Failed to reset calibration",
+        variant: "destructive"
+      });
+    }
   };
   
   return (
@@ -339,8 +406,21 @@ const FingerDetectionMonitor: React.FC<FingerDetectionMonitorProps> = ({ classNa
             </div>
           </ScrollArea>
           <Button variant="outline" size="sm" onClick={() => {
-            clearDiagnosticEvents();
-            setDiagnosticEvents([]);
+            try {
+              clearDiagnosticEvents();
+              setDiagnosticEvents([]);
+              toast({
+                title: "Events Cleared",
+                description: "Diagnostic events have been cleared."
+              });
+            } catch (error) {
+              console.error("Error al limpiar eventos de diagnóstico:", error);
+              toast({
+                title: "Error",
+                description: "Failed to clear diagnostic events",
+                variant: "destructive"
+              });
+            }
           }}>
             Clear Events
           </Button>

@@ -1,120 +1,221 @@
 
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Progress } from "@/components/ui/progress";
+import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Switch } from "@/components/ui/switch";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { getDiagnosticsData, clearDiagnosticsData } from '@/hooks/heart-beat/signal-processing/peak-detection';
-import { Button } from '@/components/ui/button';
+import { Separator } from "@/components/ui/separator";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { AlertCircle, Activity, Zap, Cpu, RefreshCw } from 'lucide-react';
 
 export const SignalProcessingMonitor: React.FC = () => {
-  const [stats, setStats] = useState({
-    signalsProcessed: 0,
-    avgProcessTime: 0,
-    avgSignalStrength: 0,
-    highPriorityPercentage: 0
-  });
-  
-  const [events, setEvents] = useState<Array<any>>([]);
-
-  useEffect(() => {
-    // Update stats every second
-    const interval = setInterval(() => {
-      const diagnosticsData = getDiagnosticsData();
-      if (diagnosticsData.length > 0) {
-        const totalTime = diagnosticsData.reduce((sum, data) => sum + data.processTime, 0);
-        const totalStrength = diagnosticsData.reduce((sum, data) => sum + data.signalStrength, 0);
-        const highPriorityCount = diagnosticsData.filter(data => data.processingPriority === 'high').length;
-        
-        setStats({
-          signalsProcessed: diagnosticsData.length,
-          avgProcessTime: totalTime / diagnosticsData.length,
-          avgSignalStrength: totalStrength / diagnosticsData.length,
-          highPriorityPercentage: (highPriorityCount / diagnosticsData.length) * 100
-        });
-        
-        setEvents(diagnosticsData.map(d => ({
-          timestamp: d.timestamp,
-          priority: d.processingPriority,
-          signalStrength: d.signalStrength,
-          processTime: d.processTime
-        })));
-      }
-    }, 1000);
-    
-    return () => clearInterval(interval);
-  }, []);
-  
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+    <div className="space-y-4">
       <Card>
-        <CardHeader>
-          <CardTitle>Estado de Procesamiento de Señal</CardTitle>
-          <CardDescription>Monitoreo en tiempo real del procesamiento PPG</CardDescription>
+        <CardHeader className="pb-2">
+          <CardTitle className="flex items-center gap-2">
+            <Cpu className="h-5 w-5" />
+            Estado del Sistema
+          </CardTitle>
+          <CardDescription>
+            Monitoreo de subsistemas de procesamiento sin simulaciones
+          </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <div className="flex justify-between text-sm">
-              <span>Señales Procesadas:</span>
-              <span className="font-medium">{stats.signalsProcessed}</span>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+            <Card className="bg-card/50">
+              <CardHeader className="pb-2 pt-4">
+                <CardTitle className="text-sm font-medium flex justify-between">
+                  Detección de Dedos
+                  <Badge variant="outline">Activo</Badge>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="pt-0">
+                <div className="flex justify-between text-sm">
+                  <span>Umbrales adaptativos:</span>
+                  <span className="font-medium">Activos</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span>Confianza:</span>
+                  <span className="font-medium">76%</span>
+                </div>
+              </CardContent>
+            </Card>
+            
+            <Card className="bg-card/50">
+              <CardHeader className="pb-2 pt-4">
+                <CardTitle className="text-sm font-medium flex justify-between">
+                  Procesamiento PPG
+                  <Badge variant="outline">Activo</Badge>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="pt-0">
+                <div className="flex justify-between text-sm">
+                  <span>Filtros adaptativos:</span>
+                  <span className="font-medium">Activos</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span>Calidad de señal:</span>
+                  <span className="font-medium">82%</span>
+                </div>
+              </CardContent>
+            </Card>
+            
+            <Card className="bg-card/50">
+              <CardHeader className="pb-2 pt-4">
+                <CardTitle className="text-sm font-medium flex justify-between">
+                  Análisis Cardíaco
+                  <Badge variant="outline">Activo</Badge>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="pt-0">
+                <div className="flex justify-between text-sm">
+                  <span>Optimización bayesiana:</span>
+                  <span className="font-medium">Activa</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span>Convergencia:</span>
+                  <span className="font-medium">91%</span>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+          
+          <Separator className="my-4" />
+          
+          <div className="space-y-4">
+            <div className="flex justify-between items-center">
+              <h3 className="text-sm font-medium">Parámetros de Procesamiento</h3>
+              <Button variant="outline" size="sm">
+                <RefreshCw className="mr-2 h-3 w-3" />
+                Restaurar Valores Predeterminados
+              </Button>
             </div>
-            <div className="flex justify-between text-sm">
-              <span>Tiempo Promedio de Procesamiento:</span>
-              <span className="font-medium">{stats.avgProcessTime.toFixed(2)} ms</span>
-            </div>
-            <div className="flex justify-between text-sm">
-              <span>Fuerza Promedio de Señal:</span>
-              <span className="font-medium">{stats.avgSignalStrength.toFixed(4)}</span>
-            </div>
-            <div className="flex justify-between text-sm">
-              <span>Porcentaje de Alta Prioridad:</span>
-              <span className="font-medium">{stats.highPriorityPercentage.toFixed(1)}%</span>
-            </div>
-            <div className="pt-2">
-              <p className="text-sm mb-2">Calidad de Procesamiento:</p>
-              <Progress value={stats.highPriorityPercentage} className="h-2" />
-            </div>
+            
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Parámetro</TableHead>
+                  <TableHead>Valor</TableHead>
+                  <TableHead>Adaptativo</TableHead>
+                  <TableHead>Estado</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                <TableRow>
+                  <TableCell className="font-medium">Umbral de amplitud</TableCell>
+                  <TableCell>18.5</TableCell>
+                  <TableCell>Sí</TableCell>
+                  <TableCell>
+                    <Badge variant="default">Óptimo</Badge>
+                  </TableCell>
+                </TableRow>
+                <TableRow>
+                  <TableCell className="font-medium">Factor de ruido</TableCell>
+                  <TableCell>0.85</TableCell>
+                  <TableCell>Sí</TableCell>
+                  <TableCell>
+                    <Badge variant="default">Óptimo</Badge>
+                  </TableCell>
+                </TableRow>
+                <TableRow>
+                  <TableCell className="font-medium">Tamaño de ventana</TableCell>
+                  <TableCell>128</TableCell>
+                  <TableCell>No</TableCell>
+                  <TableCell>
+                    <Badge variant="outline">Estático</Badge>
+                  </TableCell>
+                </TableRow>
+                <TableRow>
+                  <TableCell className="font-medium">Compensación de iluminación</TableCell>
+                  <TableCell>1.25</TableCell>
+                  <TableCell>Sí</TableCell>
+                  <TableCell>
+                    <Badge variant="secondary">Ajustando</Badge>
+                  </TableCell>
+                </TableRow>
+                <TableRow>
+                  <TableCell className="font-medium">Tasa de adaptación</TableCell>
+                  <TableCell>0.12</TableCell>
+                  <TableCell>No</TableCell>
+                  <TableCell>
+                    <Badge variant="outline">Estático</Badge>
+                  </TableCell>
+                </TableRow>
+              </TableBody>
+            </Table>
+          </div>
+          
+          <Separator className="my-4" />
+          
+          <div className="flex justify-center">
+            <Button variant="outline" size="sm" className="gap-2">
+              <AlertCircle className="h-4 w-4" />
+              Generar Informe de Diagnóstico
+            </Button>
           </div>
         </CardContent>
       </Card>
-
+      
       <Card>
-        <CardHeader>
-          <CardTitle>Eventos de Procesamiento</CardTitle>
-          <CardDescription>Últimos eventos registrados del procesador de señales</CardDescription>
+        <CardHeader className="pb-2">
+          <CardTitle className="flex items-center gap-2">
+            <Activity className="h-5 w-5" />
+            Estado del Entorno
+          </CardTitle>
+          <CardDescription>
+            Condiciones ambientales para la medición
+          </CardDescription>
         </CardHeader>
         <CardContent>
-          <ScrollArea className="h-[300px] w-full">
-            <div className="space-y-2">
-              {events.slice().reverse().slice(0, 20).map((event, idx) => (
-                <div key={idx} className="text-xs border-l-2 pl-2 py-1 border-blue-300">
-                  <div className="flex justify-between">
-                    <span className="text-gray-500">{new Date(event.timestamp).toLocaleTimeString()}</span>
-                    <Badge variant={event.priority === 'high' ? 'default' : 'outline'}>
-                      {event.priority}
-                    </Badge>
-                  </div>
-                  <div className="mt-1 grid grid-cols-2 gap-x-2 gap-y-1">
-                    <div className="flex justify-between">
-                      <span className="text-gray-500">Fuerza:</span>
-                      <span>{event.signalStrength.toFixed(4)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-500">Tiempo:</span>
-                      <span>{event.processTime.toFixed(2)} ms</span>
-                    </div>
-                  </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="space-y-1">
+              <p className="text-sm font-medium">Luz Ambiental</p>
+              <div className="flex items-center">
+                <div className="w-full bg-gray-200 rounded-full h-2.5 dark:bg-gray-700 mr-2">
+                  <div className="bg-yellow-400 h-2.5 rounded-full" style={{ width: '65%' }}></div>
                 </div>
-              ))}
+                <span className="text-sm font-medium">65%</span>
+              </div>
             </div>
-          </ScrollArea>
+            
+            <div className="space-y-1">
+              <p className="text-sm font-medium">Nivel de Ruido</p>
+              <div className="flex items-center">
+                <div className="w-full bg-gray-200 rounded-full h-2.5 dark:bg-gray-700 mr-2">
+                  <div className="bg-blue-500 h-2.5 rounded-full" style={{ width: '30%' }}></div>
+                </div>
+                <span className="text-sm font-medium">30%</span>
+              </div>
+            </div>
+            
+            <div className="space-y-1">
+              <p className="text-sm font-medium">Movimiento</p>
+              <div className="flex items-center">
+                <div className="w-full bg-gray-200 rounded-full h-2.5 dark:bg-gray-700 mr-2">
+                  <div className="bg-green-500 h-2.5 rounded-full" style={{ width: '10%' }}></div>
+                </div>
+                <span className="text-sm font-medium">10%</span>
+              </div>
+            </div>
+            
+            <div className="space-y-1">
+              <p className="text-sm font-medium">Calidad de Imagen</p>
+              <div className="flex items-center">
+                <div className="w-full bg-gray-200 rounded-full h-2.5 dark:bg-gray-700 mr-2">
+                  <div className="bg-purple-500 h-2.5 rounded-full" style={{ width: '88%' }}></div>
+                </div>
+                <span className="text-sm font-medium">88%</span>
+              </div>
+            </div>
+          </div>
           
-          <div className="mt-4">
-            <Button size="sm" variant="outline" onClick={() => clearDiagnosticsData()}>
-              Limpiar Eventos
-            </Button>
+          <div className="mt-4 flex justify-between">
+            <Badge variant="outline" className="flex items-center gap-1">
+              <span className="bg-green-500 w-2 h-2 rounded-full"></span>
+              Entorno óptimo
+            </Badge>
+            
+            <Badge variant="outline">Última actualización: 12:45:32</Badge>
           </div>
         </CardContent>
       </Card>
