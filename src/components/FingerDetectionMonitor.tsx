@@ -15,6 +15,8 @@ import {
   updateDetectionSource,
   adaptDetectionThresholds,
   isFingerDetected,
+  isFingerDetectedByRhythm,
+  isFingerDetectedByAmplitude,
   getDetectionConfidence
 } from '@/modules/signal-processing';
 import type {
@@ -33,23 +35,20 @@ import {
   clearDiagnosticEvents
 } from '@/modules/signal-processing';
 import {
-  adaptiveCalibration,
-  getCalibrationParameters,
   updateEnvironmentalState,
+  getCalibrationParameters,
   resetCalibration
 } from '@/modules/signal-processing';
 import {
   analyzeSignalForRhythmicPattern,
   resetRhythmDetector,
-  isFingerDetectedByRhythm,
   getConsistentPatternsCount
 } from '@/modules/signal-processing';
 import {
   checkSignalStrength,
   shouldProcessMeasurement,
   resetAmplitudeDetector,
-  getLastSignalQuality,
-  isFingerDetectedByAmplitude
+  getLastSignalQuality
 } from '@/modules/signal-processing';
 
 interface FingerDetectionMonitorProps {
@@ -59,23 +58,27 @@ interface FingerDetectionMonitorProps {
 const FingerDetectionMonitor: React.FC<FingerDetectionMonitorProps> = ({ className }) => {
   const [detectionState, setDetectionState] = useState<DetectionState>(getFingerDetectionState());
   const [sensitivity, setSensitivity] = useState(0.5);
-  const [diagnosticEvents, setDiagnosticEvents] = useState(fingerDiagnostics.getDiagnosticEvents());
+  const [diagnosticEvents, setDiagnosticEvents] = useState<DiagnosticEvent[]>([]);
   const [isRhythmDetected, setIsRhythmDetected] = useState(isFingerDetectedByRhythm());
   const [isAmplitudeDetected, setIsAmplitudeDetected] = useState(isFingerDetectedByAmplitude());
-  const [calibrationParams, setCalibrationParams] = useState(getCalibrationParameters());
-  const [environmentalState, setEnvironmentalState] = useState(adaptiveCalibration.getEnvironmentalState());
-  const [noiseLevel, setNoiseLevel] = useState(environmentalState.noise || 0);
-  const [lightingLevel, setLightingLevel] = useState(environmentalState.lighting || 50);
-  const [motionLevel, setMotionLevel] = useState(environmentalState.motion || 0);
+  const [calibrationParams, setCalibrationParams] = useState<AdaptiveCalibrationParams>(getCalibrationParameters());
+  const [environmentalState, setEnvironmentalState] = useState<EnvironmentalState>({
+    noise: 0,
+    lighting: 50,
+    motion: 0
+  });
+  const [noiseLevel, setNoiseLevel] = useState(0);
+  const [lightingLevel, setLightingLevel] = useState(50);
+  const [motionLevel, setMotionLevel] = useState(0);
   
   useEffect(() => {
     const intervalId = setInterval(() => {
       setDetectionState(getFingerDetectionState());
-      setDiagnosticEvents(fingerDiagnostics.getDiagnosticEvents());
+      setDiagnosticEvents(fingerDiagnostics.getDiagnosticEvents() || []);
       setIsRhythmDetected(isFingerDetectedByRhythm());
       setIsAmplitudeDetected(isFingerDetectedByAmplitude());
       setCalibrationParams(getCalibrationParameters());
-      setEnvironmentalState(adaptiveCalibration.getEnvironmentalState());
+      setEnvironmentalState(getCalibrationParameters().environmentalState);
     }, 500);
     
     return () => clearInterval(intervalId);
@@ -96,11 +99,8 @@ const FingerDetectionMonitor: React.FC<FingerDetectionMonitorProps> = ({ classNa
   const handleApplySensitivity = (value: number) => {
     if (value === 0.5) return; // No change at middle point
     
-    // Use adaptThresholds instead of updateThresholds
-    unifiedFingerDetector.adaptThresholds({
-      amplitudeSensitivity: value < 0.5 ? 0.8 : 1.2,
-      rhythmSensitivity: value < 0.5 ? 0.8 : 1.2,
-    });
+    // Aplicar sensibilidad directamente
+    adaptDetectionThresholds(value < 0.5 ? 0.8 : 1.2);
     
     toast({
       title: "Sensitivity Applied",
@@ -109,11 +109,8 @@ const FingerDetectionMonitor: React.FC<FingerDetectionMonitorProps> = ({ classNa
   };
   
   const handleResetSensitivity = () => {
-    // Use adaptThresholds instead of updateThresholds
-    unifiedFingerDetector.adaptThresholds({
-      amplitudeSensitivity: 1.0,
-      rhythmSensitivity: 1.0,
-    });
+    // Aplicar sensibilidad directamente
+    adaptDetectionThresholds(1.0);
     
     setSensitivity(0.5);
     toast({
@@ -153,8 +150,8 @@ const FingerDetectionMonitor: React.FC<FingerDetectionMonitorProps> = ({ classNa
       <CardHeader>
         <CardTitle className="flex justify-between items-center">
           <span>Finger Detection Monitor</span>
-          <Badge variant={detectionState.detected ? 'default' : 'outline'}>
-            {detectionState.detected ? 'Detected' : 'Not Detected'}
+          <Badge variant={detectionState.isFingerDetected ? 'default' : 'outline'}>
+            {detectionState.isFingerDetected ? 'Detected' : 'Not Detected'}
           </Badge>
         </CardTitle>
         <CardDescription>

@@ -1,4 +1,3 @@
-
 /**
  * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
  * 
@@ -109,14 +108,14 @@ export function useVitalSignsWithProcessing() {
         
         // Actualizar desde el extractor PPG
         updateDetectionSource(
-          'ppg-extractor', 
+          DetectionSource.PPG_EXTRACTOR, 
           extraction.lastResult.fingerDetected, 
           extraction.lastResult.quality / 100
         );
         
         // Actualizar desde el procesador de señal
         updateDetectionSource(
-          'signal-quality-amplitude', 
+          DetectionSource.SIGNAL_QUALITY_AMPLITUDE, 
           processedSignal.fingerDetected, 
           processedSignal.quality / 100
         );

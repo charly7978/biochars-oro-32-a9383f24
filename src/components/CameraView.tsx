@@ -1,4 +1,3 @@
-
 import React, { useRef, useEffect, useState } from 'react';
 import { Fingerprint } from 'lucide-react';
 import { logError, ErrorLevel } from '@/utils/debugUtils';
@@ -249,7 +248,7 @@ const CameraView: React.FC<CameraViewProps> = ({
         
         // Actualizar detector unificado con información de brillo
         updateDetectionSource(
-          'camera-analysis',
+          DetectionSource.CAMERA_ANALYSIS,
           avgBrightness > 50, // Indicar presencia potencial de dedo si brillo adecuado
           Math.min(1, avgBrightness / 200) // Confianza normalizada
         );

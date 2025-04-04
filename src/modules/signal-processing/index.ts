@@ -17,7 +17,15 @@ export {
   isFingerDetected,
   getDetectionConfidence,
   checkSignalStrength,
-  unifiedFingerDetector
+  unifiedFingerDetector,
+  isFingerDetectedByRhythm,
+  isFingerDetectedByAmplitude,
+  resetRhythmDetector,
+  resetAmplitudeDetector,
+  shouldProcessMeasurement,
+  getLastSignalQuality,
+  getConsistentPatternsCount,
+  adaptDetectionThresholds
 } from './finger-detection/unified-finger-detector';
 
 // Exportar diagnósticos
@@ -36,17 +44,8 @@ export {
   getCalibrationParameters,
   resetCalibration,
   calculateAdaptiveThreshold,
-  adaptDetectionThresholds
+  adaptDetectionThresholds as adaptCalibrationThresholds
 } from './finger-detection/adaptive-calibration';
-
-// Exportar detector de amplitud
-export {
-  checkSignalStrength as checkAmplitudeSignalStrength,
-  shouldProcessMeasurement,
-  resetAmplitudeDetector,
-  getLastSignalQuality,
-  isFingerDetectedByAmplitude
-} from './finger-detection/amplitude-detector';
 
 // Exportar procesador de señales neuronal
 export {
@@ -74,7 +73,3 @@ export type {
   SignalProcessorConfig,
   RealTimeProcessingConfig
 } from './types';
-
-// Exportar procesadores principales
-export { PPGSignalProcessor } from './processors/ppg-processor';
-export { HeartbeatProcessor } from './processors/heartbeat-processor';

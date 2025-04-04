@@ -1,56 +1,43 @@
 
 /**
- * Tipos para el sistema de detección de dedos unificado
+ * Tipos para la detección de dedos
  */
 
-/**
- * Fuentes de detección disponibles
- */
+// Fuentes de detección válidas
 export enum DetectionSource {
   AMPLITUDE = 'amplitude',
   RHYTHM = 'rhythm',
-  COMBINED = 'combined',
-  SIGNAL_QUALITY = 'signal-quality',
-  BRIGHTNESS = 'brightness',
   PPG_EXTRACTOR = 'ppg-extractor',
   SIGNAL_QUALITY_AMPLITUDE = 'signal-quality-amplitude',
   SIGNAL_QUALITY_STATE = 'signal-quality-state',
+  BRIGHTNESS = 'brightness',
   WEAK_SIGNAL_RESULT = 'weak-signal-result',
   RHYTHM_PATTERN = 'rhythm-pattern',
-  UNIFIED_DETECTION = 'unified-detection'
+  CAMERA_ANALYSIS = 'camera-analysis',
+  UNIFIED_DETECTION = 'unified-detection',
+  COMBINED = 'combined'
 }
 
-/**
- * Tipos de eventos de diagnóstico
- */
+// Tipos de eventos diagnósticos
 export enum DiagnosticEventType {
-  DETECTION_CHANGE = 'detection_change',
-  THRESHOLD_ADAPTATION = 'threshold_adaptation',
-  CALIBRATION_UPDATE = 'calibration_update',
-  ENVIRONMENTAL_CHANGE = 'environmental_change',
-  SIGNAL_QUALITY = 'signal_quality',
-  ERROR = 'error',
-  INFO = 'info',
-  FINGER_DETECTED = 'FINGER_DETECTED',
-  FINGER_LOST = 'FINGER_LOST',
-  DETECTOR_RESET = 'DETECTOR_RESET',
-  PATTERN_DETECTED = 'PATTERN_DETECTED',
-  PATTERN_LOST = 'PATTERN_LOST',
-  PATTERN_TIMEOUT = 'PATTERN_TIMEOUT'
+  FINGER_DETECTED = 'finger-detected',
+  FINGER_LOST = 'finger-lost',
+  DETECTOR_RESET = 'detector-reset',
+  CALIBRATION_CHANGED = 'calibration-changed',
+  SIGNAL_QUALITY_CHANGE = 'signal-quality-change',
+  PATTERN_DETECTED = 'pattern-detected',
+  PATTERN_LOST = 'pattern-lost',
+  PATTERN_TIMEOUT = 'pattern-timeout'
 }
 
-/**
- * Resultados de detección por fuente
- */
+// Resultado de detección para una fuente específica
 export interface SourceDetectionResult {
   detected: boolean;
   confidence: number;
-  timestamp?: number;
+  timestamp: number;
 }
 
-/**
- * Estado de detección completo
- */
+// Estado global de detección
 export interface DetectionState {
   isFingerDetected: boolean;
   confidence: number;
@@ -60,47 +47,26 @@ export interface DetectionState {
   lastUpdate: number;
 }
 
-/**
- * Eventos de diagnóstico
- */
+// Evento de diagnóstico
 export interface DiagnosticEvent {
   type: DiagnosticEventType;
+  source: DetectionSource;
   message: string;
-  details?: Record<string, any>;
   timestamp: number;
-  eventType?: string;
-  source?: string;
-  isFingerDetected?: boolean;
-  confidence?: number;
+  data?: any;
 }
 
-/**
- * Estado ambiental para calibración adaptativa
- */
-export interface EnvironmentalState {
-  noise: number;
-  lighting: number;
-  motion: number;
-  brightness?: number;
-  movement?: number;
-  signalToNoiseRatio?: number;
-  device?: {
-    type: string;
-    model?: string;
-    capabilities?: string[];
-    camera?: {
-      type?: string;
-      resolution?: string;
-      fps?: number;
-      capabilities?: string[];
-    };
-  };
-  lastUpdate?: number;
+// Estadísticas de diagnóstico
+export interface DiagnosticStats {
+  totalEvents: number;
+  detectionRate: number;
+  falsePositives: number;
+  falseNegatives: number;
+  averageConfidence: number;
+  events: DiagnosticEvent[];
 }
 
-/**
- * Parámetros de calibración adaptativa
- */
+// Parámetros de calibración adaptativa
 export interface AdaptiveCalibrationParams {
   baseThreshold: number;
   noiseMultiplier: number;
@@ -108,13 +74,22 @@ export interface AdaptiveCalibrationParams {
   motionCompensation: number;
   adaptationRate: number;
   stabilityFactor: number;
-  [key: string]: number | EnvironmentalState;
+  amplitudeThreshold: number;
+  environmentQualityFactor: number;
+  environmentalState: EnvironmentalState;
 }
 
-/**
- * Opciones de configuración para detección de dedos
- */
-export interface FingerDetectionOptions {
-  amplitudeSensitivity?: number;
-  rhythmSensitivity?: number;
+// Estado ambiental para calibración
+export interface EnvironmentalState {
+  noise?: number;
+  lighting?: number;
+  motion?: number;
+  brightness?: number;
+  deviceInfo?: {
+    type?: string;
+    resolution?: string;
+    fps?: number;
+    capabilities?: string[];
+    quality?: number;
+  };
 }
