@@ -22,7 +22,9 @@ export {
   handlePeakDetection,
   detectArrhythmia,
   calculateArrhythmiaRisk,
-  getArrhythmiaStatusMessage
+  getArrhythmiaStatusMessage,
+  getDiagnosticsData,
+  clearDiagnosticsData
 } from './peak-detection';
 
 export { 

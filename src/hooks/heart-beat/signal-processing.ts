@@ -1,4 +1,3 @@
-
 import { HeartBeatResult } from './types';
 
 /**
