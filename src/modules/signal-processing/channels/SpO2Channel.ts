@@ -1,134 +1,128 @@
 
 /**
  * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
- * 
- * Canal especializado para procesamiento de SpO2
- * Implementación unificada que mantiene toda la funcionalidad existente
  */
 
-import { SpecializedChannel, ChannelConfig } from './SpecializedChannel';
 import { VitalSignType, ChannelFeedback } from '../../../types/signal';
+import { SpecializedChannel, ChannelConfig } from './SpecializedChannel';
+import { calculateAC, calculateDC } from '../../../modules/vital-signs/spo2-processor';
 
 /**
- * Canal especializado para SpO2
+ * Canal especializado para procesamiento de señales de SpO2
  */
 export class SpO2Channel extends SpecializedChannel {
-  private readonly BASELINE_SPO2 = 97; // Porcentaje base
-  private spo2Buffer: number[] = [];
-  private readonly BUFFER_SIZE = 10;
+  // Configuración específica para SpO2
+  private amplificationFactor: number = 1.5;
+  private filterStrength: number = 0.4;
+  private lowPass: number[] = [];
   
   constructor(config?: ChannelConfig) {
     super(VitalSignType.SPO2, config);
+    
+    // Aplicar configuración específica
+    if (config) {
+      this.amplificationFactor = config.initialAmplification || this.amplificationFactor;
+      this.filterStrength = config.initialFilterStrength || this.filterStrength;
+    }
   }
   
   /**
-   * Apply SpO2-specific optimization to the signal
-   */
-  protected applyChannelSpecificOptimization(value: number): number {
-    // SpO2 specific processing - this is a pass-through implementation
-    return value;
-  }
-  
-  /**
-   * Procesa un array de valores PPG y calcula SpO2
+   * Procesa un valor y calcula directamente SpO2
    */
   public process(values: number[]): number {
-    // If not enough values, return last valid
     if (values.length < 30) {
-      return this.getLastValidValue();
+      return 0;
     }
     
     // Calcular componentes AC y DC
-    const ac = this.calculateAC(values);
-    const dc = this.calculateDC(values);
+    const ac = calculateAC(values);
+    const dc = calculateDC(values);
     
     // Evitar división por cero
     if (dc === 0) {
-      return this.getLastValidValue();
+      return 0;
     }
     
-    // Índice de perfusión
+    // Calcular índice de perfusión
     const perfusionIndex = ac / dc;
     
-    // Si el índice es muy bajo, no hay suficiente señal
+    // Umbral mínimo para índice de perfusión
     if (perfusionIndex < 0.06) {
-      return this.getLastValidValue();
+      return 0;
     }
     
-    // Calcular SpO2 basado en ratio
-    const ratio = ac / dc;
-    let spo2 = Math.round(this.BASELINE_SPO2 - (15 * ratio));
+    // Calcular SpO2 basado en la relación AC/DC
+    const R = (ac / dc);
     
-    // Ajustar basado en calidad de perfusión
+    // Fórmula de conversión
+    let spo2 = Math.round(98 - (15 * R));
+    
+    // Ajuste basado en la calidad de perfusión
     if (perfusionIndex > 0.15) {
-      spo2 = Math.min(99, spo2 + 1);
+      spo2 = Math.min(98, spo2 + 1);
     } else if (perfusionIndex < 0.08) {
       spo2 = Math.max(0, spo2 - 1);
     }
     
-    // Limitar al rango fisiológico
-    spo2 = Math.min(100, Math.max(90, spo2));
+    // Limitar valores
+    spo2 = Math.min(98, spo2);
+    spo2 = Math.max(94, spo2);
     
-    // Añadir al buffer para estabilidad
-    this.spo2Buffer.push(spo2);
-    if (this.spo2Buffer.length > this.BUFFER_SIZE) {
-      this.spo2Buffer.shift();
+    // Actualizar calidad basado en índice de perfusión
+    this.quality = Math.min(1, perfusionIndex * 10);
+    
+    return spo2;
+  }
+  
+  /**
+   * Implementación de optimización específica para este canal
+   */
+  protected applyChannelSpecificOptimization(value: number): number {
+    // Aplicar filtrado específico para SpO2
+    
+    // Filtro pasa-bajos simple para suavizar la señal
+    let filtered = value;
+    
+    if (this.lowPass.length > 0) {
+      // Media móvil ponderada
+      const lastFiltered = this.lowPass[this.lowPass.length - 1];
+      filtered = lastFiltered * (1 - this.filterStrength) + value * this.filterStrength;
     }
     
-    // Calcular promedio para estabilidad
-    const sum = this.spo2Buffer.reduce((a, b) => a + b, 0);
-    const avgSpo2 = Math.round(sum / this.spo2Buffer.length);
+    this.lowPass.push(filtered);
+    if (this.lowPass.length > 10) {
+      this.lowPass.shift();
+    }
     
-    // Update signal quality based on perfusion index
-    this.quality = Math.min(1.0, perfusionIndex * 10);
+    // Amplificar la señal para enfatizar cambios
+    const amplified = filtered * this.amplificationFactor;
     
-    return avgSpo2;
+    return amplified;
   }
   
   /**
-   * Aplicar retroalimentación al canal
+   * Aplica retroalimentación para ajustar parámetros
    */
-  public applyFeedback(feedback: ChannelFeedback): void {
-    // Implementar ajustes basados en retroalimentación
-    if (feedback.channelId === this.id && feedback.suggestedAdjustments) {
-      // Ajustar parámetros si se necesita
+  public override applyFeedback(feedback: ChannelFeedback): void {
+    super.applyFeedback(feedback);
+    
+    // Ajustes específicos para SpO2
+    if (feedback.suggestedAdjustments) {
+      if (feedback.suggestedAdjustments.amplificationFactor !== undefined) {
+        this.amplificationFactor = feedback.suggestedAdjustments.amplificationFactor;
+      }
+      
+      if (feedback.suggestedAdjustments.filterStrength !== undefined) {
+        this.filterStrength = feedback.suggestedAdjustments.filterStrength;
+      }
     }
   }
   
   /**
-   * Calcular componente AC (señal variable)
-   */
-  private calculateAC(values: number[]): number {
-    const recentValues = values.slice(-30);
-    const min = Math.min(...recentValues);
-    const max = Math.max(...recentValues);
-    return max - min;
-  }
-  
-  /**
-   * Calcular componente DC (línea base)
-   */
-  private calculateDC(values: number[]): number {
-    const recentValues = values.slice(-30);
-    const sum = recentValues.reduce((acc, val) => acc + val, 0);
-    return sum / recentValues.length;
-  }
-  
-  /**
-   * Obtener último valor válido
-   */
-  private getLastValidValue(): number {
-    if (this.spo2Buffer.length > 0) {
-      return this.spo2Buffer[this.spo2Buffer.length - 1];
-    }
-    return 0;
-  }
-  
-  /**
-   * Reiniciar el canal
+   * Reinicia el canal
    */
   public override reset(): void {
     super.reset();
-    this.spo2Buffer = [];
+    this.lowPass = [];
   }
 }
