@@ -22,11 +22,9 @@ export interface VitalSignsResult {
     overall: number;
   };
   lastArrhythmiaData?: {
-    isArrhythmia: boolean; // Changed from original to match expected structure
-    confidence: number;    // Changed from original to match expected structure
     timestamp: number;
-    rmssd?: number;        // Made optional to allow both formats
-    rrVariation?: number;  // Made optional to allow both formats
+    rmssd: number;
+    rrVariation: number;
   } | null;
 }
 
@@ -38,10 +36,6 @@ export interface SignalProcessingOptions {
   filterStrength?: number;
   qualityThreshold?: number;
   fingerDetectionSensitivity?: number;
-  useAdaptiveControl?: boolean; // Added for compatibility
-  qualityEnhancedByPrediction?: boolean; // Added for compatibility
-  adaptationRate?: number; // Added for compatibility
-  predictionHorizon?: number; // Added for compatibility
 }
 
 /**
@@ -58,8 +52,6 @@ export interface RRIntervalData {
 export interface ArrhythmiaProcessingResult {
   arrhythmiaStatus: string;
   lastArrhythmiaData: { 
-    isArrhythmia: boolean; // Added for compatibility
-    confidence: number;    // Added for compatibility
     timestamp: number; 
     rmssd: number; 
     rrVariation: number; 

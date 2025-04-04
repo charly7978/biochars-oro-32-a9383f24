@@ -1,33 +1,24 @@
 
 /**
- * Signal Processing Module
- * Central export point for all signal processing utilities
+ * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
+ * 
+ * Signal processing module
+ * Central export for all signal processing utilities
  */
 
-// Export unified types
-export * from './types-unified';
+// Export signal distributor
+export { OptimizedSignalDistributor } from './OptimizedSignalDistributor';
 
-// Export core processors
-export * from './ppg-processor';
+// Export channel types
+export { VitalSignType, type ChannelFeedback } from '../../types/signal';
 
-// Export utilities
-export * from '../utils/signal-normalizer';
-export * from './utils/finger-detector';
-export * from './utils/quality-detector';
-export * from './utils/mixed-model';
+// Export specialized channels
+export { SpecializedChannel } from './channels/SpecializedChannel';
+export { GlucoseChannel } from './channels/GlucoseChannel';
+export { LipidsChannel } from './channels/LipidsChannel';
+export { BloodPressureChannel } from './channels/BloodPressureChannel';
+export { SpO2Channel } from './channels/SpO2Channel';
+export { CardiacChannel } from './channels/CardiacChannel';
 
-// Export validation and error handling
-export * from './signal-validator';
-export * from './error-handler';
-export * from './diagnostics';
-
-// Export channels
-export * from './channels/SpecializedChannel';
-
-// Export specific reset functions
-export { resetFingerDetector } from './utils/finger-detector';
-export { resetFingerDetectorFunc } from './types-unified';
-
-// Re-export the OptimizedSignalChannel for convenience
-export { OptimizedSignalChannel } from './channels/SpecializedChannel';
-
+// Re-export utility types
+export type { SignalDistributorConfig } from '../../types/signal';
