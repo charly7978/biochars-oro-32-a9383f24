@@ -215,7 +215,9 @@ export function useSignalProcessor() {
       handlePeakDetection(
         result, 
         lastPeakTimeRef, 
-        requestImmediateBeep
+        requestImmediateBeep,
+        isMonitoringRef,
+        optimizedValue * 1.15 // Valor amplificado para mejor detección
       );
       
       // Update last valid BPM with improved filtering
@@ -309,5 +311,3 @@ export function useSignalProcessor() {
     amplificationFactor: amplificationFactorRef
   };
 }
-
-// Local function removed to avoid conflict with imported function
