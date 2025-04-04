@@ -1,3 +1,4 @@
+
 import { ProcessedSignal, ProcessingError, SignalProcessor } from '@/types/signal';
 import { SignalAmplifier } from '@/modules/SignalAmplifier';
 
@@ -72,10 +73,6 @@ export class PPGSignalProcessor implements SignalProcessor {
     this.currentConfig = { ...this.DEFAULT_CONFIG };
     this.signalAmplifier = new SignalAmplifier();
     console.log("PPGSignalProcessor: Instancia creada con amplificador de señal integrado");
-  }
-
-  public getAmplifierGain(): number {
-    return this.signalAmplifier.getCurrentGain();
   }
 
   async initialize(): Promise<void> {
@@ -175,7 +172,7 @@ export class PPGSignalProcessor implements SignalProcessor {
       
       const filtered = this.kalmanFilter.filter(redValue);
       
-      // Apply advanced signal amplifier with enhanced power
+      // Apply advanced signal amplifier
       const { amplifiedValue, quality } = this.signalAmplifier.processValue(filtered);
       this.lastAmplifiedValue = amplifiedValue;
       this.signalQuality = quality;
@@ -213,29 +210,26 @@ export class PPGSignalProcessor implements SignalProcessor {
       // Override finger detection if we have too many weak signals
       const finalFingerDetected = isFingerDetected && (this.consecutiveWeakSignals < this.MAX_WEAK_SIGNALS);
       
-      // Use amplifier quality for better detection - increased weight to amplifier quality
+      // Use amplifier quality for better detection
       const perfusionIndex = this.calculatePerfusionIndex();
       const combinedQuality = finalFingerDetected ? 
-        Math.round((detectionQuality * 0.6 + this.signalQuality * 100 * 0.4)) : 0;
+        Math.round((detectionQuality * 0.7 + this.signalQuality * 100 * 0.3)) : 0;
 
-      // Enhanced diagnostic logging
-      if (this.lastValues.length % 30 === 0) {
-        console.log("PPGSignalProcessor: Analysis with improved detection", {
-          redValue,
-          filtered,
-          amplifiedValue,
-          isFingerDetected: finalFingerDetected,
-          detectionQuality,
-          amplifierQuality: this.signalQuality,
-          combinedQuality,
-          stableFrames: this.stableFrameCount,
-          perfusionIndex,
-          dynamicThreshold: this.dynamicThreshold,
-          amplifierGain: this.signalAmplifier.getCurrentGain(),
-          weakSignalCount: this.consecutiveWeakSignals,
-          timestamp: new Date().toISOString()
-        });
-      }
+      console.log("PPGSignalProcessor: Analysis with improved detection", {
+        redValue,
+        filtered,
+        amplifiedValue,
+        isFingerDetected: finalFingerDetected,
+        detectionQuality,
+        amplifierQuality: this.signalQuality,
+        combinedQuality,
+        stableFrames: this.stableFrameCount,
+        perfusionIndex,
+        dynamicThreshold: this.dynamicThreshold,
+        amplifierGain: this.signalAmplifier.getCurrentGain(),
+        weakSignalCount: this.consecutiveWeakSignals,
+        isWeakSignal
+      });
 
       const processedSignal: ProcessedSignal = {
         timestamp: Date.now(),

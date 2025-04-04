@@ -82,22 +82,13 @@ export function useVitalSignsWithProcessing() {
     if (!isMonitoring || !extraction.lastResult) return;
     
     try {
-      // 2. Procesar el valor PPG extraído con calidad mejorada
+      // 2. Procesar el valor PPG extraído
       const processedSignal = processing.processValue(extraction.lastResult.filteredValue);
       
       if (processedSignal && processedSignal.fingerDetected) {
-        // Enhanced diagnostics
-        if (processedFramesRef.current % 100 === 0) {
-          logError(
-            `Signal Processing Metrics: Quality=${processedSignal.quality}, Peaks=${processedSignal.isPeak ? "YES" : "NO"}, HR=${processedSignal.averageBPM || 0}`,
-            ErrorLevel.INFO,
-            "VitalSignsProcessor"
-          );
-        }
-        
-        // 3. Procesar para obtener signos vitales con calidad mejorada
+        // 3. Procesar para obtener signos vitales
         const vitalsResult = vitalSigns.processSignal(
-          processedSignal.amplifiedValue, // Use amplified value for better results
+          processedSignal.filteredValue, 
           { 
             intervals: processedSignal.rrInterval ? [processedSignal.rrInterval] : [],
             lastPeakTime: processedSignal.isPeak ? processedSignal.timestamp : null
