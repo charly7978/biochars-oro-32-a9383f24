@@ -1,308 +1,316 @@
+
 /**
  * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
+ * 
+ * Sistema unificado de detección de dedos mejorado
+ * Hook para usar el sistema de detección de dedos en componentes React
  */
-import { useRef, useState, useCallback, useEffect } from 'react';
-import { logError, ErrorLevel } from '@/utils/debugUtils';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { DetectionSource } from '@/modules/signal-processing/utils/unified-finger-detector';
+import { ErrorLevel, logError } from '@/utils/debugUtils';
 
-// Finger detection sources
-type DetectionSource = 'ppg-amplitude' | 'quality-metric' | 'rhythm-detection' | 'movement';
-
-// Finger detection state
+/**
+ * Estado de detección de dedos
+ */
 export interface DetectionState {
   isFingerDetected: boolean;
   confidence: number;
   consensusLevel: number;
-}
-
-// Diagnostic event for tracking
-interface DiagnosticEvent {
-  timestamp: number;
-  source: DetectionSource;
-  value: number;
-  threshold: number;
-  isDetected: boolean;
-}
-
-// Simple buffer for tracking detection history
-interface DetectionBuffer {
-  timestamp: number;
-  isDetected: boolean;
-  confidence: number;
-}
-
-// Detailed statistics for debugging
-interface DetailedStats {
-  sources: Record<string, any>;
-  config: {
-    detectionThreshold: number;
-    sourceWeights: Record<DetectionSource, number>;
-    stableDetectionTimeMs: number;
-    detectionPersistenceMs: number;
-    adaptiveFactors: {
-      qualityInfluence: number;
-      movementSensitivity: number;
-    };
+  qualityScore: number;
+  sources: Record<string, { value: number, weight: number, age: number }>;
+  calibrationParams: {
+    sensitivityLevel: number;
+    qualityFactor: number;
+    environmentFactor: number;
+    adaptationRate: number;
   };
-  state: {
-    lastUpdate: number;
-    detectionState: DetectionState;
-    detectionBuffer: DetectionBuffer[];
+  diagnostics: {
+    falsePositives: number;
+    falseNegatives: number;
+    detectionEvents: number;
+    lossEvents: number;
+    lastCalibrationTime: number;
+    averageDetectionConfidence: number;
   };
-  diagnostics: DiagnosticEvent[];
-  history: DetectionBuffer[];
-  detectionResult: { isDetected: boolean; confidence: number };
-  confidence: number;
 }
 
 /**
- * Hook for unified finger detection with multiple sources
+ * Hook para usar el sistema de detección de dedos unificado
  */
 export function useFingerDetectionSystem() {
-  // Current detection state
+  // Estado de detección
   const [detectionState, setDetectionState] = useState<DetectionState>({
     isFingerDetected: false,
     confidence: 0,
-    consensusLevel: 0
+    consensusLevel: 0,
+    qualityScore: 0,
+    sources: {},
+    calibrationParams: {
+      sensitivityLevel: 0.5,
+      qualityFactor: 1.0,
+      environmentFactor: 1.0,
+      adaptationRate: 0.2
+    },
+    diagnostics: {
+      falsePositives: 0,
+      falseNegatives: 0,
+      detectionEvents: 0,
+      lossEvents: 0,
+      lastCalibrationTime: Date.now(),
+      averageDetectionConfidence: 0
+    }
   });
   
-  // Detection history for stabilization
-  const detectionBuffer = useRef<DetectionBuffer[]>([]);
-  
-  // Source weights and thresholds
-  const sourceWeights = useRef<Record<DetectionSource, number>>({
-    'ppg-amplitude': 0.4,
-    'quality-metric': 0.3,
-    'rhythm-detection': 0.2,
-    'movement': 0.1
-  });
-  
-  // Sources state
-  const sources = useRef<Record<DetectionSource, { value: number; threshold: number; isDetected: boolean }>>({
-    'ppg-amplitude': { value: 0, threshold: 0.03, isDetected: false },
-    'quality-metric': { value: 0, threshold: 0.25, isDetected: false },
-    'rhythm-detection': { value: 0, threshold: 0.4, isDetected: false },
-    'movement': { value: 0, threshold: 0.15, isDetected: false }
-  });
-  
-  // Constants
-  const DETECTION_THRESHOLD = 0.5;
-  const STABLE_DETECTION_TIME_MS = 1000;
-  const DETECTION_PERSISTENCE_MS = 500;
-  
-  // Diagnostics
-  const diagnostics = useRef<DiagnosticEvent[]>([]);
+  // Referencias para evitar ciclos de actualización
+  const stateRef = useRef<DetectionState>(detectionState);
+  stateRef.current = detectionState;
   
   /**
-   * Update a detection source
+   * Actualiza una fuente de información en el sistema
    */
-  const updateSource = useCallback((
-    source: DetectionSource,
-    value: number,
-    threshold?: number
-  ) => {
-    // Update source value
-    sources.current[source].value = value;
-    
-    // Update threshold if provided
-    if (threshold !== undefined) {
-      sources.current[source].threshold = threshold;
-    }
-    
-    // Update detection state for this source
-    sources.current[source].isDetected = value >= sources.current[source].threshold;
-    
-    // Record diagnostic event
-    diagnostics.current.push({
-      timestamp: Date.now(),
-      source,
-      value,
-      threshold: sources.current[source].threshold,
-      isDetected: sources.current[source].isDetected
+  const updateSource = useCallback((source: DetectionSource, value: number, threshold: number = 0.5) => {
+    // Actualizar el estado con la nueva fuente
+    setDetectionState(prevState => {
+      // Copiar fuentes actuales
+      const sources = { ...prevState.sources };
+      
+      // Actualizar o añadir fuente
+      sources[source] = {
+        value,
+        weight: prevState.sources[source]?.weight || 1.0,
+        age: 0
+      };
+      
+      // Calcular nivel de consenso
+      let totalWeight = 0;
+      let weightedSum = 0;
+      
+      Object.entries(sources).forEach(([_, data]) => {
+        const sourceWeight = data.weight * Math.max(0, 1 - data.age / 10);
+        weightedSum += data.value * sourceWeight;
+        totalWeight += sourceWeight;
+      });
+      
+      const consensusLevel = totalWeight > 0 ? weightedSum / totalWeight : 0;
+      
+      // Determinar si el dedo está detectado basado en umbral
+      const sensitivityAdjustedThreshold = threshold * (2 - prevState.calibrationParams.sensitivityLevel);
+      const isFingerDetected = consensusLevel >= sensitivityAdjustedThreshold;
+      
+      // Calcular confianza
+      const confidence = Math.min(1, consensusLevel * 1.2);
+      
+      // Actualizar diagnósticos
+      const diagnostics = { ...prevState.diagnostics };
+      
+      if (isFingerDetected && !prevState.isFingerDetected) {
+        diagnostics.detectionEvents++;
+      } else if (!isFingerDetected && prevState.isFingerDetected) {
+        diagnostics.lossEvents++;
+      }
+      
+      // Actualizar confianza promedio
+      diagnostics.averageDetectionConfidence = 
+        0.9 * diagnostics.averageDetectionConfidence + 0.1 * confidence;
+      
+      return {
+        ...prevState,
+        isFingerDetected,
+        confidence,
+        consensusLevel,
+        sources,
+        diagnostics
+      };
     });
-    
-    // Keep diagnostic log limited
-    if (diagnostics.current.length > 100) {
-      diagnostics.current = diagnostics.current.slice(-100);
-    }
-    
-    // Recalculate overall detection
-    recalculateDetection();
   }, []);
   
   /**
-   * Recalculate overall detection based on all sources
-   */
-  const recalculateDetection = useCallback(() => {
-    const now = Date.now();
-    
-    // Calculate weighted confidence
-    let weightedConfidence = 0;
-    let totalWeight = 0;
-    
-    for (const source of Object.keys(sources.current) as DetectionSource[]) {
-      const sourceData = sources.current[source];
-      const weight = sourceWeights.current[source];
-      
-      // Calculate normalized confidence (0-1)
-      const confidence = Math.min(1, sourceData.value / sourceData.threshold);
-      
-      // Add to weighted sum
-      weightedConfidence += confidence * weight;
-      totalWeight += weight;
-    }
-    
-    // Normalize confidence
-    const normalizedConfidence = totalWeight > 0 ? weightedConfidence / totalWeight : 0;
-    
-    // Determine if finger is detected based on confidence
-    const isDetected = normalizedConfidence >= DETECTION_THRESHOLD;
-    
-    // Add to buffer for stabilization
-    detectionBuffer.current.push({
-      timestamp: now,
-      isDetected,
-      confidence: normalizedConfidence
-    });
-    
-    // Keep buffer limited
-    const bufferTimeLimit = now - Math.max(STABLE_DETECTION_TIME_MS, DETECTION_PERSISTENCE_MS) - 1000;
-    detectionBuffer.current = detectionBuffer.current.filter(entry => entry.timestamp >= bufferTimeLimit);
-    
-    // Calculate consensus (stability of detection)
-    const recentBuffer = detectionBuffer.current.filter(
-      entry => entry.timestamp >= now - STABLE_DETECTION_TIME_MS
-    );
-    
-    if (recentBuffer.length > 0) {
-      // Calculate percentage of recent entries that indicate detection
-      const detectedCount = recentBuffer.filter(entry => entry.isDetected).length;
-      const consensusLevel = detectedCount / recentBuffer.length;
-      
-      // Only change detection state if:
-      // 1. Strong consensus for detection OR
-      // 2. Strong consensus against detection for longer than persistence time
-      const previousDetection = detectionState.isFingerDetected;
-      
-      let newDetectionState: boolean;
-      
-      if (consensusLevel >= 0.7) {
-        // Strong consensus for detection
-        newDetectionState = true;
-      } else if (consensusLevel <= 0.3) {
-        // Strong consensus against detection
-        const persistenceBuffer = detectionBuffer.current.filter(
-          entry => entry.timestamp >= now - DETECTION_PERSISTENCE_MS
-        );
-        
-        if (persistenceBuffer.length > 0) {
-          const persistenceConsensus = persistenceBuffer.filter(entry => entry.isDetected).length / persistenceBuffer.length;
-          
-          // Only change to false if we have strong persistence consensus against detection
-          newDetectionState = persistenceConsensus > 0.2;
-        } else {
-          newDetectionState = previousDetection;
-        }
-      } else {
-        // No strong consensus, maintain previous state
-        newDetectionState = previousDetection;
-      }
-      
-      // Update state
-      setDetectionState({
-        isFingerDetected: newDetectionState,
-        confidence: normalizedConfidence,
-        consensusLevel
-      });
-    }
-  }, [detectionState.isFingerDetected]);
-  
-  /**
-   * Reset the detection system
+   * Restablece el sistema de detección
    */
   const reset = useCallback(() => {
-    // Clear buffers
-    detectionBuffer.current = [];
-    diagnostics.current = [];
-    
-    // Reset source values
-    for (const source of Object.keys(sources.current) as DetectionSource[]) {
-      sources.current[source].value = 0;
-      sources.current[source].isDetected = false;
-    }
-    
-    // Reset detection state
     setDetectionState({
       isFingerDetected: false,
       confidence: 0,
-      consensusLevel: 0
+      consensusLevel: 0,
+      qualityScore: 0,
+      sources: {},
+      calibrationParams: {
+        sensitivityLevel: 0.5,
+        qualityFactor: 1.0,
+        environmentFactor: 1.0,
+        adaptationRate: 0.2
+      },
+      diagnostics: {
+        falsePositives: 0,
+        falseNegatives: 0,
+        detectionEvents: 0,
+        lossEvents: 0,
+        lastCalibrationTime: Date.now(),
+        averageDetectionConfidence: 0
+      }
     });
-    
-    logError(
-      "Finger detection system reset",
-      ErrorLevel.INFO,
-      "FingerDetectionSystem"
-    );
   }, []);
   
   /**
-   * Get detailed statistics for debugging
+   * Obtiene estadísticas detalladas
    */
-  const getDetailedStats = useCallback((): DetailedStats => {
+  const getDetailedStats = useCallback(() => {
     return {
-      sources: { ...sources.current },
-      config: {
-        detectionThreshold: DETECTION_THRESHOLD,
-        sourceWeights: { ...sourceWeights.current },
-        stableDetectionTimeMs: STABLE_DETECTION_TIME_MS,
-        detectionPersistenceMs: DETECTION_PERSISTENCE_MS,
-        adaptiveFactors: {
-          qualityInfluence: 0.3,
-          movementSensitivity: 0.2
-        }
+      detection: {
+        isFingerDetected: stateRef.current.isFingerDetected,
+        confidence: stateRef.current.confidence,
+        consensusLevel: stateRef.current.consensusLevel,
+        qualityScore: stateRef.current.qualityScore
       },
-      state: {
-        lastUpdate: Date.now(),
-        detectionState,
-        detectionBuffer: [...detectionBuffer.current]
-      },
-      diagnostics: [...diagnostics.current],
-      history: [...detectionBuffer.current],
-      detectionResult: { 
-        isDetected: detectionState.isFingerDetected, 
-        confidence: detectionState.confidence 
-      },
-      confidence: detectionState.confidence
+      sources: stateRef.current.sources,
+      calibration: stateRef.current.calibrationParams,
+      diagnostics: stateRef.current.diagnostics
     };
-  }, [detectionState]);
+  }, []);
   
   /**
-   * Adjust source weights to adapt to different conditions
+   * Adapta los pesos basados en factores de calidad y movimiento
    */
   const adaptWeights = useCallback((qualityFactor: number, movementFactor: number) => {
-    // Adjust weights based on factors
-    sourceWeights.current = {
-      'ppg-amplitude': 0.4 - (movementFactor * 0.1),
-      'quality-metric': 0.3 + (qualityFactor * 0.1),
-      'rhythm-detection': 0.2 + (movementFactor * 0.1),
-      'movement': 0.1 - (qualityFactor * 0.1) + (movementFactor * 0.1)
-    };
-    
-    // Normalize weights
-    const totalWeight = Object.values(sourceWeights.current).reduce((sum, weight) => sum + weight, 0);
-    
-    for (const source of Object.keys(sourceWeights.current) as DetectionSource[]) {
-      sourceWeights.current[source] /= totalWeight;
+    setDetectionState(prevState => {
+      // Ajustar nivel de sensibilidad basado en factores
+      const newSensitivity = Math.max(0.3, Math.min(0.9, 
+        prevState.calibrationParams.sensitivityLevel * (1 + (qualityFactor - 0.5) * 0.2)
+      ));
+      
+      return {
+        ...prevState,
+        calibrationParams: {
+          ...prevState.calibrationParams,
+          sensitivityLevel: newSensitivity,
+          qualityFactor: Math.max(0.5, Math.min(1.5, qualityFactor)),
+          environmentFactor: Math.max(0.5, Math.min(1.5, 
+            prevState.calibrationParams.environmentFactor * (1 + (movementFactor - 0.5) * 0.1)
+          ))
+        }
+      };
+    });
+  }, []);
+  
+  /**
+   * Actualiza los parámetros de calibración
+   */
+  const updateCalibration = useCallback((params: Partial<DetectionState['calibrationParams']>) => {
+    setDetectionState(prevState => ({
+      ...prevState,
+      calibrationParams: {
+        ...prevState.calibrationParams,
+        ...params
+      },
+      diagnostics: {
+        ...prevState.diagnostics,
+        lastCalibrationTime: Date.now()
+      }
+    }));
+  }, []);
+  
+  /**
+   * Establece el modo de override manual
+   */
+  const setManualOverride = useCallback((override: boolean) => {
+    if (override) {
+      logError("Activando override manual de detección de dedo", ErrorLevel.INFO, "FingerDetectionSystem");
+    } else {
+      logError("Desactivando override manual de detección de dedo", ErrorLevel.INFO, "FingerDetectionSystem");
     }
     
-    // Recalculate with new weights
-    recalculateDetection();
-  }, [recalculateDetection]);
+    setDetectionState(prevState => ({
+      ...prevState,
+      isFingerDetected: override ? true : prevState.isFingerDetected,
+      confidence: override ? 1.0 : prevState.confidence
+    }));
+  }, []);
+  
+  /**
+   * Actualiza los factores ambientales
+   */
+  const updateEnvironment = useCallback((brightness: number, movement: number) => {
+    const normalizedBrightness = Math.max(0, Math.min(1, brightness / 255));
+    const normalizedMovement = Math.max(0, Math.min(1, movement));
+    
+    // Ajustar factores ambientales
+    setDetectionState(prevState => ({
+      ...prevState,
+      calibrationParams: {
+        ...prevState.calibrationParams,
+        environmentFactor: 
+          prevState.calibrationParams.environmentFactor * 0.8 + 
+          (normalizedBrightness > 0.1 ? 1.0 : 0.7) * 0.2,
+        sensitivityLevel: 
+          prevState.calibrationParams.sensitivityLevel * 0.9 + 
+          (normalizedMovement < 0.3 ? 0.6 : 0.4) * 0.1
+      }
+    }));
+  }, []);
+  
+  /**
+   * Resetea completamente el sistema
+   */
+  const resetSystem = useCallback(() => {
+    logError("Reseteando sistema de detección de dedo", ErrorLevel.INFO, "FingerDetectionSystem");
+    reset();
+  }, [reset]);
+  
+  /**
+   * Exporta datos de diagnóstico
+   */
+  const exportDiagnostics = useCallback(() => {
+    return {
+      timestamp: Date.now(),
+      state: stateRef.current,
+      performance: {
+        detectionRate: stateRef.current.diagnostics.detectionEvents > 0 
+          ? stateRef.current.diagnostics.lossEvents / stateRef.current.diagnostics.detectionEvents 
+          : 0,
+        averageConfidence: stateRef.current.diagnostics.averageDetectionConfidence
+      }
+    };
+  }, []);
+  
+  // Actualizar la edad de las fuentes periódicamente
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setDetectionState(prevState => {
+        const updatedSources = { ...prevState.sources };
+        
+        // Incrementar edad de cada fuente
+        Object.keys(updatedSources).forEach(key => {
+          updatedSources[key] = {
+            ...updatedSources[key],
+            age: updatedSources[key].age + 1
+          };
+        });
+        
+        return {
+          ...prevState,
+          sources: updatedSources
+        };
+      });
+    }, 1000);
+    
+    return () => clearInterval(interval);
+  }, []);
   
   return {
     detectionState,
     updateSource,
     reset,
     getDetailedStats,
-    adaptWeights
+    adaptWeights,
+    updateCalibration,
+    setManualOverride,
+    updateEnvironment,
+    resetSystem,
+    exportDiagnostics,
+    isFingerDetected: detectionState.isFingerDetected,
+    confidence: detectionState.confidence,
+    consensusLevel: detectionState.consensusLevel,
+    calibrationParams: detectionState.calibrationParams,
+    diagnostics: detectionState.diagnostics
   };
 }

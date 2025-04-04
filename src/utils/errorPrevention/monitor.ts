@@ -2,329 +2,155 @@
 /**
  * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
  * 
- * Monitor de recursos y rendimiento
- * Proporciona información sobre el uso de recursos y rendimiento de la aplicación
+ * Monitor de prevención de errores en el sistema
+ * Detecta patrones de error y aplica estrategias de recuperación
  */
-import { logError, ErrorLevel } from '@/utils/debugUtils';
 
-/**
- * Tipo de información de rendimiento recopilada
- */
-export interface PerformanceInfo {
-  fps: number;
-  memory?: {
-    usedJSHeapSize?: number;
-    totalJSHeapSize?: number;
-    jsHeapSizeLimit?: number;
-  };
-  cpuUsage: number;
-  processingLatency: number;
-  frameDropRate: number;
+import { ErrorLevel, logError } from '../debugUtils';
+import { CameraState } from '../deviceErrorTracker';
+
+// Tipos de dispositivos monitoreados
+export type MonitoredDeviceType = 'camera' | 'accelerometer' | 'memory' | 'processor';
+
+// Interfaz para eventos de error de dispositivo
+export interface DeviceErrorEvent {
+  deviceType: MonitoredDeviceType;
+  errorType: string;
+  timestamp: number;
+  details?: any;
+  recoveryAttempted?: boolean;
 }
 
-/**
- * Clase para monitorear recursos y rendimiento
- */
-export class PerformanceMonitor {
-  private static instance: PerformanceMonitor;
+// Sistema de monitoreo de errores
+class ErrorPreventionMonitor {
+  private deviceErrors: Map<MonitoredDeviceType, DeviceErrorEvent[]> = new Map();
+  private readonly MAX_ERROR_HISTORY = 10;
   
-  // Métricas de rendimiento
-  private frameCount: number = 0;
-  private lastFrameTime: number = 0;
-  private frameRates: number[] = [];
-  private processingTimes: number[] = [];
-  private frameDrops: number = 0;
-  private totalFrames: number = 0;
-  
-  // Estado del monitor
-  private isMonitoring: boolean = false;
-  private monitorInterval: number | null = null;
-  
-  // Umbrales
-  private readonly FPS_THRESHOLD = 20;
-  private readonly PROCESSING_TIME_THRESHOLD = 50; // ms
-  private readonly MEMORY_USAGE_THRESHOLD = 0.8; // 80% de límite de memoria
-  
-  /**
-   * Constructor privado (singleton)
-   */
-  private constructor() {
-    // Inicializar
-  }
-  
-  /**
-   * Obtiene la instancia del monitor
-   */
-  public static getInstance(): PerformanceMonitor {
-    if (!PerformanceMonitor.instance) {
-      PerformanceMonitor.instance = new PerformanceMonitor();
-    }
-    return PerformanceMonitor.instance;
-  }
-  
-  /**
-   * Inicia el monitoreo
-   */
-  public startMonitoring(): void {
-    if (this.isMonitoring) return;
+  // Registrar un error de dispositivo
+  public trackDeviceError(event: DeviceErrorEvent): void {
+    const { deviceType } = event;
     
-    this.isMonitoring = true;
-    this.lastFrameTime = performance.now();
-    this.frameCount = 0;
-    this.frameRates = [];
-    this.processingTimes = [];
-    this.frameDrops = 0;
-    this.totalFrames = 0;
-    
-    // Monitorear periódicamente el rendimiento
-    this.monitorInterval = window.setInterval(() => this.checkPerformance(), 5000);
-    
-    logError("Performance monitoring started", ErrorLevel.INFO, "PerformanceMonitor");
-  }
-  
-  /**
-   * Detiene el monitoreo
-   */
-  public stopMonitoring(): void {
-    if (!this.isMonitoring) return;
-    
-    this.isMonitoring = false;
-    
-    if (this.monitorInterval !== null) {
-      clearInterval(this.monitorInterval);
-      this.monitorInterval = null;
+    // Inicializar array si no existe
+    if (!this.deviceErrors.has(deviceType)) {
+      this.deviceErrors.set(deviceType, []);
     }
     
-    logError("Performance monitoring stopped", ErrorLevel.INFO, "PerformanceMonitor");
-  }
-  
-  /**
-   * Registra un frame procesado
-   * @param processingTime Tiempo de procesamiento en ms
-   */
-  public recordFrame(processingTime: number): void {
-    if (!this.isMonitoring) return;
+    // Añadir evento al historial
+    const errors = this.deviceErrors.get(deviceType)!;
+    errors.push({
+      ...event,
+      timestamp: event.timestamp || Date.now()
+    });
     
-    const now = performance.now();
-    const frameDelta = now - this.lastFrameTime;
-    
-    this.frameCount++;
-    this.totalFrames++;
-    this.lastFrameTime = now;
-    
-    // Calcular FPS instantáneo
-    if (frameDelta > 0) {
-      const instantFPS = 1000 / frameDelta;
-      this.frameRates.push(instantFPS);
-      
-      // Limitar tamaño del historial
-      if (this.frameRates.length > 100) {
-        this.frameRates.shift();
-      }
-      
-      // Considerar un frame perdido si el FPS cae significativamente
-      if (instantFPS < this.FPS_THRESHOLD) {
-        this.frameDrops++;
-      }
+    // Limitar tamaño del historial
+    if (errors.length > this.MAX_ERROR_HISTORY) {
+      errors.shift();
     }
     
-    // Registrar tiempo de procesamiento
-    this.processingTimes.push(processingTime);
-    if (this.processingTimes.length > 100) {
-      this.processingTimes.shift();
-    }
-  }
-  
-  /**
-   * Comprueba el rendimiento general
-   */
-  private checkPerformance(): void {
-    if (this.frameRates.length === 0) return;
-    
-    try {
-      // Calcular métricas
-      const avgFPS = this.calculateAverage(this.frameRates);
-      const avgProcessingTime = this.calculateAverage(this.processingTimes);
-      const frameDropRate = this.totalFrames > 0 ? 
-                           (this.frameDrops / this.totalFrames) * 100 : 0;
-      
-      // Obtener uso de memoria si está disponible
-      let memoryInfo: PerformanceInfo['memory'] = undefined;
-      
-      if (window.performance && (performance as any).memory) {
-        const memoryUsage = (performance as any).memory;
-        memoryInfo = {
-          usedJSHeapSize: memoryUsage.usedJSHeapSize,
-          totalJSHeapSize: memoryUsage.totalJSHeapSize,
-          jsHeapSizeLimit: memoryUsage.jsHeapSizeLimit
-        };
-      }
-      
-      // Estimar uso de CPU basado en tiempo de procesamiento y FPS
-      const estimatedCPUUsage = Math.min(100, (avgProcessingTime / (1000 / avgFPS)) * 100);
-      
-      // Ensamblar información de rendimiento
-      const performanceInfo: PerformanceInfo = {
-        fps: avgFPS,
-        memory: memoryInfo,
-        cpuUsage: estimatedCPUUsage,
-        processingLatency: avgProcessingTime,
-        frameDropRate
-      };
-      
-      // Registrar métricas de rendimiento
-      this.logPerformanceMetrics(performanceInfo);
-      
-      // Comprobar si hay problemas de rendimiento
-      this.checkPerformanceIssues(performanceInfo);
-    } catch (error) {
-      logError(
-        `Error al verificar rendimiento: ${error instanceof Error ? error.message : String(error)}`,
-        ErrorLevel.WARNING,
-        "PerformanceMonitor"
-      );
-    }
-  }
-  
-  /**
-   * Calcula el promedio de un array de números
-   */
-  private calculateAverage(values: number[]): number {
-    if (values.length === 0) return 0;
-    return values.reduce((sum, val) => sum + val, 0) / values.length;
-  }
-  
-  /**
-   * Registra métricas de rendimiento
-   */
-  private logPerformanceMetrics(info: PerformanceInfo): void {
-    // Registrar cada 10 segundos para no saturar
+    // Loguear el error
     logError(
-      `Performance metrics - FPS: ${info.fps.toFixed(1)}, ` +
-      `CPU: ${info.cpuUsage.toFixed(1)}%, ` +
-      `Latency: ${info.processingLatency.toFixed(1)}ms, ` +
-      `Frame drops: ${info.frameDropRate.toFixed(1)}%` +
-      (info.memory ? `, Memory: ${(info.memory.usedJSHeapSize || 0) / (1024 * 1024)}MB / ${(info.memory.jsHeapSizeLimit || 0) / (1024 * 1024)}MB` : ''),
-      ErrorLevel.INFO,
-      "PerformanceMonitor"
+      `Error en dispositivo ${deviceType}: ${event.errorType}`,
+      ErrorLevel.WARNING,
+      'ErrorPreventionMonitor',
+      { details: event.details }
     );
   }
   
-  /**
-   * Comprueba si hay problemas de rendimiento
-   */
-  private checkPerformanceIssues(info: PerformanceInfo): void {
-    let hasIssues = false;
-    const issues: string[] = [];
+  // Comprobar si un dispositivo tiene demasiados errores recientes
+  public hasExcessiveErrors(deviceType: MonitoredDeviceType, timeWindowMs: number = 30000): boolean {
+    if (!this.deviceErrors.has(deviceType)) return false;
     
-    // Comprobar FPS bajo
-    if (info.fps < this.FPS_THRESHOLD) {
-      hasIssues = true;
-      issues.push(`Low FPS: ${info.fps.toFixed(1)} (threshold: ${this.FPS_THRESHOLD})`);
-    }
+    const errors = this.deviceErrors.get(deviceType)!;
+    const now = Date.now();
     
-    // Comprobar alto tiempo de procesamiento
-    if (info.processingLatency > this.PROCESSING_TIME_THRESHOLD) {
-      hasIssues = true;
-      issues.push(`High processing time: ${info.processingLatency.toFixed(1)}ms (threshold: ${this.PROCESSING_TIME_THRESHOLD}ms)`);
-    }
+    // Contar errores en la ventana de tiempo
+    const recentErrors = errors.filter(e => now - e.timestamp < timeWindowMs);
     
-    // Comprobar alto uso de memoria
-    if (info.memory && info.memory.jsHeapSizeLimit && info.memory.usedJSHeapSize) {
-      const memoryUsageRatio = info.memory.usedJSHeapSize / info.memory.jsHeapSizeLimit;
-      
-      if (memoryUsageRatio > this.MEMORY_USAGE_THRESHOLD) {
-        hasIssues = true;
-        issues.push(`High memory usage: ${(memoryUsageRatio * 100).toFixed(1)}% (threshold: ${(this.MEMORY_USAGE_THRESHOLD * 100)}%)`);
-      }
-    }
-    
-    // Comprobar alto ratio de frames perdidos
-    if (info.frameDropRate > 10) {
-      hasIssues = true;
-      issues.push(`High frame drop rate: ${info.frameDropRate.toFixed(1)}% (threshold: 10%)`);
-    }
-    
-    // Registrar problemas si los hay
-    if (hasIssues) {
-      logError(
-        `Performance issues detected: ${issues.join(", ")}`,
-        ErrorLevel.WARNING,
-        "PerformanceMonitor"
-      );
+    // Criterios por tipo de dispositivo
+    switch (deviceType) {
+      case 'camera':
+        return recentErrors.length >= 3;
+      case 'memory':
+        return recentErrors.length >= 5;
+      default:
+        return recentErrors.length >= 4;
     }
   }
   
-  /**
-   * Comprueba si hay una posible fuga de memoria
-   */
-  public checkMemoryLeak(): boolean {
-    if (!window.performance || !(performance as any).memory) {
-      return false;
-    }
-    
-    try {
-      const memoryUsage = (performance as any).memory;
-      const memoryUsageRatio = memoryUsage.usedJSHeapSize / memoryUsage.jsHeapSizeLimit;
-      
-      // Considerar fuga si el uso es mayor al 90% del límite
-      const hasPotentialLeak = memoryUsageRatio > 0.9;
-      
-      if (hasPotentialLeak) {
-        logError(
-          `Potential memory leak detected: ${(memoryUsageRatio * 100).toFixed(1)}% of available memory used`,
-          ErrorLevel.ERROR,
-          "PerformanceMonitor"
-        );
-      }
-      
-      return hasPotentialLeak;
-    } catch (error) {
-      return false;
-    }
+  // Obtener errores recientes para un dispositivo
+  public getRecentErrors(deviceType: MonitoredDeviceType): DeviceErrorEvent[] {
+    return this.deviceErrors.get(deviceType) || [];
   }
   
-  /**
-   * Obtiene las métricas de rendimiento actuales
-   */
-  public getCurrentMetrics(): PerformanceInfo {
-    const avgFPS = this.frameRates.length > 0 ? 
-                  this.calculateAverage(this.frameRates) : 0;
-                  
-    const avgProcessingTime = this.processingTimes.length > 0 ? 
-                             this.calculateAverage(this.processingTimes) : 0;
-                             
-    const frameDropRate = this.totalFrames > 0 ? 
-                         (this.frameDrops / this.totalFrames) * 100 : 0;
+  // Determinar si se debe intentar una recuperación
+  public shouldAttemptRecovery(deviceType: MonitoredDeviceType): boolean {
+    if (!this.deviceErrors.has(deviceType)) return false;
     
-    // Estimar uso de CPU
-    const estimatedCPUUsage = Math.min(100, (avgProcessingTime / (1000 / Math.max(1, avgFPS))) * 100);
+    const errors = this.deviceErrors.get(deviceType)!;
+    if (errors.length === 0) return false;
     
-    // Obtener información de memoria si está disponible
-    let memoryInfo: PerformanceInfo['memory'] = undefined;
+    // Verificar si ya se intentó recuperación recientemente
+    const recentRecoveryAttempt = errors
+      .filter(e => e.recoveryAttempted)
+      .some(e => Date.now() - e.timestamp < 10000);
     
-    if (window.performance && (performance as any).memory) {
-      const memoryUsage = (performance as any).memory;
-      memoryInfo = {
-        usedJSHeapSize: memoryUsage.usedJSHeapSize,
-        totalJSHeapSize: memoryUsage.totalJSHeapSize,
-        jsHeapSizeLimit: memoryUsage.jsHeapSizeLimit
-      };
+    return !recentRecoveryAttempt && this.hasExcessiveErrors(deviceType);
+  }
+  
+  // Marcar que se ha intentado recuperar un dispositivo
+  public markRecoveryAttempted(deviceType: MonitoredDeviceType): void {
+    if (!this.deviceErrors.has(deviceType)) return;
+    
+    const errors = this.deviceErrors.get(deviceType)!;
+    if (errors.length === 0) return;
+    
+    // Marcar el error más reciente
+    const mostRecent = errors[errors.length - 1];
+    mostRecent.recoveryAttempted = true;
+    
+    logError(
+      `Intento de recuperación para ${deviceType}`,
+      ErrorLevel.INFO,
+      'ErrorPreventionMonitor'
+    );
+  }
+  
+  // Restablecer el historial de errores para un dispositivo
+  public resetErrorHistory(deviceType: MonitoredDeviceType): void {
+    this.deviceErrors.set(deviceType, []);
+  }
+  
+  // Actualizar estado de cámara en el sistema de monitoreo
+  public updateCameraState(state: CameraState): void {
+    logError(
+      `Estado de cámara actualizado: ${state}`,
+      ErrorLevel.INFO,
+      'ErrorPreventionMonitor'
+    );
+    
+    // Si la cámara está activa, reiniciar contadores de error
+    if (state === CameraState.ACTIVE) {
+      this.resetErrorHistory('camera');
     }
-    
-    return {
-      fps: avgFPS,
-      memory: memoryInfo,
-      cpuUsage: estimatedCPUUsage,
-      processingLatency: avgProcessingTime,
-      frameDropRate
-    };
   }
 }
 
-/**
- * Obtiene la instancia del monitor de rendimiento
- */
-export function getPerformanceMonitor(): PerformanceMonitor {
-  return PerformanceMonitor.getInstance();
-}
+// Instancia singleton
+export const errorPreventionMonitor = new ErrorPreventionMonitor();
+
+// Exportar funciones de utilidad
+export const trackDeviceError = (event: DeviceErrorEvent): void => {
+  errorPreventionMonitor.trackDeviceError(event);
+};
+
+export const shouldAttemptDeviceRecovery = (deviceType: MonitoredDeviceType): boolean => {
+  return errorPreventionMonitor.shouldAttemptRecovery(deviceType);
+};
+
+export const markDeviceRecoveryAttempted = (deviceType: MonitoredDeviceType): void => {
+  errorPreventionMonitor.markRecoveryAttempted(deviceType);
+};
+
+export const getDeviceErrors = (deviceType: MonitoredDeviceType): DeviceErrorEvent[] => {
+  return errorPreventionMonitor.getRecentErrors(deviceType);
+};

@@ -1,31 +1,36 @@
 
 /**
- * Módulo central de procesamiento de señal
- * Proporciona funcionalidades avanzadas para el procesamiento de señales PPG y cardíacas
+ * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
+ * 
+ * Punto de entrada del módulo de procesamiento de señales
+ * Exporta todas las funcionalidades públicas
  */
 
-// Exportar procesadores principales
+// Exportar tipos comunes
+export * from './types';
+
+// Exportar procesadores
 export * from './ppg-processor';
 export * from './heartbeat-processor';
 
-// Exportar utilidades de procesamiento
-export * from './utils/quality-detector';
-export * from './utils/finger-detector';
-export * from './utils/signal-normalizer';
-export * from './utils/adaptive-predictor';
-export * from './utils/bayesian-optimization';
-export * from './utils/gaussian-process';
-export * from './utils/mixed-model';
+// Exportar utilidades adaptativas 
+export { getAdaptivePredictor } from './utils/adaptive-predictor';
+export { unifiedFingerDetector } from './utils/unified-finger-detector';
 
-// Exportar tipos
-export * from './types';
+// Exportar optimizador bayesiano
+export { 
+  BayesianOptimizer,
+  createBayesianOptimizer,
+  // Renombramos DataPoint para evitar conflicto
+  DataPoint as BayesianDataPoint
+} from './utils/bayesian-optimization';
 
-// Export a function to reset finger detector 
-export function resetFingerDetector() {
-  console.log("Finger detector has been reset");
-  // This function exists to satisfy imports
-  // Actual implementation is in finger-detector.ts
-}
+// Exportar sistema adaptativo
+export {
+  getAdaptiveSystemCoordinator,
+  AdaptiveSystemCoordinator
+} from './utils/adaptive-system-coordinator';
 
-// Export the VitalSignsProcessor
-export { VitalSignsProcessor } from '../vital-signs/VitalSignsProcessor';
+// Exportar funciones de creación
+export { createPPGSignalProcessor } from './ppg-processor';
+export { createHeartbeatProcessor } from './heartbeat-processor';

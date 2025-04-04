@@ -212,8 +212,9 @@ class DefaultAdaptivePredictor implements AdaptivePredictor {
       this.adaptationRate = Math.max(0.05, Math.min(0.5, options.adaptationRate));
     }
     
-    if (options.confidenceThreshold !== undefined) {
-      this.confidenceThreshold = Math.max(0.1, Math.min(0.9, options.confidenceThreshold));
+    // Usar propiedad custom para el umbral de confianza
+    if (options.signalQualityThreshold !== undefined) {
+      this.confidenceThreshold = Math.max(0.1, Math.min(0.9, options.signalQualityThreshold / 100));
     }
   }
   
