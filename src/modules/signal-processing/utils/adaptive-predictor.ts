@@ -1,128 +1,169 @@
+
 /**
  * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
  * 
- * Utilidades para predicción adaptativa de señales
- * Implementa un filtro de Kalman adaptativo para predecir valores futuros
+ * Adaptive predictor for signal processing
  */
 
 /**
- * Interface for adaptive prediction of signal values
+ * Result of a prediction
  */
-export interface AdaptivePredictor {
-  predict(timestamp: number): { predictedValue: number; confidence: number };
-  update(timestamp: number, value: number, weight: number): void;
-  configure(options: any): void;
-  reset(): void;
-  getState(): any;
+export interface PredictionResult {
+  predictedValue: number;
+  confidence: number;
+  error?: number;
 }
 
 /**
- * Implementación del filtro de Kalman adaptativo
+ * Adaptive predictor parameters
  */
-class KalmanFilter implements AdaptivePredictor {
-  private processNoise: number = 0.01;
-  private measurementNoise: number = 0.1;
-  private errorEstimate: number = 1;
-  private kalmanGain: number = 0;
-  private currentValue: number = 0;
-  private lastTimestamp: number = 0;
-  private adaptationRate: number = 0.1;
-  private confidenceThreshold: number = 0.5;
+export interface AdaptivePredictorParams {
+  windowSize?: number;
+  learningRate?: number;
+  adaptationRate?: number;
+}
+
+/**
+ * Simple adaptive predictor using moving average
+ */
+export class AdaptivePredictor {
+  private values: number[] = [];
+  private weights: number[] = [];
+  private lastPrediction: number | null = null;
+  private confidence: number = 0;
   
-  /**
-   * Predice el siguiente valor de la señal
-   */
-  public predict(timestamp: number): { predictedValue: number; confidence: number } {
-    // Calcular el tiempo transcurrido desde la última actualización
-    const timeDiff = timestamp - this.lastTimestamp;
+  private readonly windowSize: number;
+  private readonly learningRate: number;
+  private readonly adaptationRate: number;
+  
+  constructor({
+    windowSize = 10,
+    learningRate = 0.1,
+    adaptationRate = 0.05
+  }: AdaptivePredictorParams = {}) {
+    this.windowSize = windowSize;
+    this.learningRate = learningRate;
+    this.adaptationRate = adaptationRate;
     
-    // Proyectar el estado actual hacia el futuro
-    const predictedValue = this.currentValue;
-    
-    // La confianza es inversamente proporcional al tiempo transcurrido
-    let confidence = Math.max(0, 1 - (timeDiff / 1000));
-    
-    // Ajustar la confianza basada en el umbral
-    confidence = confidence > this.confidenceThreshold ? confidence : 0;
-    
-    return { predictedValue, confidence };
+    // Initialize weights to equal distribution
+    this.weights = Array(windowSize).fill(1 / windowSize);
   }
   
   /**
-   * Actualiza el filtro con un nuevo valor
+   * Add a value to the predictor
    */
-  public update(timestamp: number, value: number, weight: number): void {
-    // Calcular la ganancia de Kalman
-    this.kalmanGain = this.errorEstimate / (this.errorEstimate + this.measurementNoise);
+  public addValue(value: number): void {
+    this.values.push(value);
     
-    // Corregir la estimación actual
-    this.currentValue += this.kalmanGain * (value - this.currentValue);
-    
-    // Actualizar la estimación del error
-    this.errorEstimate = (1 - this.kalmanGain) * this.errorEstimate + 
-                         Math.abs(value - this.currentValue) * this.processNoise;
-    
-    // Recordar el timestamp actual
-    this.lastTimestamp = timestamp;
-    
-    // Adaptar los parámetros del filtro
-    this.processNoise = this.processNoise * (1 - this.adaptationRate) + 0.001 * this.adaptationRate;
-    this.measurementNoise = this.measurementNoise * (1 - this.adaptationRate) + 0.01 * this.adaptationRate;
-    
-    // Limitar los valores de los parámetros
-    this.processNoise = Math.max(0.0001, Math.min(0.1, this.processNoise));
-    this.measurementNoise = Math.max(0.01, Math.min(1, this.measurementNoise));
-  }
-  
-  /**
-   * Configura el filtro con opciones personalizadas
-   */
-  public configure(options: any): void {
-    if (options.adaptationRate !== undefined) {
-      this.adaptationRate = Math.max(0.01, Math.min(0.5, options.adaptationRate));
+    if (this.values.length > this.windowSize) {
+      this.values.shift();
     }
     
-    if (options.confidenceThreshold !== undefined) {
-      this.confidenceThreshold = Math.max(0.1, Math.min(0.9, options.confidenceThreshold));
+    // Update weights based on prediction error
+    if (this.lastPrediction !== null) {
+      const error = Math.abs(value - this.lastPrediction);
+      this.updateWeights(error);
+      
+      // Update confidence based on error
+      const normalizedError = Math.min(1, error / Math.abs(value));
+      this.confidence = (1 - normalizedError) * 0.9 + this.confidence * 0.1;
+    } else {
+      this.confidence = 0.5; // Initial confidence
     }
   }
   
   /**
-   * Reinicia el filtro a su estado inicial
+   * Predict the next value
+   */
+  public predict(): PredictionResult {
+    if (this.values.length === 0) {
+      return { predictedValue: 0, confidence: 0 };
+    }
+    
+    if (this.values.length < this.windowSize) {
+      // Not enough data, use simple average
+      const avg = this.values.reduce((sum, val) => sum + val, 0) / this.values.length;
+      this.lastPrediction = avg;
+      return { predictedValue: avg, confidence: 0.5 };
+    }
+    
+    // Weighted prediction
+    let prediction = 0;
+    for (let i = 0; i < this.values.length; i++) {
+      prediction += this.values[i] * this.weights[i];
+    }
+    
+    this.lastPrediction = prediction;
+    return { 
+      predictedValue: prediction, 
+      confidence: this.confidence
+    };
+  }
+  
+  /**
+   * Update weights based on prediction error
+   */
+  private updateWeights(error: number): void {
+    if (this.values.length < this.windowSize) {
+      return;
+    }
+    
+    // Normalize error
+    const normalizedError = Math.min(1, error / Math.abs(this.lastPrediction || 1));
+    
+    // Update weights - reduce weight for values that contributed more to error
+    const sumValues = this.values.reduce((sum, val) => sum + Math.abs(val), 0);
+    
+    for (let i = 0; i < this.weights.length; i++) {
+      const contribution = Math.abs(this.values[i]) / sumValues;
+      const adjustment = this.learningRate * normalizedError * contribution;
+      
+      // Reduce weight proportionally to contribution
+      this.weights[i] = Math.max(0.01, this.weights[i] - adjustment);
+    }
+    
+    // Normalize weights to sum to 1
+    const sumWeights = this.weights.reduce((sum, w) => sum + w, 0);
+    this.weights = this.weights.map(w => w / sumWeights);
+  }
+  
+  /**
+   * Reset the predictor
    */
   public reset(): void {
-    this.errorEstimate = 1;
-    this.kalmanGain = 0;
-    this.currentValue = 0;
-    this.lastTimestamp = 0;
+    this.values = [];
+    this.weights = Array(this.windowSize).fill(1 / this.windowSize);
+    this.lastPrediction = null;
+    this.confidence = 0;
   }
   
   /**
-   * Obtiene el estado actual del filtro
+   * Get current state
    */
-  public getState(): any {
+  public getState(): {
+    values: number[];
+    weights: number[];
+    lastPrediction: number | null;
+    confidence: number;
+  } {
     return {
-      processNoise: this.processNoise,
-      measurementNoise: this.measurementNoise,
-      errorEstimate: this.errorEstimate,
-      kalmanGain: this.kalmanGain,
-      currentValue: this.currentValue,
-      lastTimestamp: this.lastTimestamp,
-      adaptationRate: this.adaptationRate,
-      confidenceThreshold: this.confidenceThreshold
+      values: [...this.values],
+      weights: [...this.weights],
+      lastPrediction: this.lastPrediction,
+      confidence: this.confidence
     };
   }
 }
 
-// Singleton
-let adaptivePredictor: AdaptivePredictor | null = null;
-
 /**
- * Obtiene una instancia del filtro de Kalman adaptativo
+ * Get a shared adaptive predictor instance
  */
-export function getAdaptivePredictor(): AdaptivePredictor {
-  if (!adaptivePredictor) {
-    adaptivePredictor = new KalmanFilter();
+let sharedPredictor: AdaptivePredictor | null = null;
+
+export function getAdaptivePredictor(params?: AdaptivePredictorParams): AdaptivePredictor {
+  if (!sharedPredictor) {
+    sharedPredictor = new AdaptivePredictor(params);
   }
-  return adaptivePredictor;
+  
+  return sharedPredictor;
 }

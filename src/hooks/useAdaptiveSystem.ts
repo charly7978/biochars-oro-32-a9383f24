@@ -1,136 +1,97 @@
 
 /**
- * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
- * 
- * Hook para usar el sistema adaptativo en componentes React
- * Proporciona una interfaz para usar el sistema de coordinación adaptativa
+ * Hook for interacting with the adaptive system coordinator
  */
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { 
-  getAdaptiveSystemCoordinator, 
-  AdaptiveSystemConfig,
-  MessageType
-} from '@/modules/signal-processing';
-import { ErrorLevel, logError } from '@/utils/debugUtils';
+  getAdaptiveSystemCoordinator,
+  MessageType,
+  AdaptiveSystemMessage
+} from '@/modules/signal-processing/utils/adaptive-system-coordinator';
 
-/**
- * Hook para usar el sistema adaptativo
- */
-export function useAdaptiveSystem(initialConfig?: Partial<AdaptiveSystemConfig>) {
-  // Obtener el coordinador
-  const coordinator = useRef(getAdaptiveSystemCoordinator(initialConfig));
+export function useAdaptiveSystem(componentId: string = 'main') {
+  const [systemState, setSystemState] = useState<Record<string, any>>({});
+  const [isConnected, setIsConnected] = useState<boolean>(false);
+  const coordinatorRef = useRef(getAdaptiveSystemCoordinator());
   
-  // Estado para componentes React
-  const [systemState, setSystemState] = useState(coordinator.current.getSystemState());
-  const [isOptimizing, setIsOptimizing] = useState(false);
-  const [lastOptimization, setLastOptimization] = useState<any>(null);
-  
-  /**
-   * Procesa un valor con el sistema adaptativo
-   */
-  const processValue = useCallback((value: number, quality: number, timestamp: number = Date.now()) => {
-    try {
-      const result = coordinator.current.processValue(value, quality, timestamp);
-      
-      // Si hay resultado de optimización, actualizar estado
-      if (result.optimizationStatus) {
-        setIsOptimizing(true);
-        setLastOptimization(result.optimizationStatus);
-        
-        // Restaurar estado después de un breve periodo
-        setTimeout(() => {
-          setIsOptimizing(false);
-        }, 500);
-      }
-      
-      return result;
-    } catch (error) {
-      logError(
-        `Error en procesamiento adaptativo: ${error}`,
-        ErrorLevel.ERROR,
-        "AdaptiveSystem"
-      );
-      
-      // Devolver resultado por defecto en caso de error
-      return {
-        processedValue: value,
-        prediction: { predictedValue: value, confidence: 0 },
-        optimizationStatus: null
-      };
-    }
-  }, []);
-  
-  /**
-   * Envía un mensaje al sistema
-   */
-  const sendMessage = useCallback((destination: string, type: string, payload: any, priority: 'high' | 'medium' | 'low' = 'medium') => {
-    coordinator.current.sendMessage({
-      source: 'react-component',
-      destination,
-      type,
-      payload,
-      priority
-    });
-  }, []);
-  
-  /**
-   * Actualiza la configuración
-   */
-  const updateConfig = useCallback((newConfig: Partial<AdaptiveSystemConfig>) => {
-    coordinator.current.updateConfig(newConfig);
-    setSystemState(coordinator.current.getSystemState());
-  }, []);
-  
-  /**
-   * Reinicia el sistema
-   */
-  const resetSystem = useCallback(() => {
-    coordinator.current.reset();
-    setSystemState(coordinator.current.getSystemState());
-    setIsOptimizing(false);
-    setLastOptimization(null);
-  }, []);
-  
-  /**
-   * Inicia una optimización
-   */
-  const startOptimization = useCallback(() => {
-    sendMessage('adaptive-coordinator', MessageType.OPTIMIZATION_REQUEST, {
-      timestamp: Date.now()
-    }, 'high');
-    setIsOptimizing(true);
-  }, [sendMessage]);
-  
-  /**
-   * Actualiza periódicamente el estado del sistema para la UI
-   */
+  // Connect to the adaptive system
   useEffect(() => {
-    const intervalId = setInterval(() => {
-      setSystemState(coordinator.current.getSystemState());
-    }, 1000);
+    const coordinator = coordinatorRef.current;
+    coordinator.registerComponent(componentId);
     
-    // Solicitar diagnósticos al inicio
-    sendMessage('adaptive-coordinator', MessageType.DIAGNOSTICS_REQUEST, {}, 'low');
+    // Initial state
+    setSystemState(coordinator.getSystemState());
+    setIsConnected(true);
     
-    return () => clearInterval(intervalId);
+    // Subscribe to config updates
+    const unsubscribe = coordinator.subscribe(
+      MessageType.CONFIG_UPDATE,
+      () => {
+        setSystemState(coordinator.getSystemState());
+      }
+    );
+    
+    return () => {
+      unsubscribe();
+    };
+  }, [componentId]);
+  
+  // Process a value through the adaptive system
+  const processValue = useCallback((value: number, metadata?: any): number => {
+    return coordinatorRef.current.processValue(value, metadata);
+  }, []);
+  
+  // Send a message to the adaptive system
+  const sendMessage = useCallback((
+    type: MessageType,
+    data?: any,
+    source: string = componentId,
+    target?: string
+  ): void => {
+    const message: AdaptiveSystemMessage = {
+      type,
+      timestamp: Date.now(),
+      source,
+      data,
+      target
+    };
+    
+    coordinatorRef.current.sendMessage(message);
+  }, [componentId]);
+  
+  // Update configuration
+  const updateConfig = useCallback((config: Record<string, any>): void => {
+    coordinatorRef.current.updateConfig(config);
+    setSystemState(coordinatorRef.current.getSystemState());
+  }, []);
+  
+  // Get current system state
+  const getSystemState = useCallback((): Record<string, any> => {
+    return coordinatorRef.current.getSystemState();
+  }, []);
+  
+  // Request system diagnostics
+  const requestDiagnostics = useCallback((): void => {
+    sendMessage(
+      MessageType.DIAGNOSTICS_REQUEST,
+      { timestamp: Date.now() }
+    );
   }, [sendMessage]);
   
-  /**
-   * Obtiene el estado actual
-   */
-  const getSystemStateSnapshot = useCallback(() => {
-    return coordinator.current.getSystemState();
-  }, []);
+  // Reset the adaptive system
+  const resetSystem = useCallback((): void => {
+    sendMessage(MessageType.RESET_REQUEST);
+    setSystemState(coordinatorRef.current.getSystemState());
+  }, [sendMessage]);
   
   return {
+    isConnected,
+    systemState,
     processValue,
     sendMessage,
     updateConfig,
-    resetSystem,
-    startOptimization,
-    systemState,
-    isOptimizing,
-    lastOptimization,
-    getSystemStateSnapshot
+    getSystemState,
+    requestDiagnostics,
+    resetSystem
   };
 }

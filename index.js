@@ -5,6 +5,7 @@ import { useSignalProcessor } from "@/hooks/useSignalProcessor";
 import { useHeartBeatProcessor } from "@/hooks/useHeartBeatProcessor";
 import { useVitalSignsProcessor } from "@/hooks/useVitalSignsProcessor";
 import PPGSignalMeter from "@/components/PPGSignalMeter";
+import ArrhythmiaVisualizer from "@/components/ArrhythmiaVisualizer";
 import MeasurementConfirmationDialog from "@/components/MeasurementConfirmationDialog";
 import { toast } from "sonner";
 import { initializeErrorTracking, logError, ErrorLevel } from "@/utils/debugUtils";
@@ -24,6 +25,7 @@ const Index = () => {
   const [arrhythmiaCount, setArrhythmiaCount] = useState("--");
   const [elapsedTime, setElapsedTime] = useState(0);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+  const [rrIntervals, setRRIntervals] = useState<number[]>([]);
   const measurementTimerRef = useRef(null);
   const cameraRecoveryTimerRef = useRef(null);
   
@@ -141,6 +143,7 @@ const Index = () => {
     setCameraState(CameraState.REQUESTING);
     startProcessing();
     setElapsedTime(0);
+    setRRIntervals([]);
     
     if (measurementTimerRef.current) {
       clearInterval(measurementTimerRef.current);
@@ -186,6 +189,7 @@ const Index = () => {
     });
     setArrhythmiaCount("--");
     setSignalQuality(0);
+    setRRIntervals([]);
     
     if (measurementTimerRef.current) {
       clearInterval(measurementTimerRef.current);
@@ -208,6 +212,7 @@ const Index = () => {
     });
     setArrhythmiaCount("--");
     setSignalQuality(0);
+    setRRIntervals([]);
     
     if (measurementTimerRef.current) {
       clearInterval(measurementTimerRef.current);
@@ -316,6 +321,16 @@ const Index = () => {
         const heartBeatResult = processHeartBeat(lastSignal.filteredValue);
         setHeartRate(heartBeatResult.bpm);
         
+        if (heartBeatResult.rrData && heartBeatResult.rrData.intervals) {
+          setRRIntervals(prev => {
+            const newIntervals = [...prev];
+            if (heartBeatResult.rrData && heartBeatResult.rrData.intervals && heartBeatResult.rrData.intervals.length > 0) {
+              newIntervals.push(...heartBeatResult.rrData.intervals);
+            }
+            return newIntervals.slice(-20);
+          });
+        }
+        
         const vitals = processVitalSigns(lastSignal.filteredValue, heartBeatResult.rrData);
         if (vitals) {
           setVitalSigns(vitals);
@@ -363,72 +378,73 @@ const Index = () => {
             <PPGSignalMeter 
               value={lastSignal?.filteredValue || 0}
               quality={lastSignal?.quality || 0}
-              isFingerDetected={lastSignal?.fingerDetected || false}
-              onStartMeasurement={startMonitoring}
-              onReset={stopMonitoring}
-              arrhythmiaStatus={vitalSigns.arrhythmiaStatus}
-              rawArrhythmiaData={vitalSigns.lastArrhythmiaData}
+              fingerDetected={lastSignal?.fingerDetected || false}
+              showBeats={isMonitoring}
             />
           </div>
 
-          <div className="absolute bottom-[200px] left-0 right-0 px-4">
-            <div className="bg-gray-900/30 backdrop-blur-sm rounded-xl p-4">
-              <div className="grid grid-cols-4 gap-2">
-                <VitalSign 
-                  label="FRECUENCIA CARDÍACA"
-                  value={heartRate || "--"}
-                  unit="BPM"
-                />
-                <VitalSign 
-                  label="SPO2"
-                  value={vitalSigns.spo2 || "--"}
-                  unit="%"
-                />
-                <VitalSign 
-                  label="PRESIÓN ARTERIAL"
-                  value={vitalSigns.pressure}
-                  unit="mmHg"
-                />
-                <VitalSign 
-                  label="ARRITMIAS"
-                  value={vitalSigns.arrhythmiaStatus}
-                />
-              </div>
+          <div className="bg-black bg-opacity-70 p-4 rounded-t-xl">
+            <div className="grid grid-cols-2 gap-4 mb-4">
+              <VitalSign label="SpO₂" value={vitalSigns.spo2} unit="%" />
+              <VitalSign label="Presión" value={vitalSigns.pressure} unit="" />
+              <VitalSign label="Frecuencia" value={heartRate} unit="BPM" />
+              <VitalSign label="Calidad" value={signalQuality} unit="%" />
             </div>
-          </div>
-
-          {isMonitoring && (
-            <div className="absolute bottom-40 left-0 right-0 text-center">
-              <span className="text-xl font-medium text-gray-300">{elapsedTime}s / 30s</span>
+            
+            <div className="mb-4">
+              <ArrhythmiaVisualizer 
+                arrhythmiaCount={arrhythmiaCount}
+                arrhythmiaStatus={vitalSigns.arrhythmiaStatus}
+                latestRRIntervals={rrIntervals}
+                heartRate={heartRate}
+                quality={signalQuality}
+              />
             </div>
-          )}
 
-          <div className="h-[80px] grid grid-cols-2 gap-px bg-gray-900 mt-auto">
-            <button 
-              onClick={startMonitoring}
-              className="w-full h-full bg-black/80 text-2xl font-bold text-white active:bg-gray-800"
-            >
-              INICIAR
-            </button>
-            <button 
-              onClick={stopMonitoring}
-              className="w-full h-full bg-black/80 text-2xl font-bold text-white active:bg-gray-800"
-            >
-              RESET
-            </button>
+            <div className="flex justify-center">
+              {!isMonitoring ? (
+                <button
+                  className="bg-green-500 text-white px-6 py-3 rounded-full text-lg font-semibold hover:bg-green-600 transition-colors"
+                  onClick={startMonitoring}
+                >
+                  Iniciar Medición
+                </button>
+              ) : (
+                <div className="flex flex-col items-center">
+                  <div className="text-white mb-2">
+                    Tiempo: {elapsedTime} segundos
+                  </div>
+                  <div className="flex space-x-4">
+                    <button
+                      className="bg-red-500 text-white px-6 py-3 rounded-full text-lg font-semibold hover:bg-red-600 transition-colors"
+                      onClick={stopMonitoring}
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      className="bg-blue-500 text-white px-6 py-3 rounded-full text-lg font-semibold hover:bg-blue-600 transition-colors"
+                      onClick={showMeasurementConfirmation}
+                    >
+                      Completar
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
 
       <MeasurementConfirmationDialog
-        open={showConfirmDialog}
-        onOpenChange={setShowConfirmDialog}
+        isOpen={showConfirmDialog}
         onConfirm={confirmMeasurement}
         onCancel={cancelMeasurement}
-        measurementTime={elapsedTime}
-        heartRate={heartRate}
-        spo2={vitalSigns.spo2}
-        pressure={vitalSigns.pressure}
+        vitalSigns={{
+          spo2: vitalSigns.spo2,
+          pressure: vitalSigns.pressure,
+          heartRate,
+          arrhythmiaStatus: vitalSigns.arrhythmiaStatus
+        }}
       />
     </div>
   );

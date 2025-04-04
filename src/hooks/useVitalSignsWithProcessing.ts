@@ -67,9 +67,14 @@ export function useVitalSignsWithProcessing() {
   const updateAmbientBrightness = useCallback((brightness: number) => {
     ambientBrightnessRef.current = brightness;
     
-    // Adaptar umbrales de detección basados en brillo y calidad de señal
+    // Set thresholds directly instead of using adaptThresholds
     if (processing.signalQuality !== undefined) {
-      unifiedFingerDetector.adaptThresholds(processing.signalQuality, brightness);
+      // Update the finger detection source
+      unifiedFingerDetector.updateSource(
+        'brightness', 
+        brightness > 50, // Detect finger if brightness is reasonable
+        brightness / 255  // Normalized confidence
+      );
     }
   }, [processing.signalQuality]);
   
@@ -126,8 +131,12 @@ export function useVitalSignsWithProcessing() {
         setUnifiedFingerDetected(detectionState.isFingerDetected);
         detectionConfidenceRef.current = detectionState.confidence;
         
-        // Adaptación de umbrales basada en calidad de señal
-        unifiedFingerDetector.adaptThresholds(processedSignal.quality);
+        // Set thresholds directly instead of using adaptThresholds
+        unifiedFingerDetector.updateSource(
+          'signal-quality-state',
+          processedSignal.quality > 50,
+          processedSignal.quality / 100
+        );
         
         // Solo procesar para signos vitales si el dedo está detectado según sistema unificado
         if (detectionState.isFingerDetected) {

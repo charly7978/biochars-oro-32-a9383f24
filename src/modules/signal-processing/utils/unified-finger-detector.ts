@@ -18,6 +18,12 @@ export type DetectionSource =
   'camera-analysis' |
   'unified-detection';
 
+// Detection state interface
+export interface DetectionState {
+  isFingerDetected: boolean;
+  confidence: number;
+}
+
 /**
  * Simple implementation of a unified finger detector
  */
@@ -25,6 +31,11 @@ export class UnifiedFingerDetector {
   private detectionSources: Map<DetectionSource, { detected: boolean, confidence: number }> = new Map();
   private isFingerDetected: boolean = false;
   private detectionConfidence: number = 0;
+  private amplitudeThreshold: number = 0.05;
+  private falsePositiveReductionFactor: number = 0.3;
+  private falseNegativeReductionFactor: number = 0.7;
+  private sensitivityFactor: number = 1.0;
+  private adaptationRate: number = 0.1;
   
   /**
    * Update detection state from a source
@@ -37,7 +48,7 @@ export class UnifiedFingerDetector {
   /**
    * Get current detection state
    */
-  public getDetectionState(): { isFingerDetected: boolean, confidence: number } {
+  public getDetectionState(): DetectionState {
     return {
       isFingerDetected: this.isFingerDetected,
       confidence: this.detectionConfidence
@@ -80,6 +91,58 @@ export class UnifiedFingerDetector {
     
     // Overall confidence is the average of confidence values from positive detections
     this.detectionConfidence = detectedCount > 0 ? totalConfidence / detectedCount : 0;
+  }
+
+  /**
+   * Adapt thresholds based on signal quality and brightness
+   */
+  public adaptThresholds(signalQuality: number, brightness?: number): void {
+    const qualityFactor = signalQuality / 100; // normalize to 0-1
+    
+    // Adjust sensitivity based on signal quality
+    if (brightness !== undefined) {
+      // Use brightness to further adjust sensitivity
+      const brightnessFactor = Math.min(1, Math.max(0.1, brightness / 255));
+      this.sensitivityFactor = Math.max(0.5, Math.min(1.5, qualityFactor * brightnessFactor * 2));
+    } else {
+      // Just use signal quality
+      this.sensitivityFactor = Math.max(0.5, Math.min(1.5, qualityFactor * 1.5));
+    }
+  }
+
+  /**
+   * Set detection sensitivity
+   */
+  public setSensitivity(sensitivity: number): void {
+    this.sensitivityFactor = Math.max(0.1, Math.min(2.0, sensitivity));
+  }
+
+  /**
+   * Set adaptation rate
+   */
+  public setAdaptationRate(rate: number): void {
+    this.adaptationRate = Math.max(0.01, Math.min(1.0, rate));
+  }
+
+  /**
+   * Set amplitude threshold
+   */
+  public setAmplitudeThreshold(threshold: number): void {
+    this.amplitudeThreshold = Math.max(0.01, Math.min(0.5, threshold));
+  }
+
+  /**
+   * Set false positive reduction factor
+   */
+  public setFalsePositiveReduction(factor: number): void {
+    this.falsePositiveReductionFactor = Math.max(0.1, Math.min(0.9, factor));
+  }
+
+  /**
+   * Set false negative reduction factor
+   */
+  public setFalseNegativeReduction(factor: number): void {
+    this.falseNegativeReductionFactor = Math.max(0.1, Math.min(0.9, factor));
   }
 }
 
