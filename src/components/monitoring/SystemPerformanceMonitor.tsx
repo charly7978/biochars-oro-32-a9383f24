@@ -4,7 +4,7 @@ import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Cpu, HardDrive, Chip, Wifi, Clock, Activity } from 'lucide-react';
+import { Cpu, HardDrive, Database, Wifi, Clock, Activity } from 'lucide-react';
 
 export const SystemPerformanceMonitor: React.FC = () => {
   const [cpuUsage, setCpuUsage] = useState(0);
@@ -70,7 +70,7 @@ export const SystemPerformanceMonitor: React.FC = () => {
               <div className="space-y-1">
                 <div className="flex justify-between items-center">
                   <span className="flex items-center">
-                    <Chip className="h-4 w-4 mr-2" />
+                    <Database className="h-4 w-4 mr-2" />
                     Uso de Memoria
                   </span>
                   <span className={`font-medium ${getStatusColor(memoryUsage, { low: 30, medium: 60 })}`}>
