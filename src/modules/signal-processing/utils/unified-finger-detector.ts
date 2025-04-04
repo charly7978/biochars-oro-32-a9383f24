@@ -1,3 +1,4 @@
+
 /**
  * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
  * 
@@ -18,33 +19,48 @@ export type DetectionSource =
   'signal-quality-state' | 
   'weak-signal-result' | 
   'manual-override' | 
-  'brightness';
+  'brightness' |
+  'camera-analysis' |
+  'extraction' |
+  'signalProcessor' |
+  'rhythm-pattern';
 
 // Configuración estándar
 const DEFAULT_CONFIG = {
   // Reducir umbral general para detección más sensible
-  detectionThreshold: 0.58, // Reducido de 0.65
+  detectionThreshold: 0.55, // Reducido de 0.58 para mayor sensibilidad
   // Pesos de las diferentes fuentes de detección
   sourceWeights: {
     'camera-illumination': 0.8,
     'ppg-extractor': 0.9,
-    'signal-quality-amplitude': 0.85, // Aumentado de 0.8
+    'signal-quality-amplitude': 0.85,
     'signal-quality-pattern': 0.95,
     'signal-quality-state': 0.8,
     'weak-signal-result': 0.7,
     'manual-override': 1.0,
-    'brightness': 0.7
+    'brightness': 0.7,
+    'camera-analysis': 0.85,
+    'extraction': 0.9,
+    'signalProcessor': 0.85,
+    'rhythm-pattern': 0.9
   } as Record<DetectionSource, number>,
   // Tiempo mínimo para mantener una detección (anti-flicker)
-  stableDetectionTimeMs: 450, // Reducido de 500
+  stableDetectionTimeMs: 450,
   // Tiempo para mantener la detección después de perderla
   detectionPersistenceMs: 150,
   // Factores de adaptación de umbrales
   adaptiveFactors: {
-    qualityInfluence: 0.04, // Mayor influencia (era 0.03)
+    qualityInfluence: 0.04,
     brightnessInfluence: 0.05
   }
 };
+
+// Interface for diagnostic events
+interface DiagnosticEvent {
+  timestamp: number;
+  type: string;
+  details: any;
+}
 
 /**
  * Clase para detección unificada de dedo usando múltiples fuentes
@@ -62,6 +78,16 @@ export class UnifiedFingerDetector {
   // Configuración
   private config = {...DEFAULT_CONFIG};
   
+  // Debug mode
+  private debugMode: boolean = false;
+  
+  // Manual override
+  private manualOverrideActive: boolean = false;
+  
+  // Diagnostic events buffer
+  private diagnosticEvents: DiagnosticEvent[] = [];
+  private readonly MAX_DIAGNOSTIC_EVENTS = 100;
+  
   constructor() {
     this.sources = new Map();
     console.log("UnifiedFingerDetector: Sistema de detección unificado inicializado");
@@ -76,6 +102,16 @@ export class UnifiedFingerDetector {
       confidence: Math.min(1, Math.max(0, confidence)),
       timestamp: Date.now()
     });
+    
+    // Log diagnostic event
+    if (this.debugMode) {
+      this.logDiagnosticEvent('source-update', {
+        source,
+        detected,
+        confidence,
+        timestamp: Date.now()
+      });
+    }
     
     // Recalcular estado inmediatamente para respuesta más rápida
     this.calculateDetectionState();
@@ -93,7 +129,7 @@ export class UnifiedFingerDetector {
         const qualityAdjustment = this.config.adaptiveFactors.qualityInfluence * 
                                  (signalQuality > 30 ? 0.6 : 0.3);
         this.config.detectionThreshold = Math.max(
-          0.4, // Umbral mínimo más bajo (era 0.5)
+          0.38, // Umbral mínimo más bajo para mejorar sensibilidad
           DEFAULT_CONFIG.detectionThreshold - qualityAdjustment
         );
       } else {
@@ -113,10 +149,20 @@ export class UnifiedFingerDetector {
         const brightnessAdjustment = this.config.adaptiveFactors.brightnessInfluence * 
                                     (0.3 - normalizedBrightness);
         this.config.detectionThreshold = Math.max(
-          0.4, // Umbral mínimo
+          0.35, // Umbral mínimo más bajo para mejorar sensibilidad
           this.config.detectionThreshold - brightnessAdjustment
         );
       }
+    }
+    
+    // Log threshold adaptation if in debug mode
+    if (this.debugMode) {
+      this.logDiagnosticEvent('threshold-adaptation', {
+        signalQuality,
+        brightness,
+        newThreshold: this.config.detectionThreshold,
+        timestamp: Date.now()
+      });
     }
   }
   
@@ -125,6 +171,14 @@ export class UnifiedFingerDetector {
    */
   private calculateDetectionState(): void {
     const now = Date.now();
+    
+    // If manual override is active, use that
+    if (this.manualOverrideActive) {
+      this.isFingerDetected = true;
+      this.detectionConfidence = 1.0;
+      this.lastDetectionTime = now;
+      return;
+    }
     
     // Ignorar fuentes sin actualización reciente (últimos 2 segundos)
     const recentSources = Array.from(this.sources.entries())
@@ -174,6 +228,17 @@ export class UnifiedFingerDetector {
     // Actualizar estado y confianza
     this.isFingerDetected = newDetectionState;
     this.detectionConfidence = weightedValue;
+    
+    // Log state calculation if in debug mode
+    if (this.debugMode) {
+      this.logDiagnosticEvent('state-calculation', {
+        weightedValue,
+        threshold: this.config.detectionThreshold,
+        isDetected: this.isFingerDetected,
+        confidence: this.detectionConfidence,
+        timestamp: now
+      });
+    }
   }
   
   /**
@@ -190,6 +255,73 @@ export class UnifiedFingerDetector {
   }
   
   /**
+   * Set debug mode
+   */
+  public setDebug(enabled: boolean): void {
+    this.debugMode = enabled;
+    console.log(`UnifiedFingerDetector: Debug mode ${enabled ? 'enabled' : 'disabled'}`);
+  }
+  
+  /**
+   * Set manual override
+   */
+  public setManualOverride(active: boolean): void {
+    this.manualOverrideActive = active;
+    console.log(`UnifiedFingerDetector: Manual override ${active ? 'activated' : 'deactivated'}`);
+    
+    // Log override action if in debug mode
+    if (this.debugMode) {
+      this.logDiagnosticEvent('manual-override', {
+        active,
+        timestamp: Date.now()
+      });
+    }
+  }
+  
+  /**
+   * Log diagnostic event
+   */
+  public logDiagnosticEvent(type: string, details: any): void {
+    this.diagnosticEvents.push({
+      timestamp: Date.now(),
+      type,
+      details
+    });
+    
+    // Limit buffer size
+    if (this.diagnosticEvents.length > this.MAX_DIAGNOSTIC_EVENTS) {
+      this.diagnosticEvents.shift();
+    }
+  }
+  
+  /**
+   * Get detailed statistics about the detector
+   */
+  public getDetailedStats(): {
+    sources: Record<string, any>;
+    config: typeof DEFAULT_CONFIG;
+    state: {
+      isFingerDetected: boolean;
+      confidence: number;
+      lastDetectionTime: number | null;
+      lastLossTime: number | null;
+    };
+    diagnostics: DiagnosticEvent[];
+  } {
+    return {
+      sources: this.getSourcesState(),
+      config: {...this.config},
+      state: {
+        isFingerDetected: this.isFingerDetected,
+        confidence: this.detectionConfidence,
+        lastDetectionTime: this.lastDetectionTime,
+        lastLossTime: this.lastLossTime
+      },
+      diagnostics: [...this.diagnosticEvents]
+    };
+  }
+  
+  /**
    * Resetea el detector
    */
   public reset(): void {
@@ -199,6 +331,8 @@ export class UnifiedFingerDetector {
     this.lastDetectionTime = null;
     this.lastLossTime = null;
     this.config = {...DEFAULT_CONFIG};
+    this.manualOverrideActive = false;
+    this.diagnosticEvents = [];
   }
   
   /**

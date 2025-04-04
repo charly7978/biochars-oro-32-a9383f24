@@ -1,3 +1,4 @@
+
 /**
  * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
  *
@@ -28,13 +29,13 @@ export function shouldProcessMeasurement(value: number): boolean {
   // Añadir diagnóstico sobre decisión de procesamiento
   const signalStrength = Math.abs(value);
   // Umbral reducido para mayor sensibilidad
-  const processingDecision = signalStrength >= 0.006; // Reducido de 0.008
+  const processingDecision = signalStrength >= 0.0045; // Reduced from 0.006 for higher sensitivity
   
   // Determinar prioridad basada en la fuerza de la señal
   let priority: 'high' | 'medium' | 'low' = 'low';
-  if (signalStrength >= 0.04) { // Reducido de 0.05
+  if (signalStrength >= 0.035) { // Reducido de 0.04
     priority = 'high';
-  } else if (signalStrength >= 0.015) { // Reducido de 0.02
+  } else if (signalStrength >= 0.012) { // Reducido de 0.015
     priority = 'medium';
   }
   
@@ -45,7 +46,7 @@ export function shouldProcessMeasurement(value: number): boolean {
     signalStrength,
     processorLoad: 0,
     dataPointsProcessed: 1,
-    peakDetectionConfidence: processingDecision ? signalStrength * 12 : 0, // Aumentado multiplicador
+    peakDetectionConfidence: processingDecision ? signalStrength * 15 : 0, // Increased multiplier from 12
     processingPriority: priority
   });
   
@@ -63,7 +64,7 @@ export function createWeakSignalResult(arrhythmiaCounter: number = 0): any {
   addDiagnosticsData({
     timestamp: Date.now(),
     processTime: 0,
-    signalStrength: 0.005, // Valor bajo característico
+    signalStrength: 0.004, // Valor bajo característico - reducido de 0.005
     processorLoad: 0,
     dataPointsProcessed: 1,
     peakDetectionConfidence: 0,
@@ -109,14 +110,14 @@ export function handlePeakDetection(
   
   // Determinar prioridad basada en la confianza del resultado
   let priority: 'high' | 'medium' | 'low' = 'low';
-  if (result.confidence > 0.5) {
+  if (result.confidence > 0.45) { // Reduced from 0.5 for higher sensitivity
     priority = 'high';
-  } else if (result.confidence > 0.2) {
+  } else if (result.confidence > 0.15) { // Reduced from 0.2 for higher sensitivity
     priority = 'medium';
   }
   
   // Solo actualizar tiempo del pico para cálculos de tiempo
-  if (result.isPeak && result.confidence > 0.05) {
+  if (result.isPeak && result.confidence > 0.04) { // Reduced from 0.05 for higher sensitivity
     // Actualizar tiempo del pico para cálculos de tempo solamente
     lastPeakTimeRef.current = now;
     
