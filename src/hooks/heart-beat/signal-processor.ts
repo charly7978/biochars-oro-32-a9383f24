@@ -1,3 +1,4 @@
+
 import { useCallback, useRef, useEffect } from 'react';
 import { HeartBeatResult } from './types';
 import { HeartBeatConfig } from '../../modules/heart-beat/config';
@@ -37,13 +38,13 @@ export function useSignalProcessor() {
   // Simple reference counter for compatibility
   const consecutiveWeakSignalsRef = useRef<number>(0);
   
-  // Aumentar la amplificación para ondas cardíacas más visibles
-  const WEAK_SIGNAL_THRESHOLD = HeartBeatConfig.LOW_SIGNAL_THRESHOLD * 0.6; 
+  // Reducir el umbral de señal débil para mejorar la detección de señales más débiles
+  const WEAK_SIGNAL_THRESHOLD = HeartBeatConfig.LOW_SIGNAL_THRESHOLD * 0.7; 
   const MAX_CONSECUTIVE_WEAK_SIGNALS = HeartBeatConfig.LOW_SIGNAL_FRAMES;
 
-  // Buffer mejorado para visualización de ondas con mayor amplitud
+  // Nuevo: buffer para mejorar la visualización de ondas
   const visualizationBufferRef = useRef<number[]>([]);
-  const amplificationFactorRef = useRef<number>(2.5);  // Aumentado para ondas más visibles
+  const amplificationFactorRef = useRef<number>(1.5);  // Factor de amplificación aumentado
 
   // Initialize signal distributor and ML model
   useEffect(() => {
@@ -88,10 +89,10 @@ export function useSignalProcessor() {
     try {
       calibrationCounterRef.current++;
       
-      // Mayor amplificación para visualización más clara de ondas cardíacas
+      // Agregar mayor amplificación para visualización más clara
       const amplifiedVisualizationValue = value * amplificationFactorRef.current;
       visualizationBufferRef.current.push(amplifiedVisualizationValue);
-      if (visualizationBufferRef.current.length > 50) { // Buffer más grande para mejor visualización
+      if (visualizationBufferRef.current.length > 30) {
         visualizationBufferRef.current.shift();
       }
       
@@ -116,7 +117,7 @@ export function useSignalProcessor() {
       }
       
       // Apply optimized cardiac signal processing with increased sensitivity
-      const optimizedValue = optimizeCardiacSignal(enhancedValue, signalBufferRef.current, 1.8); // Mayor amplificación
+      const optimizedValue = optimizeCardiacSignal(enhancedValue, signalBufferRef.current, 1.2); // Aumentar factor
       
       // Check for weak signal with reduced threshold for better sensitivity
       const { isWeakSignal, updatedWeakSignalsCount } = checkWeakSignal(
@@ -134,8 +135,8 @@ export function useSignalProcessor() {
         return createWeakSignalResult(processor.getArrhythmiaCounter());
       }
       
-      // Umbral reducido para mayor sensibilidad
-      if (!shouldProcessMeasurement(optimizedValue, 0.01)) { 
+      // Procesamiento mejorado con mayor sensibilidad
+      if (!shouldProcessMeasurement(optimizedValue, 0.02)) { // Umbral reducido
         return createWeakSignalResult(processor.getArrhythmiaCounter());
       }
       
@@ -144,18 +145,18 @@ export function useSignalProcessor() {
         const processedSignal = {
           timestamp: Date.now(),
           rawValue: value,
-          // Mayor amplificación para mejor visualización
-          filteredValue: optimizedValue * 1.8,
+          // Usar valor más amplificado para mejor visualización
+          filteredValue: optimizedValue * 1.2, // Amplificación extra
           normalizedValue: optimizedValue,
-          amplifiedValue: optimizedValue * 2.0, // Amplificación aumentada
+          amplifiedValue: optimizedValue * 1.25, // Aumentado para mejor detección
           quality: mlConfidence > 0 ? mlConfidence * 100 : 70,
           fingerDetected: true,
-          signalStrength: Math.abs(optimizedValue) * 1.8 // Mejora en la fuerza de señal
+          signalStrength: Math.abs(optimizedValue) * 1.2 // Mejora en la fuerza de señal
         };
         
         // Process through distributor with enhanced processing
         const distributorResults = signalDistributorRef.current.processSignal(processedSignal);
-        const cardiacValue = distributorResults[VitalSignType.CARDIAC] * 1.5; // Amplificación adicional
+        const cardiacValue = distributorResults[VitalSignType.CARDIAC] * 1.15; // Amplificación adicional
         
         // Get cardiac channel for RR intervals with improved detection
         const cardiacChannel = signalDistributorRef.current.getChannel(VitalSignType.CARDIAC);
@@ -176,7 +177,7 @@ export function useSignalProcessor() {
                 console.log("SignalProcessor: Optimized BPM calculation", {
                   optimizedBPM,
                   intervals: lastRRIntervalsRef.current,
-                  signalStrength: Math.abs(optimizedValue) * 1.8
+                  signalStrength: Math.abs(optimizedValue) * 1.2
                 });
               }
             }
@@ -193,11 +194,11 @@ export function useSignalProcessor() {
       const isPeakRealTime = detectPeakRealTime(
         optimizedValue, 
         signalBufferRef.current, 
-        0.08  // Umbral reducido para mejor detección
+        0.12  // Umbral reducido para mejor detección
       );
       
       // Process real signal with traditional processor but use enhanced peak detection
-      const result = processor.processSignal(optimizedValue * 1.8); // Valor amplificado
+      const result = processor.processSignal(optimizedValue * 1.15); // Valor amplificado
       const rrData = processor.getRRIntervals();
       
       // Override result with real-time peak detection for lower latency response
@@ -215,7 +216,8 @@ export function useSignalProcessor() {
         result, 
         lastPeakTimeRef, 
         requestImmediateBeep, 
-        isMonitoringRef
+        isMonitoringRef,
+        optimizedValue * 1.15 // Valor amplificado para mejor detección
       );
       
       // Update last valid BPM with improved filtering
@@ -247,9 +249,9 @@ export function useSignalProcessor() {
             signalQuality: result.confidence * 1.2, // Aumentar calidad percibida
             timestamp: Date.now(),
             suggestedAdjustments: {
-              // Dynamic adjustment based on signal quality
-              amplificationFactor: 2.2 + (0.9 * (1 - result.confidence)),
-              filterStrength: 0.2 + (0.2 * (1 - result.confidence))
+              // Dynamic adjustment based on signal quality for mejor visualización
+              amplificationFactor: 1.8 + (0.7 * (1 - result.confidence)),
+              filterStrength: 0.25 + (0.2 * (1 - result.confidence))
             }
           });
         }
@@ -260,15 +262,6 @@ export function useSignalProcessor() {
         processedResult.bpm = lastValidBpmRef.current > 0 ? lastValidBpmRef.current : 72;
         processedResult.confidence = 0.3; // Baja confianza para valores estimados
       }
-      
-      // Gráficos de diagnósticos mejorados
-      processedResult.diagnosticData = {
-        amplifiedValue: optimizedValue * 2.5, // Valor extra amplificado para visualización
-        timestamp: Date.now(),
-        signalQuality: result.confidence * 100,
-        thresholdValue: WEAK_SIGNAL_THRESHOLD * 1.2,
-        isPeakRealTime
-      };
       
       return processedResult;
     } catch (error) {
@@ -281,13 +274,6 @@ export function useSignalProcessor() {
         rrData: {
           intervals: [],
           lastPeakTime: null
-        },
-        diagnosticData: {
-          amplifiedValue: 0,
-          timestamp: Date.now(),
-          signalQuality: 0,
-          thresholdValue: 0,
-          isPeakRealTime: false
         }
       };
       return fallbackResult;
@@ -303,7 +289,7 @@ export function useSignalProcessor() {
     consecutiveWeakSignalsRef.current = 0;
     signalBufferRef.current = [];
     visualizationBufferRef.current = [];
-    amplificationFactorRef.current = 2.5;
+    amplificationFactorRef.current = 1.5;
     
     // Reset signal distributor
     if (signalDistributorRef.current) {
@@ -320,7 +306,7 @@ export function useSignalProcessor() {
     consecutiveWeakSignalsRef,
     MAX_CONSECUTIVE_WEAK_SIGNALS,
     signalDistributor: signalDistributorRef.current,
-    // Propiedades para visualización mejorada
+    // Nuevas propiedades para mejorar visualización
     visualizationBuffer: visualizationBufferRef.current,
     amplificationFactor: amplificationFactorRef
   };

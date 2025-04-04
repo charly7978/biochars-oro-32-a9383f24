@@ -68,7 +68,8 @@ export function handlePeakDetection(
   result: HeartBeatResult,
   lastPeakTimeRef: React.MutableRefObject<number | null>,
   requestImmediateBeep: (value: number) => boolean,
-  isMonitoringRef: React.MutableRefObject<boolean>
+  isMonitoringRef: React.MutableRefObject<boolean>,
+  signalValue: number
 ): void {
   if (result.isPeak) {
     const now = Date.now();
@@ -78,8 +79,8 @@ export function handlePeakDetection(
     
     // Request beep with amplified value for better audio response
     if (isMonitoringRef.current) {
-      // Solicitar beep sin amplificar el valor (corregido)
-      requestImmediateBeep(1.0);
+      // Amplificar la señal para mejor respuesta de audio
+      requestImmediateBeep(signalValue * 1.5);
     }
   }
 }
