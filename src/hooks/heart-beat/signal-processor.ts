@@ -129,11 +129,16 @@ export function useSignalProcessor() {
         
         // Get cardiac channel for RR intervals
         const cardiacChannel = signalDistributorRef.current.getChannel(VitalSignType.CARDIAC);
-        if (cardiacChannel) {
+        if (cardiacChannel && 'getRRIntervals' in cardiacChannel) {
           // Update RR intervals reference
-          const intervals = cardiacChannel.getRRIntervals();
+          const intervals = (cardiacChannel as any).getRRIntervals();
           if (intervals.length > 0) {
             lastRRIntervalsRef.current = [...intervals];
+          }
+          
+          // Update arrhythmia status
+          if ('isArrhythmia' in cardiacChannel) {
+            currentBeatIsArrhythmiaRef.current = (cardiacChannel as any).isArrhythmia();
           }
         }
       }
@@ -175,6 +180,7 @@ export function useSignalProcessor() {
             channelId: cardiacChannel.getId(),
             success: true,
             signalQuality: result.confidence,
+            timestamp: Date.now(),
             suggestedAdjustments: {
               // Dynamic adjustment based on signal quality
               amplificationFactor: 1.5 + (0.5 * (1 - result.confidence)),

@@ -1,311 +1,372 @@
-
 /**
  * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
+ * 
+ * CardiacChannel
+ * Specialized signal channel optimized for cardiac signal processing
+ * - Heart rate detection
+ * - Arrhythmia analysis
+ * - Beat quality assessment
  */
 
-import { VitalSignType, ChannelFeedback } from '../../../types/signal';
-import { SpecializedChannel, ChannelConfig } from './SpecializedChannel';
+import { SpecializedChannel } from './SpecializedChannel';
+import { ChannelConfig, ChannelFeedback } from '../../../types/signal';
+import { TensorFlowMLProcessor } from '../../ml/TensorFlowMLProcessor';
 
 /**
- * Extended config for cardiac channel
- */
-interface CardiacChannelConfig extends ChannelConfig {
-  peakDetectionThreshold?: number;
-  adaptiveFilterStrength?: number;
-  mlEnabled?: boolean;
-}
-
-/**
- * Canal especializado para señales cardíacas
- * Versión mejorada con detección de picos y análisis de arritmias
+ * CardiacChannel
+ * Specialized channel optimized for cardiac signal processing
  */
 export class CardiacChannel extends SpecializedChannel {
-  // Signal processing parameters
-  private amplificationFactor: number = 2.0;
-  private filterStrength: number = 0.3;
-  private peakDetectionThreshold: number = 0.6;
-  private adaptiveFilterStrength: number = 0.5;
-  private mlEnabled: boolean = true;
-  
-  // Peak detection state
-  private lastPeakTime: number | null = null;
-  private peakToPeakIntervals: number[] = [];
+  // Keep RR intervals for arrhythmia analysis
+  private rrIntervals: number[] = [];
+  private lastPeakTime: number = 0;
+  private peakValues: number[] = [];
+  private heartRateEstimate: number = 0;
   private latestPeakDetected: boolean = false;
-  private peakBuffer: number[] = [];
+  private peakThreshold: number = 0.2;
   
-  // Adaptive parameters
-  private signalBaseline: number = 0;
-  private signalAmplitude: number = 0;
-  private adaptiveThreshold: number = 0.6;
-
-  // ML model state placeholder
-  private mlModelLoaded: boolean = false;
-  private confidenceScores: number[] = [];
-
-  constructor(config?: CardiacChannelConfig) {
-    super(VitalSignType.CARDIAC, config);
-    
-    // Aplicar configuración específica
-    if (config) {
-      this.amplificationFactor = config.initialAmplification || this.amplificationFactor;
-      this.filterStrength = config.initialFilterStrength || this.filterStrength;
-      this.peakDetectionThreshold = config.peakDetectionThreshold || this.peakDetectionThreshold;
-      this.adaptiveFilterStrength = config.adaptiveFilterStrength || this.adaptiveFilterStrength;
-      this.mlEnabled = config.mlEnabled !== undefined ? config.mlEnabled : this.mlEnabled;
-    }
-    
-    // Initialize ML model if enabled
-    if (this.mlEnabled) {
-      this.initializeMLModel();
-    }
-  }
-
+  // ML processor for enhanced signal analysis
+  private mlProcessor: TensorFlowMLProcessor | null = null;
+  private mlEnabled: boolean = false;
+  
+  // Arrhythmia detection
+  private isCurrentBeatArrhythmia: boolean = false;
+  private arrhythmiaCounter: number = 0;
+  
   /**
-   * Implementación de optimización específica para señales cardíacas
-   * Esta función es llamada por el método processValue de la clase base
+   * Constructor
+   * @param config Channel configuration
    */
-  protected override applyChannelSpecificOptimization(value: number): number {
-    // Store the raw value in the peak buffer for analysis
-    this.peakBuffer.push(value);
-    if (this.peakBuffer.length > 50) {
-      this.peakBuffer.shift();
+  constructor(config: ChannelConfig) {
+    super('cardiac-channel', config);
+    
+    // Initialize ML processor if available
+    try {
+      this.mlProcessor = new TensorFlowMLProcessor();
+      this.mlEnabled = true;
+      console.log("CardiacChannel: ML processor initialized");
+    } catch (e) {
+      console.warn("CardiacChannel: ML processor not available", e);
+      this.mlEnabled = false;
     }
     
-    // Update signal baseline with adaptive filter
-    this.updateSignalBaseline(value);
+    // Set cardiac-specific configuration
+    this.setFrequencyRange(0.5, 5.0); // Target heart rate range (30 - 300 bpm)
     
-    // Bandpass filter for cardiac signal (0.5Hz - 4Hz typical for PPG cardiac)
-    const filteredValue = this.applyBandPassFilter(value);
-    
-    // Amplify the cardiac component
-    const amplifiedValue = filteredValue * this.amplificationFactor;
-    
-    // Reset peak detected flag
-    this.latestPeakDetected = false;
-    
-    // Detect peaks with adaptive threshold
-    this.detectPeakWithAdaptiveThreshold(amplifiedValue);
-    
-    // Apply ML model enhancement if enabled
-    const finalValue = this.mlEnabled && this.mlModelLoaded 
-      ? this.enhanceWithMLModel(amplifiedValue) 
-      : amplifiedValue;
-    
-    return finalValue;
+    console.log("CardiacChannel: Initialized with specialized cardiac parameters");
   }
   
   /**
-   * Update signal baseline with adaptive filtering
+   * Process a single signal value
+   * @param value Signal value
+   * @returns Processed value
    */
-  private updateSignalBaseline(value: number): void {
-    if (this.recentValues.length < 3) {
-      this.signalBaseline = value;
+  public processValue(value: number): number {
+    // Apply base processing from parent class
+    const processedValue = super.processValue(value);
+    
+    // Enhanced cardiac processing
+    const enhancedValue = this.enhanceCardiacSignal(processedValue);
+    
+    // ML-enhanced signal if available
+    let mlEnhancedValue = enhancedValue;
+    if (this.mlEnabled && this.mlProcessor) {
+      mlEnhancedValue = this.mlProcessor.processSample(enhancedValue).enhancedValue;
+    }
+    
+    // Detect peak
+    const currentTime = Date.now();
+    const isPeak = this.detectPeak(mlEnhancedValue);
+    
+    // Update latest peak detected flag
+    this.latestPeakDetected = isPeak;
+    
+    // Process peak for RR intervals if detected
+    if (isPeak) {
+      // Store peak value
+      this.peakValues.push(mlEnhancedValue);
+      if (this.peakValues.length > 10) {
+        this.peakValues.shift();
+      }
+      
+      // Adapt peak threshold based on recent peaks
+      this.adaptPeakThreshold();
+      
+      // Calculate RR interval and update list
+      if (this.lastPeakTime > 0) {
+        const rrInterval = currentTime - this.lastPeakTime;
+        
+        // Only consider reasonable RR intervals (250ms to 2000ms)
+        // Equivalent to HR 30-240 bpm
+        if (rrInterval >= 250 && rrInterval <= 2000) {
+          this.rrIntervals.push(rrInterval);
+          
+          // Keep a limited buffer of RR intervals
+          if (this.rrIntervals.length > 10) {
+            this.rrIntervals.shift();
+          }
+          
+          // Update heart rate estimate
+          this.updateHeartRateEstimate();
+          
+          // Check for arrhythmia
+          this.isCurrentBeatArrhythmia = this.detectArrhythmia();
+          
+          // Emit cardiac peak event with appropriate data
+          this.emitCardiacPeakEvent();
+        }
+      }
+      
+      // Update last peak time
+      this.lastPeakTime = currentTime;
+    }
+    
+    return mlEnhancedValue;
+  }
+  
+  /**
+   * Enhance the signal for cardiac processing
+   * @param value Base processed value
+   * @returns Enhanced value for cardiac analysis
+   */
+  private enhanceCardiacSignal(value: number): number {
+    // Apply specific cardiac signal enhancements
+    // - Emphasize peaks
+    // - Reduce noise
+    
+    // Simple enhancement: emphasize peaks a bit more
+    return value * 1.1;
+  }
+  
+  /**
+   * Detect peaks in the signal
+   * @param value Current signal value
+   * @returns True if peak detected
+   */
+  private detectPeak(value: number): boolean {
+    // Basic algorithm: adaptive threshold-based peak detection
+    
+    // Need at least some buffer to detect peaks
+    if (this.buffer.length < 5) {
+      return false;
+    }
+    
+    // Get the last few samples
+    const recentValues = this.buffer.slice(-5);
+    
+    // Current value is the middle one (to avoid edge effects)
+    const currentValue = recentValues[2];
+    
+    // Check if middle value is bigger than neighbors and above threshold
+    return (
+      value > this.peakThreshold &&
+      currentValue > recentValues[0] &&
+      currentValue > recentValues[1] &&
+      currentValue > recentValues[3] &&
+      currentValue > recentValues[4]
+    );
+  }
+  
+  /**
+   * Adapt peak detection threshold based on recent signal
+   */
+  private adaptPeakThreshold(): void {
+    if (this.peakValues.length < 3) {
       return;
     }
     
-    // Adaptive baseline tracking
-    this.signalBaseline = this.signalBaseline * (1 - this.adaptiveFilterStrength) + 
-                         value * this.adaptiveFilterStrength;
+    // Calculate average peak value from recent peaks
+    const avgPeak = this.peakValues.reduce((sum, val) => sum + val, 0) / this.peakValues.length;
     
-    // Update signal amplitude estimate
-    if (this.recentValues.length >= 10) {
-      const min = Math.min(...this.recentValues.slice(-10));
-      const max = Math.max(...this.recentValues.slice(-10));
-      this.signalAmplitude = max - min;
-      
-      // Update adaptive threshold based on amplitude
-      this.adaptiveThreshold = this.peakDetectionThreshold * 
-        (0.4 + (Math.min(this.signalAmplitude, 1) * 0.6));
+    // Set threshold to 60% of average peak value
+    this.peakThreshold = avgPeak * 0.6;
+    
+    // Ensure reasonable bounds
+    this.peakThreshold = Math.max(0.1, Math.min(0.5, this.peakThreshold));
+  }
+  
+  /**
+   * Update heart rate estimate based on RR intervals
+   */
+  private updateHeartRateEstimate(): void {
+    if (this.rrIntervals.length < 2) {
+      return;
     }
+    
+    // Average the last few RR intervals
+    const avgRR = this.rrIntervals.reduce((sum, val) => sum + val, 0) / this.rrIntervals.length;
+    
+    // Convert to BPM: 60,000 ms / RR interval in ms
+    this.heartRateEstimate = Math.round(60000 / avgRR);
+    
+    // Ensure physiological range
+    this.heartRateEstimate = Math.max(30, Math.min(220, this.heartRateEstimate));
   }
   
   /**
-   * Detect peaks using adaptive threshold
+   * Detect arrhythmia based on RR interval variability
+   * @returns True if arrhythmia detected
    */
-  private detectPeakWithAdaptiveThreshold(value: number): void {
-    if (this.recentValues.length < 5) return;
-    
-    const now = Date.now();
-    
-    // Get recent values
-    const recent = this.recentValues.slice(-5);
-    
-    // Simple peak detection (more advanced algorithm would be used in real implementation)
-    const prev2 = recent[recent.length - 3];
-    const prev1 = recent[recent.length - 2];
-    
-    // Check if we just passed a peak at prev1
-    if (value < prev1 && prev1 > prev2 && prev1 > this.adaptiveThreshold) {
-      // Physiological limit check - don't detect peaks too close together
-      if (this.lastPeakTime === null || now - this.lastPeakTime > 300) {
-        // Process peak
-        if (this.lastPeakTime !== null) {
-          const interval = now - this.lastPeakTime;
-          this.peakToPeakIntervals.push(interval);
-          
-          // Keep only recent intervals
-          if (this.peakToPeakIntervals.length > 10) {
-            this.peakToPeakIntervals.shift();
-          }
-        }
-        
-        this.lastPeakTime = now;
-        this.latestPeakDetected = true;
-        
-        // Update confidence based on peak quality
-        const peakQuality = (prev1 - this.adaptiveThreshold) / this.adaptiveThreshold;
-        this.confidenceScores.push(Math.min(1, peakQuality));
-        if (this.confidenceScores.length > 10) {
-          this.confidenceScores.shift();
-        }
-        
-        // Update channel quality based on peak detection confidence
-        if (this.confidenceScores.length > 0) {
-          const avgConfidence = this.confidenceScores.reduce((sum, score) => sum + score, 0) / 
-                             this.confidenceScores.length;
-          this.quality = avgConfidence;
-        }
-        
-        console.log("CardiacChannel: Peak detected", {
-          interval: this.lastPeakTime !== null ? now - this.lastPeakTime : 0,
-          peakQuality,
-          adaptiveThreshold: this.adaptiveThreshold,
-          estimatedHR: this.getEstimatedHeartRate()
-        });
-      }
+  private detectArrhythmia(): boolean {
+    if (this.rrIntervals.length < 3) {
+      return false;
     }
+    
+    // Advanced arrhythmia detection (based on HRV metrics)
+    // 1. Calculate RR interval variability
+    const avgRR = this.rrIntervals.reduce((sum, val) => sum + val, 0) / this.rrIntervals.length;
+    const rrVariability = this.rrIntervals.map(rr => Math.abs(rr - avgRR) / avgRR);
+    const maxVariability = Math.max(...rrVariability);
+    
+    // 2. RMSSD - Root Mean Square of Successive Differences
+    let rmssd = 0;
+    for (let i = 1; i < this.rrIntervals.length; i++) {
+      rmssd += Math.pow(this.rrIntervals[i] - this.rrIntervals[i-1], 2);
+    }
+    rmssd = Math.sqrt(rmssd / (this.rrIntervals.length - 1));
+    
+    // 3. Apply rule-based detection with adaptive thresholds
+    let isArrhythmia = false;
+    
+    // High heart rate (>100 bpm) - less variability expected
+    if (this.heartRateEstimate > 100) {
+      isArrhythmia = maxVariability > 0.25;
+    } 
+    // Low heart rate (<50 bpm) - more variability expected
+    else if (this.heartRateEstimate < 50) {
+      isArrhythmia = maxVariability > 0.3;
+    }
+    // Normal heart rate - moderate variability threshold
+    else {
+      isArrhythmia = maxVariability > 0.2 || (rmssd > 50 && maxVariability > 0.15);
+    }
+    
+    // Update arrhythmia counter if arrhythmia detected
+    if (isArrhythmia) {
+      this.arrhythmiaCounter++;
+    }
+    
+    return isArrhythmia;
   }
   
   /**
-   * Enhance signal with ML model
+   * Emit cardiac peak event for audio system
    */
-  private enhanceWithMLModel(value: number): number {
-    // Placeholder for ML model enhancement
-    // Real implementation would use TensorFlow.js
-    return value;
-  }
-  
-  /**
-   * Initialize ML model for signal enhancement
-   */
-  private initializeMLModel(): void {
-    // Placeholder for ML model initialization
-    // In a real implementation, this would load a TensorFlow.js model
-    console.log("CardiacChannel: Initializing ML model");
-    
-    // Simulate model loading
-    setTimeout(() => {
-      this.mlModelLoaded = true;
-      console.log("CardiacChannel: ML model loaded");
-    }, 500);
-  }
-  
-  /**
-   * Aplica un filtro pasa-banda simple
-   */
-  private applyBandPassFilter(value: number): number {
-    if (this.recentValues.length < 5) return value;
-    
-    // High-pass component (removes DC offset)
-    const highPassValue = value - this.signalBaseline;
-    
-    // Low-pass component (smooth signal)
-    const recentForAvg = this.recentValues.slice(-5);
-    const avgValue = recentForAvg.reduce((sum, val) => sum + val, 0) / recentForAvg.length;
-    
-    // Combined bandpass
-    return highPassValue * (1 - this.filterStrength) + avgValue * this.filterStrength;
-  }
-  
-  /**
-   * Aplica retroalimentación para ajustar parámetros
-   */
-  public override applyFeedback(feedback: ChannelFeedback): void {
-    super.applyFeedback(feedback);
-    
-    // Ajustes específicos para canal cardíaco
-    if (feedback.suggestedAdjustments) {
-      if (feedback.suggestedAdjustments.amplificationFactor !== undefined) {
-        this.amplificationFactor = feedback.suggestedAdjustments.amplificationFactor;
+  private emitCardiacPeakEvent(): void {
+    // Create custom event with cardiac data
+    const event = new CustomEvent('cardiac-peak-detected', {
+      detail: {
+        timestamp: Date.now(),
+        heartRate: this.heartRateEstimate,
+        isArrhythmia: this.isCurrentBeatArrhythmia,
+        arrhythmiaCounter: this.arrhythmiaCounter,
+        source: 'cardiac-channel'
       }
-      
-      if (feedback.suggestedAdjustments.filterStrength !== undefined) {
-        this.filterStrength = feedback.suggestedAdjustments.filterStrength;
-      }
-      
-      // Additional cardiac-specific adjustments
-      if (feedback.suggestedAdjustments.peakDetectionThreshold !== undefined) {
-        this.peakDetectionThreshold = feedback.suggestedAdjustments.peakDetectionThreshold;
+    });
+    
+    // Dispatch event for listeners (AudioManager)
+    window.dispatchEvent(event);
+  }
+  
+  /**
+   * Apply feedback to adjust channel parameters
+   * @param feedback Feedback from cardiac algorithm
+   */
+  public applyFeedback(feedback: ChannelFeedback): void {
+    // Add timestamp if not present
+    const timestampedFeedback = {
+      ...feedback,
+      timestamp: feedback.timestamp || Date.now()
+    };
+    
+    // Apply base feedback handling from parent class
+    super.applyFeedback(timestampedFeedback);
+    
+    // Apply cardiac-specific feedback
+    if (timestampedFeedback.suggestedAdjustments) {
+      if (timestampedFeedback.suggestedAdjustments.peakDetectionThreshold !== undefined) {
+        // Override adaptive threshold with suggested value
+        this.peakThreshold = timestampedFeedback.suggestedAdjustments.peakDetectionThreshold;
       }
     }
     
-    // Apply more complex ML-based adjustments if available
-    if (feedback.mlFeedback && this.mlEnabled) {
-      console.log("CardiacChannel: Received ML feedback", feedback.mlFeedback);
-      // In a real implementation, this would update ML model parameters
+    // Apply ML feedback if available
+    if (timestampedFeedback.mlFeedback && this.mlProcessor) {
+      // Forward feedback to ML processor
+      this.mlProcessor.applyFeedback(timestampedFeedback.mlFeedback);
     }
+    
+    console.log("CardiacChannel: Applied feedback", {
+      signalQuality: timestampedFeedback.signalQuality,
+      success: timestampedFeedback.success,
+      adaptedThreshold: this.peakThreshold
+    });
   }
   
   /**
-   * Check if a peak was detected in the most recent processing
+   * Get the most recent RR intervals
+   * @returns Array of RR intervals in milliseconds
+   */
+  public getRRIntervals(): number[] {
+    return [...this.rrIntervals];
+  }
+  
+  /**
+   * Check if latest sample was a peak
+   * @returns True if latest sample was a peak
    */
   public isLatestPeakDetected(): boolean {
     return this.latestPeakDetected;
   }
   
   /**
-   * Obtiene intervalos RR actuales
-   */
-  public getRRIntervals(): number[] {
-    return [...this.peakToPeakIntervals];
-  }
-  
-  /**
-   * Calcula ritmo cardíaco estimado
+   * Get estimated heart rate
+   * @returns Heart rate in BPM
    */
   public getEstimatedHeartRate(): number {
-    if (this.peakToPeakIntervals.length < 3) return 0;
-    
-    // Calculate average interval
-    const avgInterval = this.peakToPeakIntervals.reduce((sum, i) => sum + i, 0) / 
-                      this.peakToPeakIntervals.length;
-    
-    // Convert to BPM: 60000 ms / avg RR interval
-    return avgInterval > 0 ? Math.round(60000 / avgInterval) : 0;
+    return this.heartRateEstimate;
   }
   
   /**
-   * Get signal quality metrics
+   * Get arrhythmia status
+   * @returns True if current beat is arrhythmic
    */
-  public getSignalMetrics(): {
-    baseline: number;
-    amplitude: number;
-    adaptiveThreshold: number;
-    confidenceAverage: number;
-  } {
-    const avgConfidence = this.confidenceScores.length > 0 
-      ? this.confidenceScores.reduce((sum, score) => sum + score, 0) / this.confidenceScores.length
-      : 0;
-      
-    return {
-      baseline: this.signalBaseline,
-      amplitude: this.signalAmplitude,
-      adaptiveThreshold: this.adaptiveThreshold,
-      confidenceAverage: avgConfidence
-    };
+  public isArrhythmia(): boolean {
+    return this.isCurrentBeatArrhythmia;
   }
   
   /**
-   * Reinicia el canal
+   * Get arrhythmia counter
+   * @returns Number of arrhythmias detected
    */
-  public override reset(): void {
+  public getArrhythmiaCounter(): number {
+    return this.arrhythmiaCounter;
+  }
+  
+  /**
+   * Reset channel
+   */
+  public reset(): void {
     super.reset();
-    this.lastPeakTime = null;
-    this.peakToPeakIntervals = [];
+    this.rrIntervals = [];
+    this.lastPeakTime = 0;
+    this.peakValues = [];
+    this.heartRateEstimate = 0;
     this.latestPeakDetected = false;
-    this.peakBuffer = [];
-    this.signalBaseline = 0;
-    this.signalAmplitude = 0;
-    this.confidenceScores = [];
+    this.isCurrentBeatArrhythmia = false;
+    
+    // Don't reset arrhythmia counter on normal reset
+    // Users typically want to track this across measurement sessions
+    
+    console.log("CardiacChannel: Reset complete");
+  }
+  
+  /**
+   * Full reset (including arrhythmia counter)
+   */
+  public fullReset(): void {
+    this.reset();
+    this.arrhythmiaCounter = 0;
+    console.log("CardiacChannel: Full reset complete (including arrhythmia counter)");
   }
 }
