@@ -15,24 +15,20 @@ export {
   shouldProcessMeasurement, 
   createWeakSignalResult,
   resetSignalQualityState,
-  isFingerDetected,
-  getSignalQualityState
+  isFingerDetected
 } from './signal-quality';
 
 export { 
   handlePeakDetection,
   detectArrhythmia,
   calculateArrhythmiaRisk,
-  getArrhythmiaStatusMessage,
-  getDiagnosticsData,
-  clearDiagnosticsData
+  getArrhythmiaStatusMessage
 } from './peak-detection';
 
 export { 
   updateLastValidBpm, 
   processLowConfidenceResult,
-  enhanceDiagnosticData,
-  dispatchArrhythmiaVisualizationEvent
+  enhanceDiagnosticData
 } from './result-processor';
 
 export {
