@@ -1,40 +1,39 @@
 
 import React from 'react';
-import { PlayCircle, StopCircle, RotateCcw } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { Button } from './ui/button';
 
 interface MonitorButtonProps {
   isMonitoring: boolean;
   onToggle: () => void;
-  variant: 'monitor' | 'reset';
+  variant?: "monitor" | "reset";
 }
 
-const MonitorButton: React.FC<MonitorButtonProps> = ({ isMonitoring, onToggle, variant }) => {
-  const isMonitorButton = variant === 'monitor';
+const MonitorButton: React.FC<MonitorButtonProps> = ({ 
+  isMonitoring, 
+  onToggle, 
+  variant = "monitor" 
+}) => {
+  const baseClass = "w-full animation-smooth";
   
-  // Se cambia el color del botón de monitoreo para mejor concordancia semántica:
-  // - Verde para iniciar (acción positiva)
-  // - Rojo para detener (acción de parada)
-  // - Gris para reset (acción neutral)
-  const bgColor = isMonitorButton 
-    ? isMonitoring ? 'bg-red-600 hover:bg-red-700' : 'bg-green-600 hover:bg-green-700'
-    : 'bg-gray-700 hover:bg-gray-800';
+  // Get the button variant accepted by shadcn/ui Button component
+  const getButtonVariant = () => {
+    if (variant === "reset") return "secondary";
+    return isMonitoring ? "destructive" : "default"; // Using 'default' instead of 'primary'
+  };
   
-  const buttonText = isMonitorButton
-    ? isMonitoring ? 'DETENER' : 'INICIAR'
-    : 'RESET';
-  
-  const Icon = isMonitorButton
-    ? isMonitoring ? StopCircle : PlayCircle
-    : RotateCcw;
-
   return (
-    <button 
-      className={`w-full ${bgColor} text-white py-3 rounded-lg text-lg font-bold flex justify-center items-center gap-2`}
-      onClick={onToggle}
+    <Button 
+      onClick={onToggle} 
+      variant={getButtonVariant()}
+      className={cn(
+        baseClass,
+        isMonitoring && variant === "monitor" && "bg-[var(--medical-danger-direct)] hover:bg-[var(--medical-danger-direct)]/90",
+        !isMonitoring && variant === "monitor" && "bg-[var(--medical-info-direct)] hover:bg-[var(--medical-info-direct)]/90"
+      )}
     >
-      <Icon className="w-5 h-5" />
-      {buttonText}
-    </button>
+      {variant === "monitor" ? (isMonitoring ? 'Detener' : 'Iniciar') : 'Reset'}
+    </Button>
   );
 };
 
