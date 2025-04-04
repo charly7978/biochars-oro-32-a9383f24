@@ -28,13 +28,16 @@ export const useHeartBeatProcessor = (): UseHeartBeatReturn => {
     cleanup: cleanupBeepProcessor 
   } = useBeepProcessor();
   
-  // Fix: Initialize lastRRIntervalsRef and currentBeatIsArrhythmiaRef before using them
+  // Get all necessary refs from useArrhythmiaDetector
   const {
     processRRIntervals,
     reset: resetArrhythmiaDetector,
     getArrhythmiaState,
     lastRRIntervalsRef,
-    currentBeatIsArrhythmiaRef
+    lastIsArrhythmiaRef,
+    currentBeatIsArrhythmiaRef,
+    heartRateVariabilityRef,
+    stabilityCounterRef
   } = useArrhythmiaDetector();
   
   const {
@@ -117,8 +120,7 @@ export const useHeartBeatProcessor = (): UseHeartBeatReturn => {
       };
     }
 
-    // Fix: Ensure lastRRIntervalsRef and currentBeatIsArrhythmiaRef are initialized
-    // by using empty arrays and false as defaults if they're undefined
+    // Ensure these refs exist before accessing them
     const lastRRIntervals = lastRRIntervalsRef?.current || [];
     const currentBeatIsArrhythmia = currentBeatIsArrhythmiaRef?.current || false;
 

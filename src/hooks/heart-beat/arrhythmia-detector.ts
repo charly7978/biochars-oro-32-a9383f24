@@ -1,25 +1,10 @@
-
 /**
  * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
  */
 
 import { useCallback, useRef, useEffect } from 'react';
 import { calculateRMSSD, calculateRRVariation } from '../../modules/vital-signs/arrhythmia/calculations';
-import { ArrhythmiaState } from '../vital-signs/types';
-import { RRAnalysisResult } from './arrhythmia/types';
-
-interface UseArrhythmiaDetectorReturn {
-  processRRIntervals: (intervals: number[]) => boolean;
-  reset: () => void;
-  getArrhythmiaState: () => ArrhythmiaState;
-  
-  // Additional refs needed by useHeartBeatProcessor
-  heartRateVariabilityRef: React.MutableRefObject<number[]>;
-  stabilityCounterRef: React.MutableRefObject<number>;
-  lastRRIntervalsRef: React.MutableRefObject<number[]>;
-  lastIsArrhythmiaRef: React.MutableRefObject<boolean>;
-  currentBeatIsArrhythmiaRef: React.MutableRefObject<boolean>;
-}
+import { ArrhythmiaState, UseArrhythmiaDetectorReturn } from '../heart-beat/types';
 
 /**
  * Hook for arrhythmia detection based on real RR interval data
