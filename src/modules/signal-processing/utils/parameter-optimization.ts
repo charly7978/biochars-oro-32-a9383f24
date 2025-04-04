@@ -1,11 +1,10 @@
-
 /**
  * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
  * 
  * Implementación del optimizador de parámetros de señal
  * Utiliza optimización bayesiana para ajustar parámetros de procesamiento
  */
-import { BayesianOptimizer, OptimizationParameter } from './bayesian-optimization';
+import { BayesianOptimizer, BayesianOptimizerConfig } from './bayesian-optimization';
 
 /**
  * Estados del optimizador durante el ciclo de optimización
@@ -81,14 +80,16 @@ export class SignalParameterOptimizer {
    * Constructor del optimizador
    * @param parameters Lista de parámetros a optimizar
    */
-  constructor(parameters: OptimizationParameter[]) {
+  constructor(parameters: BayesianOptimizerConfig) {
     this.optimizer = new BayesianOptimizer(parameters);
     
     // Inicializar parámetros actuales con valores iniciales
-    parameters.forEach(param => {
-      this.currentParams[param.name] = param.initialValue !== undefined ? 
-        param.initialValue : param.min;
-    });
+    if (parameters.parameters) {
+      parameters.parameters.forEach(param => {
+        this.currentParams[param.name] = param.initialValue !== undefined ? 
+          param.initialValue : param.default;
+      });
+    }
   }
   
   /**
@@ -322,7 +323,7 @@ export class SignalParameterOptimizer {
  * Crea un nuevo optimizador de parámetros de señal
  */
 export function createSignalParameterOptimizer(
-  parameters: OptimizationParameter[]
+  parameters: BayesianOptimizerConfig
 ): SignalParameterOptimizer {
   return new SignalParameterOptimizer(parameters);
 }

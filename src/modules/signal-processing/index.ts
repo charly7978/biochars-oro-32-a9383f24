@@ -15,7 +15,7 @@ export * from './heartbeat-processor';
 
 // Exportar utilidades adaptativas 
 export { getAdaptivePredictor } from './utils/adaptive-predictor';
-export { unifiedFingerDetector } from './utils/unified-finger-detector';
+export { unifiedFingerDetector, resetFingerDetector } from './utils/unified-finger-detector';
 
 // Exportar optimizador bayesiano
 export { 
@@ -25,8 +25,9 @@ export {
   createHeartbeatOptimizer,
   DEFAULT_PPG_PARAMETERS,
   DEFAULT_HEARTBEAT_PARAMETERS,
+  OptimizationParameter,
   // Renombramos DataPoint para evitar conflicto
-  DataPoint as BayesianDataPoint
+  BayesianDataPoint
 } from './utils/bayesian-optimization';
 
 // Exportar sistema adaptativo

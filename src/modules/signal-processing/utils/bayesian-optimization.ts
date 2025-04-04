@@ -5,8 +5,22 @@
  * Optimizador bayesiano unificado para procesamiento adaptativo de señales
  * Implementa algoritmos de optimización bayesiana para ajuste automático de parámetros
  */
-import { BayesianDataPoint, OptimizationParameter } from '../types';
+import { BayesianDataPoint } from '../types';
 import { logError, ErrorLevel } from '@/utils/debugUtils';
+
+/**
+ * Parámetro de optimización
+ */
+export interface OptimizationParameter {
+  name: string;
+  min: number;
+  max: number;
+  step?: number;
+  default: number;
+  initialValue?: number;
+  description?: string;
+  weight?: number;
+}
 
 /**
  * Configuración del optimizador bayesiano

@@ -1,4 +1,3 @@
-
 /**
  * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
  * 
@@ -7,13 +6,20 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { 
   SignalParameterOptimizer, 
-  OptimizationState, 
-  OptimizationMetrics,
-  createSignalParameterOptimizer 
+  OptimizationState
 } from '@/modules/signal-processing/utils/parameter-optimization';
-import { OptimizationParameter } from '@/modules/signal-processing/utils/bayesian-optimization';
+import { BayesianOptimizerConfig } from '@/modules/signal-processing/utils/bayesian-optimization';
 import { useErrorPrevention } from '@/utils/errorPrevention/integration';
 import { logError, ErrorLevel } from '@/utils/debugUtils';
+
+export interface OptimizationMetrics {
+  currentScore: number;
+  bestScore: number;
+  improvementPercentage: number;
+  optimizationCycles: number;
+  lastOptimizationTime: number | null;
+  paramsHistory: any[];
+}
 
 export interface SignalOptimizerConfig {
   // Función para calcular la puntuación de calidad
@@ -23,7 +29,7 @@ export interface SignalOptimizerConfig {
   applyFunction: (params: Record<string, number>) => void;
   
   // Parámetros a optimizar
-  parameters: OptimizationParameter[];
+  parameters: BayesianOptimizerConfig;
   
   // Configuración avanzada
   observationsNeeded?: number;

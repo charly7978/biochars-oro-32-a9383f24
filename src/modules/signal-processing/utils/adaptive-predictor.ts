@@ -1,54 +1,120 @@
-
 /**
  * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
  * 
- * Predictor adaptativo para señales biométricas
- * Implementa algoritmos de predicción para mejorar la calidad de señal
+ * Predictor adaptativo para señales PPG y cardíacas
  */
-import { PredictionResult, SignalProcessingOptions } from '../types';
 import { CircularBuffer } from './circular-buffer';
 import { logError, ErrorLevel } from '@/utils/debugUtils';
 
+// Export type for PredictionResult
+export type PredictionResult = {
+  predictedValue: number;
+  confidence: number;
+  predictedTimestamp?: number;
+};
+
 /**
- * Interfaz del predictor adaptativo
+ * Configuración del predictor adaptativo
  */
-export interface AdaptivePredictor {
-  update(timestamp: number, value: number, confidence: number): void;
-  predict(timestamp: number): PredictionResult;
-  reset(): void;
-  configure(options: Partial<SignalProcessingOptions>): void;
-  getState(): any;
+interface AdaptivePredictorConfig {
+  learningRate?: number; // Tasa de aprendizaje (0-1)
+  momentum?: number;     // Factor de momentum (0-1)
+  noiseTolerance?: number; // Tolerancia al ruido (0-1)
+  minObservations?: number; // Mínimo de observaciones para predecir
+  maxHistory?: number;    // Máximo de valores históricos a mantener
 }
 
 /**
- * Implementación predeterminada del predictor adaptativo
+ * Estado interno del predictor
  */
-class DefaultAdaptivePredictor implements AdaptivePredictor {
-  private valuesBuffer: CircularBuffer<{ timestamp: number; value: number; confidence: number }>;
-  private lastPrediction: PredictionResult | null = null;
-  private adaptationRate: number = 0.25;
-  private modelWeights: number[] = [0.5, 0.3, 0.15, 0.05];
-  private confidenceThreshold: number = 0.5;
+interface PredictorState {
+  lastValue: number;
+  lastTimestamp: number;
+  trend: number;
+  confidence: number;
+  history: { value: number; timestamp: number; }[];
+}
+
+/**
+ * Implementación de predictor adaptativo
+ */
+class AdaptivePredictor {
+  private config: Required<AdaptivePredictorConfig>;
+  private state: PredictorState;
+  private valueBuffer: CircularBuffer<number>;
   
-  constructor() {
-    this.valuesBuffer = new CircularBuffer(20, true, true);
+  /**
+   * Constructor del predictor
+   */
+  constructor(config?: AdaptivePredictorConfig) {
+    this.config = {
+      learningRate: config?.learningRate ?? 0.1,
+      momentum: config?.momentum ?? 0.8,
+      noiseTolerance: config?.noiseTolerance ?? 0.2,
+      minObservations: config?.minObservations ?? 5,
+      maxHistory: config?.maxHistory ?? 20
+    };
+    
+    this.state = {
+      lastValue: 0,
+      lastTimestamp: 0,
+      trend: 0,
+      confidence: 0.5,
+      history: []
+    };
+    
+    // Buffer circular para valores recientes
+    this.valueBuffer = new CircularBuffer<number>(this.config.maxHistory, true, true);
   }
   
   /**
-   * Actualiza el modelo con un nuevo valor observado
+   * Actualiza el predictor con un nuevo valor
+   * @param timestamp Marca de tiempo del valor
+   * @param value Valor a agregar
+   * @param stability Estabilidad de la señal (0-1)
    */
-  public update(timestamp: number, value: number, confidence: number): void {
+  public update(timestamp: number, value: number, stability: number = 0.75): void {
     try {
-      // Almacenar valor con timestamp y confianza
-      this.valuesBuffer.push({ timestamp, value, confidence });
+      // Agregar al buffer
+      this.valueBuffer.push(value);
       
-      // Actualizar pesos del modelo si la confianza es alta
-      if (confidence > this.confidenceThreshold && this.valuesBuffer.getSize() >= 4) {
-        this.updateModelWeights();
+      // Calcular diferencia con el valor anterior
+      const delta = value - this.state.lastValue;
+      const timeDelta = timestamp - this.state.lastTimestamp;
+      
+      // Estimar tendencia
+      let currentTrend = timeDelta > 0 ? delta / timeDelta : 0;
+      
+      // Aplicar filtro de ruido
+      if (Math.abs(currentTrend) < this.config.noiseTolerance) {
+        currentTrend = 0;
+      }
+      
+      // Combinar tendencia actual con la anterior usando momentum
+      this.state.trend = this.config.momentum * this.state.trend +
+                         (1 - this.config.momentum) * currentTrend;
+      
+      // Ajustar confianza basada en la estabilidad
+      this.state.confidence = this.config.learningRate * stability +
+                              (1 - this.config.learningRate) * this.state.confidence;
+      
+      // Limitar confianza a 0-1
+      this.state.confidence = Math.max(0, Math.min(1, this.state.confidence));
+      
+      // Actualizar estado
+      this.state.lastValue = value;
+      this.state.lastTimestamp = timestamp;
+      
+      // Agregar al historial
+      this.state.history.push({ value, timestamp });
+      
+      // Limitar tamaño del historial
+      if (this.state.history.length > this.config.maxHistory) {
+        this.state.history.shift();
       }
     } catch (error) {
       logError(
-        `Error actualizando predictor adaptativo: ${error}`,
+        `Error al actualizar predictor adaptativo: ${error}`,
         ErrorLevel.WARNING,
         "AdaptivePredictor"
       );
@@ -56,97 +122,48 @@ class DefaultAdaptivePredictor implements AdaptivePredictor {
   }
   
   /**
-   * Predice el valor para un timestamp dado
+   * Predice el siguiente valor
+   * @param timestamp Marca de tiempo para la predicción
    */
   public predict(timestamp: number): PredictionResult {
     try {
-      // Si no hay suficientes datos, no se puede predecir
-      if (this.valuesBuffer.getSize() < 2) {
-        const lastValue = this.valuesBuffer.getSize() > 0 
-          ? this.valuesBuffer.getLastN(1)[0].value 
-          : 0;
-          
+      // Verificar si hay suficientes observaciones
+      if (this.valueBuffer.getSize() < this.config.minObservations) {
         return {
-          predictedValue: lastValue,
-          confidence: 0.1
+          predictedValue: this.state.lastValue,
+          confidence: 0.2,
+          predictedTimestamp: timestamp
         };
       }
       
-      // Obtener valores recientes
-      const recentValues = this.valuesBuffer.getLastN(4);
+      // Estimar tiempo desde la última actualización
+      const timeSinceLastUpdate = timestamp - this.state.lastTimestamp;
       
-      // Calcular intervalos de tiempo para ajustar la predicción
-      const intervals: number[] = [];
-      for (let i = 1; i < recentValues.length; i++) {
-        intervals.push(recentValues[i].timestamp - recentValues[i-1].timestamp);
-      }
+      // Proyectar el valor basado en la tendencia
+      let predictedValue = this.state.lastValue + this.state.trend * timeSinceLastUpdate;
       
-      // Calcular intervalo promedio
-      const avgInterval = intervals.reduce((sum, interval) => sum + interval, 0) / 
-                         Math.max(1, intervals.length);
+      // Aplicar corrección basada en el promedio reciente
+      const avgRecentValue = this.valueBuffer.getAverage();
+      const blendFactor = Math.min(1, this.state.confidence * 0.5);
       
-      // Calcular tiempo transcurrido desde la última muestra
-      const mostRecent = recentValues[recentValues.length - 1];
-      const elapsed = timestamp - mostRecent.timestamp;
+      predictedValue = blendFactor * predictedValue +
+                       (1 - blendFactor) * avgRecentValue;
       
-      // Ajustar predicción según tiempo transcurrido
-      let timeWeight = Math.min(1, elapsed / (avgInterval * 2));
-      
-      // Modelo de predicción ponderado
-      let predictedValue = 0;
-      let totalWeight = 0;
-      
-      for (let i = 0; i < Math.min(this.modelWeights.length, recentValues.length); i++) {
-        const index = recentValues.length - 1 - i;
-        const weight = this.modelWeights[i] * recentValues[index].confidence;
-        predictedValue += recentValues[index].value * weight;
-        totalWeight += weight;
-      }
-      
-      // Normalizar por peso total
-      if (totalWeight > 0) {
-        predictedValue /= totalWeight;
-      } else {
-        predictedValue = recentValues[recentValues.length - 1].value;
-      }
-      
-      // Calcular confianza basada en consistencia y tiempo
-      const valueVariability = this.calculateVariability(recentValues.map(v => v.value));
-      const timeVariability = intervals.length > 1 ? 
-        this.calculateVariability(intervals) : 1;
-        
-      // Menor variabilidad = mayor confianza
-      const consistencyFactor = Math.max(0, 1 - valueVariability);
-      const timingFactor = Math.max(0, 1 - timeVariability);
-      const timeDecay = Math.max(0, 1 - timeWeight);
-      
-      // Combinar factores para confianza final
-      const confidence = 0.7 * consistencyFactor + 
-                        0.2 * timingFactor + 
-                        0.1 * timeDecay;
-      
-      // Guardar predicción
-      this.lastPrediction = {
+      return {
         predictedValue,
-        confidence,
+        confidence: this.state.confidence,
         predictedTimestamp: timestamp
       };
-      
-      return this.lastPrediction;
     } catch (error) {
       logError(
-        `Error en predicción adaptativa: ${error}`,
+        `Error al predecir valor: ${error}`,
         ErrorLevel.WARNING,
         "AdaptivePredictor"
       );
       
-      // Valor por defecto en caso de error
-      const fallbackValue = this.valuesBuffer.getSize() > 0 
-        ? this.valuesBuffer.getLastN(1)[0].value 
-        : 0;
-        
+      // Retornar fallback seguro
       return {
-        predictedValue: fallbackValue,
+        predictedValue: this.state.lastValue,
         confidence: 0.1,
         predictedTimestamp: timestamp
       };
@@ -154,155 +171,40 @@ class DefaultAdaptivePredictor implements AdaptivePredictor {
   }
   
   /**
-   * Actualiza los pesos del modelo basados en datos recientes
-   */
-  private updateModelWeights(): void {
-    // Solo actualizar si hay suficientes datos
-    if (this.valuesBuffer.getSize() < 4) return;
-    
-    try {
-      // Obtener valores recientes
-      const recentValues = this.valuesBuffer.getLastN(6);
-      
-      // Calcular error de predicción anterior si existe
-      if (this.lastPrediction && this.lastPrediction.predictedTimestamp) {
-        // Buscar valor real para el timestamp predicho
-        const predictedTime = this.lastPrediction.predictedTimestamp;
-        
-        // Encontrar muestras que rodean el tiempo de predicción
-        let lowerIndex = -1;
-        let upperIndex = -1;
-        
-        for (let i = 0; i < recentValues.length - 1; i++) {
-          if (recentValues[i].timestamp <= predictedTime && 
-              recentValues[i+1].timestamp >= predictedTime) {
-            lowerIndex = i;
-            upperIndex = i + 1;
-            break;
-          }
-        }
-        
-        // Si encontramos muestras que rodean la predicción
-        if (lowerIndex >= 0 && upperIndex >= 0) {
-          // Interpolar para obtener el valor estimado real
-          const lowerValue = recentValues[lowerIndex];
-          const upperValue = recentValues[upperIndex];
-          
-          const timeFraction = (predictedTime - lowerValue.timestamp) / 
-                              (upperValue.timestamp - lowerValue.timestamp);
-                              
-          const estimatedRealValue = lowerValue.value + 
-            timeFraction * (upperValue.value - lowerValue.value);
-          
-          // Calcular error
-          const predictionError = Math.abs(estimatedRealValue - this.lastPrediction.predictedValue);
-          
-          // Ajustar pesos según el error (menor error = menos ajuste)
-          const errorFactor = Math.min(1, predictionError / (Math.abs(estimatedRealValue) + 0.0001));
-          
-          // Aplicar adaptación
-          for (let i = 0; i < this.modelWeights.length; i++) {
-            // Los pesos más recientes se ajustan más cuando hay error
-            const weightIndex = this.modelWeights.length - 1 - i;
-            const adjustmentFactor = this.adaptationRate * errorFactor * (1 - i * 0.2);
-            
-            // Ajustar hacia mayor influencia de valores más recientes si el error es alto
-            if (i === 0) {
-              this.modelWeights[weightIndex] += adjustmentFactor * 0.1;
-            } else {
-              this.modelWeights[weightIndex] -= adjustmentFactor * 0.05;
-            }
-            
-            // Asegurar que el peso esté en rango [0.01, 0.7]
-            this.modelWeights[weightIndex] = Math.max(0.01, 
-              Math.min(0.7, this.modelWeights[weightIndex]));
-          }
-          
-          // Normalizar pesos
-          const totalWeight = this.modelWeights.reduce((sum, w) => sum + w, 0);
-          for (let i = 0; i < this.modelWeights.length; i++) {
-            this.modelWeights[i] /= totalWeight;
-          }
-        }
-      }
-    } catch (error) {
-      logError(
-        `Error actualizando pesos del modelo: ${error}`,
-        ErrorLevel.WARNING,
-        "AdaptivePredictor"
-      );
-    }
-  }
-  
-  /**
-   * Calcula la variabilidad normalizada de un conjunto de valores
-   */
-  private calculateVariability(values: number[]): number {
-    if (values.length < 2) return 0;
-    
-    const mean = values.reduce((sum, val) => sum + val, 0) / values.length;
-    
-    if (Math.abs(mean) < 0.0001) return 1; // Evitar división por cero
-    
-    const sumSquaredDiff = values.reduce((sum, val) => {
-      return sum + Math.pow(val - mean, 2);
-    }, 0);
-    
-    // Coeficiente de variación normalizado a [0,1]
-    const cv = Math.sqrt(sumSquaredDiff / values.length) / Math.abs(mean);
-    return Math.min(1, cv);
-  }
-  
-  /**
-   * Configura el predictor
-   */
-  public configure(options: Partial<SignalProcessingOptions>): void {
-    if (options.adaptationRate !== undefined) {
-      this.adaptationRate = Math.max(0.1, Math.min(0.5, options.adaptationRate));
-    }
-    
-    if (options.confidenceThreshold !== undefined) {
-      this.confidenceThreshold = Math.max(0.2, Math.min(0.8, options.confidenceThreshold));
-    }
-  }
-  
-  /**
-   * Reinicia el predictor
-   */
-  public reset(): void {
-    this.valuesBuffer.clear();
-    this.lastPrediction = null;
-    this.modelWeights = [0.5, 0.3, 0.15, 0.05];
-  }
-  
-  /**
    * Obtiene el estado actual del predictor
    */
   public getState(): any {
     return {
-      bufferSize: this.valuesBuffer.getSize(),
-      adaptationRate: this.adaptationRate,
-      modelWeights: [...this.modelWeights],
-      confidenceThreshold: this.confidenceThreshold,
-      lastPrediction: this.lastPrediction,
-      bufferStats: this.valuesBuffer.getState()
+      lastValue: this.state.lastValue,
+      lastTimestamp: this.state.lastTimestamp,
+      trend: this.state.trend,
+      confidence: this.state.confidence,
+      historySize: this.state.history.length,
+      bufferState: this.valueBuffer.getState()
     };
   }
+  
+  /**
+   * Resetea el predictor a su estado inicial
+   */
+  public reset(): void {
+    this.state = {
+      lastValue: 0,
+      lastTimestamp: 0,
+      trend: 0,
+      confidence: 0.5,
+      history: []
+    };
+    this.valueBuffer.clear();
+  }
 }
 
-// Instancia singleton
-let adaptivePredictor: AdaptivePredictor | null = null;
+// Crear instancia singleton
+const defaultPredictor = new AdaptivePredictor();
 
 /**
- * Obtiene o crea la instancia del predictor adaptativo
+ * Obtiene la instancia singleton del predictor adaptativo
  */
 export function getAdaptivePredictor(): AdaptivePredictor {
-  if (!adaptivePredictor) {
-    adaptivePredictor = new DefaultAdaptivePredictor();
-  }
-  
-  return adaptivePredictor;
+  return defaultPredictor;
 }
-
-// Re-exportar interfaz para uso externo
-export { PredictionResult };
