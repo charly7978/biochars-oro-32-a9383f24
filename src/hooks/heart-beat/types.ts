@@ -1,3 +1,4 @@
+
 /**
  * Type definitions for heart beat processing
  */
@@ -39,6 +40,7 @@ export interface UseHeartBeatReturn {
   requestBeep: (value: number) => boolean;
   startMonitoring: () => void;
   stopMonitoring: () => void;
+  lastHeartBeatResult: HeartBeatResult | null; // Added missing property
 }
 
 export interface UseArrhythmiaDetectorReturn {

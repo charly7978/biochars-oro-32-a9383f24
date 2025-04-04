@@ -1,4 +1,3 @@
-
 import { useCallback, useRef, useEffect } from 'react';
 import { HeartBeatResult } from './types';
 import { HeartBeatConfig } from '../../modules/heart-beat/config';
@@ -216,8 +215,7 @@ export function useSignalProcessor() {
         result, 
         lastPeakTimeRef, 
         requestImmediateBeep, 
-        isMonitoringRef,
-        optimizedValue * 1.8 // Valor amplificado para mejor detección
+        isMonitoringRef
       );
       
       // Update last valid BPM with improved filtering
