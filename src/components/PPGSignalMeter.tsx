@@ -1,4 +1,3 @@
-
 import React, { useEffect, useRef, useState } from 'react';
 import { Heart } from 'lucide-react';
 import ArrhythmiaIndicator from './ArrhythmiaIndicator';
@@ -32,17 +31,14 @@ const PPGSignalMeter: React.FC<PPGSignalMeterProps> = ({
   const ARRHYTHMIA_DISPLAY_TIME = 3000; // 3 seconds display time
   
   useEffect(() => {
-    // Handle arrhythmia event listeners
     const handleArrhythmiaVisual = (event: CustomEvent) => {
       const { severity } = event.detail;
       
       console.log("Arrhythmia visual event received:", event.detail);
       
-      // Show the arrhythmia indicator
       setArrhythmiaSeverity(severity || 'medium');
       setActiveArrhythmia(true);
       
-      // Hide after delay
       setTimeout(() => {
         setActiveArrhythmia(false);
       }, ARRHYTHMIA_DISPLAY_TIME);
@@ -55,19 +51,15 @@ const PPGSignalMeter: React.FC<PPGSignalMeterProps> = ({
     };
   }, []);
   
-  // Listen for cardiac peaks to animate heartbeat
   useEffect(() => {
     const handleCardiacPeak = (event: CustomEvent) => {
       const { isArrhythmia } = event.detail;
       
-      // Flash heart animation
       setIsMaxValue(true);
       
-      // If arrhythmia is detected in this peak, show indicator
       if (isArrhythmia) {
         setActiveArrhythmia(true);
         
-        // Determine severity based on heart rate
         const heartRate = event.detail.heartRate || 0;
         if (heartRate > 100) {
           setArrhythmiaSeverity('high');
@@ -77,13 +69,11 @@ const PPGSignalMeter: React.FC<PPGSignalMeterProps> = ({
           setArrhythmiaSeverity('medium');
         }
         
-        // Hide indicator after delay
         setTimeout(() => {
           setActiveArrhythmia(false);
         }, ARRHYTHMIA_DISPLAY_TIME);
       }
       
-      // Reset flash after animation time
       setTimeout(() => {
         setIsMaxValue(false);
       }, 150);
@@ -96,22 +86,17 @@ const PPGSignalMeter: React.FC<PPGSignalMeterProps> = ({
     };
   }, []);
   
-  // Listen to arrhythmia status changes
   useEffect(() => {
     if (arrhythmiaStatus?.includes("ARRHYTHMIA DETECTED")) {
-      // Show arrhythmia indicator when status changes
       setActiveArrhythmia(true);
       
-      // Hide after delay
       setTimeout(() => {
         setActiveArrhythmia(false);
       }, ARRHYTHMIA_DISPLAY_TIME);
     }
   }, [arrhythmiaStatus]);
   
-  // Update values and draw waveform
   useEffect(() => {
-    // Add value to array
     setValues(prev => {
       const newValues = [...prev, value];
       if (newValues.length > MAX_VALUES) {
@@ -120,7 +105,6 @@ const PPGSignalMeter: React.FC<PPGSignalMeterProps> = ({
       return newValues;
     });
     
-    // Draw waveform
     const canvas = canvasRef.current;
     if (canvas) {
       const ctx = canvas.getContext('2d');
@@ -129,10 +113,8 @@ const PPGSignalMeter: React.FC<PPGSignalMeterProps> = ({
         const height = canvas.height;
         const centerY = height / 2;
         
-        // Clear canvas
         ctx.clearRect(0, 0, width, height);
         
-        // Draw waveform
         ctx.beginPath();
         ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
         ctx.lineWidth = 3;
@@ -151,13 +133,11 @@ const PPGSignalMeter: React.FC<PPGSignalMeterProps> = ({
         
         ctx.stroke();
         
-        // Draw arrhythmia markers if there's raw data
         if (rawArrhythmiaData && activeArrhythmia) {
           ctx.beginPath();
-          ctx.strokeStyle = 'rgba(239, 68, 68, 0.8)'; // Red color for arrhythmia
+          ctx.strokeStyle = 'rgba(239, 68, 68, 0.8)';
           ctx.lineWidth = 5;
           
-          // Mark the point where arrhythmia was detected
           const arrhythmiaX = currentValues.length - 5;
           if (arrhythmiaX > 0) {
             const y = centerY - currentValues[arrhythmiaX] * height * 0.4;
@@ -191,13 +171,11 @@ const PPGSignalMeter: React.FC<PPGSignalMeterProps> = ({
           height={200} 
         />
         
-        {/* Arrhythmia visual indicator */}
         <ArrhythmiaIndicator 
           isActive={activeArrhythmia} 
           severity={arrhythmiaSeverity}
         />
         
-        {/* Signal quality indicator */}
         <div className="absolute bottom-4 left-4 bg-black/30 backdrop-blur-sm px-3 py-1 rounded-lg">
           <div className="flex items-center gap-1">
             <span className="text-xs text-gray-300">Calidad:</span>
@@ -214,7 +192,6 @@ const PPGSignalMeter: React.FC<PPGSignalMeterProps> = ({
           </div>
         </div>
         
-        {/* Arrhythmia status indicator */}
         {arrhythmiaStatus && !arrhythmiaStatus.includes("--") && (
           <div className="absolute bottom-4 right-4 bg-black/30 backdrop-blur-sm px-3 py-1 rounded-lg">
             <div className="flex items-center gap-2">
@@ -226,7 +203,6 @@ const PPGSignalMeter: React.FC<PPGSignalMeterProps> = ({
         )}
       </div>
 
-      {/* Controls */}
       {onStartMeasurement && onReset && (
         <div className="absolute bottom-20 left-1/2 transform -translate-x-1/2 flex gap-4">
           <button 

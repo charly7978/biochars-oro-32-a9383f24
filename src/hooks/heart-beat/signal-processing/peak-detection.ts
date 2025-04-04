@@ -303,6 +303,3 @@ export function clearDiagnosticsData(): void {
   qualityDistribution.low = 0;
   lastQualityTrend = [];
 }
-
-// Export the remaining functions and type definitions
-export { getArrhythmiaStatusMessage, detectArrhythmia, calculateArrhythmiaRisk };
