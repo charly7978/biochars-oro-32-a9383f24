@@ -59,6 +59,18 @@ export function handlePeakDetection(
     if ((!isMonitoringRef || isMonitoringRef.current) && result.confidence > 0.5) {
       requestBeepCallback(value || 1);  // Use provided value or default to 1
     }
+    
+    // If it's an arrhythmic beat, dispatch event
+    if (result.isArrhythmia) {
+      const arrhythmiaEvent = new CustomEvent('arrhythmia-detected', {
+        detail: {
+          timestamp: now,
+          confidence: result.confidence,
+          value
+        }
+      });
+      window.dispatchEvent(arrhythmiaEvent);
+    }
   }
 }
 
@@ -130,3 +142,50 @@ export function enhanceDiagnosticData(
   };
 }
 
+/**
+ * Check for arrhythmia windows in a sequence of RR intervals
+ * and dispatch visualization events
+ */
+export function checkArrhythmiaWindows(
+  rrIntervals: number[],
+  threshold: number = 0.2,
+  minSequence: number = 3
+): boolean {
+  if (rrIntervals.length < minSequence + 1) return false;
+  
+  const latestIntervals = rrIntervals.slice(-minSequence - 1);
+  const avg = latestIntervals.reduce((a, b) => a + b, 0) / latestIntervals.length;
+  
+  // Check for sequence of irregular RR intervals
+  let irregularCount = 0;
+  let windowStart = 0;
+  
+  for (let i = 0; i < latestIntervals.length; i++) {
+    const variation = Math.abs(latestIntervals[i] - avg) / avg;
+    
+    if (variation > threshold) {
+      irregularCount++;
+      
+      if (irregularCount === 1) {
+        windowStart = Date.now() - (latestIntervals.length - i) * avg;
+      }
+    } else {
+      irregularCount = 0;
+    }
+    
+    if (irregularCount >= minSequence) {
+      // Dispatch window event for visualization purposes
+      const arrhythmiaWindowEvent = new CustomEvent('arrhythmia-window-detected', {
+        detail: {
+          start: windowStart,
+          end: Date.now(),
+          intervals: latestIntervals.slice(i - minSequence + 1, i + 1)
+        }
+      });
+      window.dispatchEvent(arrhythmiaWindowEvent);
+      return true;
+    }
+  }
+  
+  return false;
+}

@@ -1,4 +1,7 @@
 
+/**
+ * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
+ */
 import { HeartBeatResult } from './types';
 
 /**
@@ -44,6 +47,17 @@ export function shouldProcessMeasurement(
 }
 
 /**
+ * Determines if a finger is detected
+ * based on signal characteristics
+ */
+export function isFingerDetected(
+  value: number,
+  threshold = 0.05
+): boolean {
+  return Math.abs(value) >= threshold;
+}
+
+/**
  * Creates a result object for weak signal scenarios
  * Enhanced with additional diagnostic data
  */
@@ -63,7 +77,8 @@ export function createWeakSignalResult(arrhythmiaCount = 0): HeartBeatResult {
       signalStrength: 0,
       signalQuality: 'weak',
       detectionStatus: 'insufficient_signal',
-      lastProcessedTime: Date.now()
+      lastProcessedTime: Date.now(),
+      isFingerDetected: false
     }
   };
 }
@@ -88,6 +103,21 @@ export function handlePeakDetection(
       result.diagnosticData.lastPeakDetected = now;
       result.diagnosticData.peakStrength = result.confidence;
       result.diagnosticData.detectionStatus = 'peak_detected';
+      
+      // If this is an arrhythmic peak, mark it
+      if (result.isArrhythmia) {
+        result.diagnosticData.isArrhythmia = true;
+        
+        // Dispatch arrhythmia event for visualization
+        const arrhythmiaEvent = new CustomEvent('arrhythmia-detected', {
+          detail: {
+            timestamp: now,
+            confidence: result.confidence,
+            value: result.filteredValue
+          }
+        });
+        window.dispatchEvent(arrhythmiaEvent);
+      }
     }
   }
 }
@@ -109,6 +139,61 @@ export function updateLastValidBpm(
       result.diagnosticData.bpmReliability = result.confidence;
     }
   }
+}
+
+/**
+ * Checks an arrhythmia window from RR intervals
+ * Dispatches arrhythmia window events for visualization
+ */
+export function checkArrhythmiaWindow(
+  rrIntervals: number[],
+  threshold: number = 0.2,
+  minSequence: number = 3
+): boolean {
+  if (rrIntervals.length < minSequence + 1) return false;
+  
+  const latestIntervals = rrIntervals.slice(-minSequence - 1);
+  const avg = latestIntervals.reduce((a, b) => a + b, 0) / latestIntervals.length;
+  
+  // Check for sequence of irregular RR intervals
+  let irregularCount = 0;
+  let windowStart = 0;
+  
+  for (let i = 0; i < latestIntervals.length; i++) {
+    const variation = Math.abs(latestIntervals[i] - avg) / avg;
+    
+    if (variation > threshold) {
+      irregularCount++;
+      
+      if (irregularCount === 1) {
+        windowStart = Date.now() - (latestIntervals.length - i) * avg;
+      }
+    } else {
+      irregularCount = 0;
+    }
+    
+    if (irregularCount >= minSequence) {
+      // Dispatch window event
+      const arrhythmiaWindowEvent = new CustomEvent('arrhythmia-window-detected', {
+        detail: {
+          start: windowStart,
+          end: Date.now(),
+          intervals: latestIntervals.slice(i - minSequence + 1, i + 1)
+        }
+      });
+      window.dispatchEvent(arrhythmiaWindowEvent);
+      return true;
+    }
+  }
+  
+  return false;
+}
+
+/**
+ * Reset signal quality state
+ */
+export function resetSignalQualityState(): void {
+  // Reset any global state related to signal quality if needed
 }
 
 /**
@@ -134,7 +219,8 @@ export function processLowConfidenceResult(
         usingHistoricalBPM: true,
         historyBPM: currentBPM,
         originalConfidence: result.confidence,
-        adjustedConfidence: Math.max(0.3, result.confidence)
+        adjustedConfidence: Math.max(0.3, result.confidence),
+        arrhythmiaCount: arrhythmiaCount
       }
     };
     
@@ -149,7 +235,8 @@ export function processLowConfidenceResult(
       diagnosticData: {
         ...(result.diagnosticData || {}),
         bpmStatus: 'zero',
-        arrhythmiaTracking: true
+        arrhythmiaTracking: true,
+        arrhythmiaCount: arrhythmiaCount
       }
     };
   }
@@ -159,7 +246,8 @@ export function processLowConfidenceResult(
     arrhythmiaCount,
     diagnosticData: {
       ...(result.diagnosticData || {}),
-      processingStatus: 'normal'
+      processingStatus: 'normal',
+      arrhythmiaCount: arrhythmiaCount
     }
   };
 }

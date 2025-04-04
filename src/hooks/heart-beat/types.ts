@@ -20,6 +20,9 @@ export interface DiagnosticData {
   bpmStatus?: 'zero' | 'normal' | 'high' | 'low' | 'using_historical';
   arrhythmiaTracking?: boolean;
   processingStatus?: string;
+  isFingerDetected?: boolean;
+  isArrhythmia?: boolean;
+  arrhythmiaCount?: number;
   rhythmAnalysis?: {
     regularity: number;
     variability: number;
@@ -39,6 +42,7 @@ export interface HeartBeatResult {
   isPeak: boolean;
   arrhythmiaCount: number;
   isArrhythmia?: boolean;
+  filteredValue?: number;
   rrData: {
     intervals: number[];
     lastPeakTime: number | null;
