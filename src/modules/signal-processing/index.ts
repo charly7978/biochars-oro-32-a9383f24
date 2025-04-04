@@ -99,8 +99,10 @@ export {
   SignalParameterOptimizer,
   createSignalParameterOptimizer,
   OptimizationState,
-  OptimizationMetrics
 } from './utils/parameter-optimization';
+
+// Exportar tipo de métricas de optimización
+export type { OptimizationMetrics } from './utils/parameter-optimization';
 
 // Exportar utilidades de buffer circular optimizado
 export { CircularBuffer } from './utils/circular-buffer';

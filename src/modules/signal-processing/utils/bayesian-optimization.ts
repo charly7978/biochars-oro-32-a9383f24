@@ -9,7 +9,7 @@ import {
 } from '../finger-detection/unified-finger-detector';
 
 // Forward export the DetectionState interface to keep compatibility
-export type { DetectionState } from './unified-finger-detector';
+export type { DetectionState } from '../finger-detection/unified-finger-detector';
 
 export interface ParameterOptions {
   name: string;
@@ -52,6 +52,7 @@ export interface BayesianOptimizer {
   getObservations: () => BayesianDataPoint[];
 }
 
+// Export OptimizationParameter interface so it can be imported by other modules
 export interface OptimizationParameter {
   name: string;
   min: number;
