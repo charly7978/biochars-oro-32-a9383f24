@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -48,7 +49,7 @@ const OptimizerMonitor: React.FC<OptimizerMonitorProps> = ({
       case OptimizationState.COMPLETED:
         return 'bg-amber-500';
       case OptimizationState.FAILED:
-        return 'bg-green-500';
+        return 'bg-red-500';
       case OptimizationState.COLLECTING:
         return 'bg-cyan-500';
       case OptimizationState.EVALUATING:

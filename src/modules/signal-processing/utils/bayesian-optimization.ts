@@ -1,3 +1,4 @@
+
 /**
  * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
  * 
@@ -52,7 +53,7 @@ export interface BayesianOptimizer {
   getObservations: () => BayesianDataPoint[];
 }
 
-// Export OptimizationParameter interface so it can be imported by other modules
+// Export OptimizationParameter interface directly so it can be imported by other modules
 export interface OptimizationParameter {
   name: string;
   min: number;
