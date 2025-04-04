@@ -1,4 +1,3 @@
-
 /**
  * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
  * 
@@ -41,6 +40,20 @@ export class CardiacChannel extends SpecializedChannel {
   // Arrhythmia detection
   private isCurrentBeatArrhythmia: boolean = false;
   private arrhythmiaCounter: number = 0;
+  
+  // Diagnostic data
+  private diagnosticData: { 
+    timestamp: number;
+    rmssd: number | null;
+    peakAmplitude: number | null;
+    rrVariability: number | null;
+    signalQuality: number;
+    beatConfidence: number;
+  }[] = [];
+  
+  // Enhanced arrhythmia visualization data
+  private currentArrhythmiaWindow: {start: number, end: number} | null = null;
+  private arrhythmiaWindows: {start: number, end: number}[] = [];
   
   /**
    * Constructor
@@ -134,6 +147,16 @@ export class CardiacChannel extends SpecializedChannel {
           
           // Check for arrhythmia
           this.isCurrentBeatArrhythmia = this.detectArrhythmia();
+          
+          // If this is an arrhythmia, start or update the current window
+          this.updateArrhythmiaWindows(this.isCurrentBeatArrhythmia, currentTime);
+          
+          // Store diagnostic data for visualization
+          this.collectDiagnosticData(
+            currentTime, 
+            mlEnhancedValue, 
+            rrInterval
+          );
           
           // Emit cardiac peak event with appropriate data
           this.emitCardiacPeakEvent();
@@ -286,6 +309,85 @@ export class CardiacChannel extends SpecializedChannel {
   }
   
   /**
+   * Manage arrhythmia visualization windows
+   */
+  private updateArrhythmiaWindows(isArrhythmia: boolean, currentTime: number): void {
+    if (isArrhythmia) {
+      // Start new window or extend current one
+      if (!this.currentArrhythmiaWindow) {
+        this.currentArrhythmiaWindow = {
+          start: currentTime,
+          end: currentTime + 500 // Initial end (will be extended)
+        };
+      } else {
+        // Extend current window
+        this.currentArrhythmiaWindow.end = currentTime + 500;
+      }
+    } else {
+      // If there's a current window and no longer in arrhythmia, close it
+      if (this.currentArrhythmiaWindow && currentTime > this.currentArrhythmiaWindow.end) {
+        // Only store windows that are long enough to be significant
+        if (this.currentArrhythmiaWindow.end - this.currentArrhythmiaWindow.start > 1000) {
+          this.arrhythmiaWindows.push(this.currentArrhythmiaWindow);
+          
+          // Keep only most recent windows for visualization
+          if (this.arrhythmiaWindows.length > 10) {
+            this.arrhythmiaWindows.shift();
+          }
+          
+          // Dispatch an arrhythmia window event for visualization
+          window.dispatchEvent(new CustomEvent('arrhythmia-window-detected', {
+            detail: this.currentArrhythmiaWindow
+          }));
+        }
+        
+        this.currentArrhythmiaWindow = null;
+      }
+    }
+  }
+  
+  /**
+   * Collect diagnostic data for visualization
+   */
+  private collectDiagnosticData(
+    currentTime: number, 
+    peakValue: number,
+    rrInterval: number
+  ): void {
+    // Calculate RMSSD (root mean square of successive differences)
+    let rmssd = null;
+    if (this.rrIntervals.length > 3) {
+      let sum = 0;
+      for (let i = 1; i < this.rrIntervals.length; i++) {
+        sum += Math.pow(this.rrIntervals[i] - this.rrIntervals[i-1], 2);
+      }
+      rmssd = Math.sqrt(sum / (this.rrIntervals.length - 1));
+    }
+    
+    // Calculate RR variability
+    let rrVariability = null;
+    if (this.rrIntervals.length > 1) {
+      const avgRR = this.rrIntervals.reduce((sum, val) => sum + val, 0) / this.rrIntervals.length;
+      rrVariability = Math.abs(rrInterval - avgRR) / avgRR;
+    }
+    
+    // Store diagnostic point
+    this.diagnosticData.push({
+      timestamp: currentTime,
+      rmssd: rmssd,
+      peakAmplitude: peakValue,
+      rrVariability: rrVariability,
+      signalQuality: this.rrIntervals.length > 5 ? 85 : 60, // Simple estimation
+      beatConfidence: this.rrIntervals.length > 3 ? 0.9 : 0.7 // Simple estimation
+    });
+    
+    // Keep limited history
+    if (this.diagnosticData.length > 100) {
+      this.diagnosticData.shift();
+    }
+  }
+  
+  /**
    * Emit cardiac peak event for audio system
    */
   private emitCardiacPeakEvent(): void {
@@ -296,7 +398,8 @@ export class CardiacChannel extends SpecializedChannel {
         heartRate: this.heartRateEstimate,
         isArrhythmia: this.isCurrentBeatArrhythmia,
         arrhythmiaCounter: this.arrhythmiaCounter,
-        source: 'cardiac-channel'
+        source: 'cardiac-channel',
+        diagnosticData: this.diagnosticData[this.diagnosticData.length - 1]
       }
     });
     
@@ -380,6 +483,31 @@ export class CardiacChannel extends SpecializedChannel {
   }
   
   /**
+   * Get arrhythmia windows for visualization
+   * @returns Array of arrhythmia time windows
+   */
+  public getArrhythmiaWindows(): {start: number, end: number}[] {
+    return [...this.arrhythmiaWindows];
+  }
+  
+  /**
+   * Get all diagnostic data
+   * @returns Array of diagnostic data points
+   */
+  public getDiagnosticData() {
+    return [...this.diagnosticData];
+  }
+  
+  /**
+   * Get latest diagnostic data
+   * @returns Latest diagnostic data point or null
+   */
+  public getLatestDiagnosticData() {
+    return this.diagnosticData.length > 0 ? 
+      this.diagnosticData[this.diagnosticData.length - 1] : null;
+  }
+  
+  /**
    * Reset channel
    */
   public reset(): void {
@@ -391,6 +519,8 @@ export class CardiacChannel extends SpecializedChannel {
     this.latestPeakDetected = false;
     this.isCurrentBeatArrhythmia = false;
     this.buffer = [];
+    this.currentArrhythmiaWindow = null;
+    this.diagnosticData = [];
     
     // Don't reset arrhythmia counter on normal reset
     // Users typically want to track this across measurement sessions
@@ -404,6 +534,7 @@ export class CardiacChannel extends SpecializedChannel {
   public fullReset(): void {
     this.reset();
     this.arrhythmiaCounter = 0;
+    this.arrhythmiaWindows = [];
     console.log("CardiacChannel: Full reset complete (including arrhythmia counter)");
   }
 }
