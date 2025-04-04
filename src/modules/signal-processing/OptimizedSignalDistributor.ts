@@ -1,3 +1,4 @@
+
 /**
  * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
  * 
@@ -16,6 +17,7 @@ import {
 } from '../../types/signal';
 import { SpecializedChannel, ChannelConfig } from './channels/SpecializedChannel';
 import { SpO2Channel } from './channels/SpO2Channel';
+import { CardiacChannel } from './channels/CardiacChannel';
 
 /**
  * Default configuration for the signal distributor
@@ -31,6 +33,13 @@ const DEFAULT_CONFIG: SignalDistributorConfig = {
       initialFilterStrength: 0.75,
       frequencyBandMin: 0.8,
       frequencyBandMax: 5.0
+    },
+    // Add cardiac channel configuration
+    [VitalSignType.CARDIAC]: {
+      initialAmplification: 1.8,
+      initialFilterStrength: 0.6,
+      frequencyBandMin: 0.5,
+      frequencyBandMax: 4.0
     }
   }
 };
@@ -38,7 +47,6 @@ const DEFAULT_CONFIG: SignalDistributorConfig = {
 /**
  * OptimizedSignalDistributor
  * Core class that manages specialized signal channels for each vital sign
- * Simplified version focusing on SpO2 only
  */
 export class OptimizedSignalDistributor {
   private channels: Map<VitalSignType, SpecializedChannel> = new Map();
@@ -52,6 +60,7 @@ export class OptimizedSignalDistributor {
     feedbackCount: Map<VitalSignType, number>;
     successRate: Map<VitalSignType, number[]>;
   };
+  private audioEnabled: boolean = true;
 
   /**
    * Constructor
@@ -75,7 +84,7 @@ export class OptimizedSignalDistributor {
       this.startOptimizationLoop();
     }
     
-    console.log("OptimizedSignalDistributor: Initialized with SpO2 channel and bidirectional feedback");
+    console.log("OptimizedSignalDistributor: Initialized with SpO2 and Cardiac channels with bidirectional feedback");
   }
 
   /**
@@ -90,6 +99,14 @@ export class OptimizedSignalDistributor {
       )
     );
     
+    // Create specialized channel for Cardiac measurement
+    this.channels.set(
+      VitalSignType.CARDIAC, 
+      new CardiacChannel(
+        this.config.channels[VitalSignType.CARDIAC] || DEFAULT_CONFIG.channels[VitalSignType.CARDIAC]
+      )
+    );
+    
     // Initialize metrics for each channel
     for (const type of Object.values(VitalSignType)) {
       if (this.channels.has(type)) {
@@ -99,7 +116,7 @@ export class OptimizedSignalDistributor {
       }
     }
     
-    console.log("OptimizedSignalDistributor: SpO2 channel initialized");
+    console.log("OptimizedSignalDistributor: SpO2 and Cardiac channels initialized");
   }
 
   /**
@@ -146,6 +163,15 @@ export class OptimizedSignalDistributor {
         times.shift();
       }
       this.processingMetrics.channelProcessingTimes.set(type, times);
+      
+      // Special handling for cardiac channel - emit beep if peak detected
+      if (type === VitalSignType.CARDIAC) {
+        const cardiacChannel = channel as CardiacChannel;
+        if (cardiacChannel.isLatestPeakDetected() && this.audioEnabled) {
+          // Emit peak detected event for audio system
+          this.emitCardiacPeakEvent(cardiacChannel.getEstimatedHeartRate());
+        }
+      }
     }
     
     const totalProcessingTime = performance.now() - startTime;
@@ -160,6 +186,35 @@ export class OptimizedSignalDistributor {
     }
     
     return results;
+  }
+
+  /**
+   * Emit cardiac peak event for audio system
+   * @param heartRate Current heart rate estimate
+   */
+  private emitCardiacPeakEvent(heartRate: number): void {
+    // Custom event with heart rate data for audio system
+    const event = new CustomEvent('cardiac-peak-detected', { 
+      detail: { 
+        heartRate,
+        timestamp: Date.now(),
+        source: 'optimized-cardiac-channel'
+      } 
+    });
+    
+    // Dispatch the event for listeners (AudioManager will listen)
+    window.dispatchEvent(event);
+    
+    console.log("OptimizedSignalDistributor: Cardiac peak event emitted", { heartRate });
+  }
+
+  /**
+   * Enable/disable audio for cardiac peaks
+   * @param enabled Whether audio should be enabled
+   */
+  public setAudioEnabled(enabled: boolean): void {
+    this.audioEnabled = enabled;
+    console.log(`OptimizedSignalDistributor: Audio ${enabled ? 'enabled' : 'disabled'}`);
   }
 
   /**
@@ -384,7 +439,8 @@ export class OptimizedSignalDistributor {
       configSummary: {
         enableFeedback: this.config.enableFeedback,
         adaptChannels: this.config.adaptChannels,
-        optimizationInterval: this.config.optimizationInterval
+        optimizationInterval: this.config.optimizationInterval,
+        audioEnabled: this.audioEnabled
       }
     };
   }
