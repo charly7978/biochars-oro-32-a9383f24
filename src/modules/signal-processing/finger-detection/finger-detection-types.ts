@@ -19,7 +19,13 @@ export type DetectionSource =
   | 'tensorflow-model'
   | 'combined-sources'
   | 'calibration-system'
-  | 'signal-processor';
+  | 'signal-processor'
+  | 'amplitude'
+  | 'rhythm'
+  | 'brightness'
+  | 'camera-analysis'
+  | 'signal-quality-state'
+  | 'weak-signal-result';
 
 /**
  * Tipos de eventos de diagnóstico
@@ -54,12 +60,25 @@ export interface DiagnosticEvent {
 }
 
 /**
+ * Resultado de detección de fuente
+ */
+export interface SourceDetectionResult {
+  source: DetectionSource;
+  detected: boolean;
+  confidence: number;
+  timestamp: number;
+}
+
+/**
  * Estado ambiental para calibración
  */
 export interface EnvironmentalState {
   noise: number;
   lighting: number;
   motion: number;
+  brightness?: number;
+  signalToNoiseRatio?: number;
+  lastUpdate?: number;
 }
 
 /**
@@ -73,6 +92,10 @@ export interface AdaptiveCalibrationParams {
   adaptationRate: number;
   stabilityFactor: number;
   environmentalState?: EnvironmentalState;
+  amplitudeThreshold?: number;
+  rhythmDetectionThreshold?: number;
+  sensitivityLevel?: number;
+  environmentQualityFactor?: number;
 }
 
 /**
@@ -96,6 +119,28 @@ export interface DetectionState {
     lastUpdate: number;
   }>>;
   lastUpdate: number;
+  thresholds?: {
+    amplitude: number;
+    rhythm: number;
+    combined: number;
+  };
+}
+
+/**
+ * Estado de calibración del sistema
+ */
+export interface CalibrationState {
+  baseThreshold: number;
+  noiseLevel: number;
+  lightingLevel: number;
+  motionLevel: number;
+  adaptationRate: number;
+  lastCalibrationTime: number;
+  device?: {
+    type: string;
+    model?: string;
+    capabilities?: string[];
+  };
 }
 
 /**

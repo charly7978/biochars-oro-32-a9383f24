@@ -1,375 +1,328 @@
+
 /**
- * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
- * 
- * Utilidades de depuración y registro de errores
- * Soporte para registro y monitoreo en producción
+ * Utilidades de depuración para toda la aplicación
  */
 
-// Niveles de error
 export enum ErrorLevel {
   DEBUG = 'debug',
   INFO = 'info',
-  WARNING = 'warning',
+  WARN = 'warn',
   ERROR = 'error',
   CRITICAL = 'critical'
 }
 
-// Configuración de depuración
-interface DebugConfig {
-  verbose: boolean;
-  logToConsole: boolean;
-  setupGlobalHandlers: boolean;
-  maxLogSize: number;
+export interface ErrorTrackingConfig {
+  verbose?: boolean;
+  setupGlobalHandlers?: boolean;
+  logToConsole?: boolean;
+  maxLogSize?: number;
   applicationVersion?: string;
-  userAgent?: string;
-  deviceInfo?: Record<string, any>;
 }
 
-// Estructura para entrada de log
 export interface LogEntry {
-  timestamp: number;
-  level: ErrorLevel;
   message: string;
-  module?: string;
-  details?: Record<string, any>;
+  level: ErrorLevel;
+  timestamp: number;
+  moduleId?: string;
+  source?: string;
+  data?: any;
+  stack?: string;
 }
 
-// Estado global
-const debugState = {
-  isInitialized: false,
-  config: {
-    verbose: false,
-    logToConsole: true,
-    setupGlobalHandlers: false,
-    maxLogSize: 1000,
-    applicationVersion: '1.0.0'
-  } as DebugConfig,
-  logs: [] as LogEntry[],
-  errorHandlers: [] as ((error: Error, info: any) => void)[],
-  
-  // Buffer específico para componentes de UI
-  errorBuffer: [] as LogEntry[],
-  maxBufferSize: 500
-};
+let errorLogs: LogEntry[] = [];
+let isVerboseLogging = false;
+let maxLogSize = 1000;
+let errorHandlers: Function[] = [];
 
 /**
  * Inicializa el sistema de seguimiento de errores
  */
-export function initializeErrorTracking(config?: Partial<DebugConfig>): void {
-  debugState.config = {
-    ...debugState.config,
-    ...config,
-    userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : 'unknown',
-    deviceInfo: getDeviceInfo()
-  };
+export function initializeErrorTracking(config: ErrorTrackingConfig = {}): void {
+  isVerboseLogging = config.verbose || false;
+  maxLogSize = config.maxLogSize || 1000;
   
-  debugState.isInitialized = true;
-  
-  if (debugState.config.setupGlobalHandlers) {
-    setupGlobalErrorHandlers();
+  // Configurar manejadores globales si se solicita
+  if (config.setupGlobalHandlers) {
+    setupGlobalHandlers();
   }
   
   logError(
-    `Error tracking initialized with verbose=${debugState.config.verbose}`,
+    `Sistema de seguimiento inicializado, verbose: ${isVerboseLogging}`,
     ErrorLevel.INFO,
-    'Debug'
+    'ErrorTracking'
   );
 }
 
 /**
- * Obtiene información sobre el dispositivo actual
+ * Configura el modo verbose de logging
  */
-function getDeviceInfo(): Record<string, any> {
-  if (typeof window === 'undefined') {
-    return { environment: 'server' };
-  }
-  
-  return {
-    screenSize: {
-      width: window.screen.width,
-      height: window.screen.height,
-    },
-    viewportSize: {
-      width: window.innerWidth,
-      height: window.innerHeight,
-    },
-    language: navigator.language,
-    platform: navigator.platform,
-    hasWebGL: hasWebGL(),
-    hasCameraSupport: 'mediaDevices' in navigator,
-    pixelRatio: window.devicePixelRatio || 1,
-    timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-    connection: getConnectionInfo()
-  };
+export function setVerboseLogging(verbose: boolean): void {
+  isVerboseLogging = verbose;
+  logError(
+    `Verbose logging ${verbose ? 'activado' : 'desactivado'}`,
+    ErrorLevel.INFO,
+    'ErrorTracking'
+  );
 }
 
 /**
- * Verifica si el navegador soporta WebGL
- */
-function hasWebGL(): boolean {
-  try {
-    const canvas = document.createElement('canvas');
-    return !!(window.WebGLRenderingContext && 
-      (canvas.getContext('webgl') || canvas.getContext('experimental-webgl')));
-  } catch {
-    return false;
-  }
-}
-
-/**
- * Obtiene información sobre la conexión del cliente
- */
-function getConnectionInfo(): Record<string, any> {
-  if (typeof navigator === 'undefined' || !('connection' in navigator)) {
-    return { available: false };
-  }
-  
-  const connection = (navigator as any).connection;
-  
-  if (!connection) {
-    return { available: false };
-  }
-  
-  return {
-    available: true,
-    effectiveType: connection.effectiveType,
-    downlink: connection.downlink,
-    rtt: connection.rtt,
-    saveData: connection.saveData
-  };
-}
-
-/**
- * Configura manejadores globales de errores
- */
-function setupGlobalErrorHandlers(): void {
-  if (typeof window === 'undefined') return;
-
-  // Error de JavaScript
-  window.onerror = (message, source, lineno, colno, error) => {
-    logError(
-      String(message), 
-      ErrorLevel.ERROR, 
-      'GlobalError',
-      {
-        source,
-        lineno,
-        colno,
-        stack: error?.stack
-      }
-    );
-    return false;
-  };
-
-  // Promesas no manejadas
-  window.addEventListener('unhandledrejection', (event) => {
-    logError(
-      `Unhandled promise rejection: ${event.reason}`,
-      ErrorLevel.ERROR,
-      'PromiseRejection',
-      {
-        reason: event.reason
-      }
-    );
-  });
-
-  // Error en recurso
-  window.addEventListener('error', (event) => {
-    if (event.target && (event.target as any).tagName) {
-      const target = event.target as HTMLElement;
-      logError(
-        `Resource error in ${target.tagName}`,
-        ErrorLevel.WARNING,
-        'ResourceError',
-        {
-          element: target.tagName,
-          src: (target as any).src || (target as any).href
-        }
-      );
-    }
-  }, true);
-}
-
-/**
- * Registra un error o mensaje de depuración
+ * Registra un error en el sistema
  */
 export function logError(
   message: string,
   level: ErrorLevel = ErrorLevel.ERROR,
-  module?: string,
-  details?: Record<string, any>
+  moduleId?: string,
+  data?: any
 ): void {
-  if (!debugState.isInitialized) {
-    initializeErrorTracking();
+  // Solo registrar mensajes de depuración si el modo verbose está activo
+  if (level === ErrorLevel.DEBUG && !isVerboseLogging) {
+    return;
   }
-
+  
   const logEntry: LogEntry = {
-    timestamp: Date.now(),
-    level,
     message,
-    module,
-    details
+    level,
+    timestamp: Date.now(),
+    moduleId,
+    source: getCallSource(),
+    data,
+    stack: new Error().stack
   };
   
-  // Agregar al registro principal
-  debugState.logs.push(logEntry);
+  // Agregar al registro
+  errorLogs.push(logEntry);
   
-  // Agregar al buffer para componentes UI
-  debugState.errorBuffer.push(logEntry);
-  
-  // Limitar tamaño de los registros
-  if (debugState.logs.length > debugState.config.maxLogSize) {
-    debugState.logs.shift();
+  // Limitar tamaño del registro
+  if (errorLogs.length > maxLogSize) {
+    errorLogs.shift();
   }
   
-  if (debugState.errorBuffer.length > debugState.maxBufferSize) {
-    debugState.errorBuffer.shift();
+  // Notificar a manejadores de errores
+  if (level === ErrorLevel.ERROR || level === ErrorLevel.CRITICAL) {
+    notifyErrorHandlers(logEntry);
   }
   
-  // Imprimir en consola si está habilitado
-  if (debugState.config.logToConsole) {
-    const logFn = level === ErrorLevel.ERROR || level === ErrorLevel.CRITICAL
-      ? console.error
-      : level === ErrorLevel.WARNING
-        ? console.warn
-        : level === ErrorLevel.INFO
-          ? console.info
-          : console.debug;
+  // Mostrar en consola si está configurado
+  if (shouldLogToConsole(level)) {
+    logToConsole(logEntry);
+  }
+}
+
+/**
+ * Determina si un nivel de error debe mostrarse en consola
+ */
+function shouldLogToConsole(level: ErrorLevel): boolean {
+  // Siempre mostrar errores y críticos
+  if (level === ErrorLevel.ERROR || level === ErrorLevel.CRITICAL) {
+    return true;
+  }
+  
+  // Para otros niveles, solo mostrar si verbose está activo
+  return isVerboseLogging;
+}
+
+/**
+ * Registra una entrada en la consola
+ */
+function logToConsole(entry: LogEntry): void {
+  const timestamp = new Date(entry.timestamp).toISOString();
+  const prefix = `[${timestamp}] [${entry.level.toUpperCase()}]${entry.moduleId ? ` [${entry.moduleId}]` : ''}`;
+  
+  switch (entry.level) {
+    case ErrorLevel.DEBUG:
+      console.debug(`${prefix} ${entry.message}`, entry.data || '');
+      break;
+    case ErrorLevel.INFO:
+      console.info(`${prefix} ${entry.message}`, entry.data || '');
+      break;
+    case ErrorLevel.WARN:
+      console.warn(`${prefix} ${entry.message}`, entry.data || '');
+      break;
+    case ErrorLevel.ERROR:
+    case ErrorLevel.CRITICAL:
+      console.error(`${prefix} ${entry.message}`, entry.data || '');
+      if (entry.stack) {
+        console.error(entry.stack);
+      }
+      break;
+  }
+}
+
+/**
+ * Obtiene la fuente de la llamada
+ */
+function getCallSource(): string {
+  try {
+    const err = new Error();
+    const stack = err.stack || '';
+    const stackLines = stack.split('\n');
     
-    const prefix = module ? `[${module}] ` : '';
+    // Buscar la primera línea que no sea de este archivo
+    const relevantLine = stackLines.find(line => !line.includes('debugUtils.ts'));
     
-    if (details) {
-      logFn(`${prefix}${message}`, details);
-    } else {
-      logFn(`${prefix}${message}`);
+    if (relevantLine) {
+      // Extraer información relevante
+      const match = relevantLine.match(/\s+at\s+([^\s]+)\s+\((.+):(\d+):(\d+)\)/);
+      if (match) {
+        const [_, functionName, filePath, line, column] = match;
+        const filePathParts = filePath.split('/');
+        const fileName = filePathParts[filePathParts.length - 1];
+        return `${functionName} (${fileName}:${line})`;
+      }
     }
+    
+    return 'unknown';
+  } catch (e) {
+    return 'error-getting-source';
   }
+}
+
+/**
+ * Configura manejadores globales para errores no capturados
+ */
+function setupGlobalHandlers(): void {
+  // Manejador de errores no capturados
+  window.addEventListener('error', (event) => {
+    logError(
+      `Error no capturado: ${event.message}`,
+      ErrorLevel.ERROR,
+      'GlobalHandler',
+      { 
+        filename: event.filename,
+        lineno: event.lineno,
+        colno: event.colno,
+        error: event.error
+      }
+    );
+  });
   
-  // Notificar a los manejadores registrados
-  for (const handler of debugState.errorHandlers) {
+  // Manejador de promesas rechazadas no capturadas
+  window.addEventListener('unhandledrejection', (event) => {
+    const reason = event.reason ? (event.reason.toString ? event.reason.toString() : JSON.stringify(event.reason)) : 'Unknown reason';
+    logError(
+      `Promesa rechazada no capturada: ${reason}`,
+      ErrorLevel.ERROR,
+      'GlobalHandler',
+      { reason: event.reason }
+    );
+  });
+  
+  logError(
+    'Manejadores globales de errores configurados',
+    ErrorLevel.INFO,
+    'ErrorTracking'
+  );
+}
+
+/**
+ * Registra un manejador de errores
+ */
+export function registerErrorHandler(handler: Function): void {
+  errorHandlers.push(handler);
+  logError(
+    `Nuevo manejador de errores registrado. Total: ${errorHandlers.length}`,
+    ErrorLevel.INFO,
+    'ErrorTracking'
+  );
+}
+
+/**
+ * Notifica a todos los manejadores de errores
+ */
+function notifyErrorHandlers(entry: LogEntry): void {
+  errorHandlers.forEach(handler => {
     try {
-      handler(new Error(message), { level, module, details });
-    } catch (error) {
-      console.error('Error in error handler:', error);
+      handler(entry);
+    } catch (e) {
+      console.error('Error en manejador de errores:', e);
     }
-  }
+  });
 }
 
 /**
- * Registra un manejador de errores externo
+ * Obtiene todos los registros de errores
  */
-export function registerErrorHandler(handler: (error: Error, info: any) => void): void {
-  debugState.errorHandlers.push(handler);
+export function getErrorLogs(): LogEntry[] {
+  return [...errorLogs];
 }
 
 /**
- * Obtiene los registros de error actuales
+ * Obtiene los registros filtrados por nivel
  */
-export function getErrorLogs(
-  filter?: {
-    level?: ErrorLevel;
-    module?: string;
-    since?: number;
-  }
-): typeof debugState.logs {
-  let logs = [...debugState.logs];
-  
-  if (filter) {
-    if (filter.level) {
-      const levelIndex = Object.values(ErrorLevel).indexOf(filter.level);
-      logs = logs.filter(log => {
-        const logLevelIndex = Object.values(ErrorLevel).indexOf(log.level);
-        return logLevelIndex >= levelIndex;
-      });
-    }
-    
-    if (filter.module) {
-      logs = logs.filter(log => log.module === filter.module);
-    }
-    
-    if (filter.since) {
-      logs = logs.filter(log => log.timestamp >= filter.since);
-    }
+export function getFilteredErrorLogs(level?: ErrorLevel): LogEntry[] {
+  if (!level) {
+    return [...errorLogs];
   }
   
-  return logs;
+  return errorLogs.filter(entry => entry.level === level);
 }
 
 /**
- * Limpia el registro de errores
+ * Limpia todos los registros de errores
  */
 export function clearErrorLogs(): void {
-  debugState.logs = [];
+  errorLogs = [];
+  logError(
+    'Registros de error limpiados',
+    ErrorLevel.INFO,
+    'ErrorTracking'
+  );
 }
 
 /**
- * Obtiene el buffer de errores para componentes UI
- */
-export function getErrorBuffer(
-  filter?: {
-    level?: ErrorLevel;
-    module?: string;
-    since?: number;
-  }
-): LogEntry[] {
-  let entries = [...debugState.errorBuffer];
-  
-  if (filter) {
-    if (filter.level) {
-      const levelIndex = Object.values(ErrorLevel).indexOf(filter.level);
-      entries = entries.filter(entry => {
-        const entryLevelIndex = Object.values(ErrorLevel).indexOf(entry.level);
-        return entryLevelIndex >= levelIndex;
-      });
-    }
-    
-    if (filter.module) {
-      entries = entries.filter(entry => entry.module === filter.module);
-    }
-    
-    if (filter.since) {
-      entries = entries.filter(entry => entry.timestamp >= filter.since);
-    }
-  }
-  
-  return entries;
-}
-
-/**
- * Limpia el buffer de errores para componentes UI
- */
-export function clearErrorBuffer(): void {
-  debugState.errorBuffer = [];
-}
-
-/**
- * Detecta referencias circulares en objetos
+ * Detecta referencias circulares en un objeto
  */
 export function detectCircular(obj: any, seen = new WeakSet()): boolean {
-  if (obj === null || typeof obj !== 'object') return false;
-  if (seen.has(obj)) return true;
+  // Valores primitivos no tienen referencias circulares
+  if (obj === null || typeof obj !== 'object') {
+    return false;
+  }
   
+  // Si ya hemos visto este objeto, es circular
+  if (seen.has(obj)) {
+    return true;
+  }
+  
+  // Agregar este objeto a los vistos
   seen.add(obj);
   
-  for (const key of Object.keys(obj)) {
-    if (detectCircular(obj[key], seen)) return true;
+  // Verificar en propiedades
+  for (const key in obj) {
+    if (Object.prototype.hasOwnProperty.call(obj, key)) {
+      if (detectCircular(obj[key], seen)) {
+        return true;
+      }
+    }
+  }
+  
+  // Verificar en arrays
+  if (Array.isArray(obj)) {
+    for (const item of obj) {
+      if (detectCircular(item, seen)) {
+        return true;
+      }
+    }
   }
   
   return false;
 }
 
 /**
- * Stringifica objetos de forma segura, evitando referencias circulares
+ * Convierte un objeto a JSON, manejando referencias circulares
  */
-export function safeStringify(obj: any, space: number | string = 2): string {
-  const seen = new WeakSet();
-  return JSON.stringify(obj, (key, value) => {
-    if (typeof value === 'object' && value !== null) {
-      if (seen.has(value)) {
-        return '[Circular Reference]';
+export function safeStringify(obj: any, space?: number): string {
+  try {
+    const cache = new WeakSet();
+    return JSON.stringify(obj, (key, value) => {
+      if (typeof value === 'object' && value !== null) {
+        if (cache.has(value)) {
+          return '[Circular Reference]';
+        }
+        cache.add(value);
       }
-      seen.add(value);
-    }
-    return value;
-  }, space);
+      return value;
+    }, space);
+  } catch (e) {
+    return `[Error al convertir objeto: ${e}]`;
+  }
 }

@@ -1,21 +1,27 @@
 
-import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
-import { Toaster } from "@/components/ui/toaster";
-import Index from "./pages/Index";
-import NotFound from "./pages/NotFound";
-import MonitoringPage from "./pages/MonitoringPage";
+import React, { useState } from 'react';
+import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom';
+import { Button } from '@/components/ui/button';
+import { Activity } from 'lucide-react';
+import './App.css';
+import Index from './pages/Index';
+import MonitoringPage from './pages/Monitoring';
+import { initializeErrorTrackingSystem } from './utils/errorTracking';
 
-const App = () => {
+// Initialize error tracking system
+initializeErrorTrackingSystem();
+
+function App() {
   return (
     <Router>
-      <Routes>
-        <Route path="/" element={<Index />} />
-        <Route path="/monitoring" element={<MonitoringPage />} />
-        <Route path="*" element={<NotFound />} />
-      </Routes>
-      <Toaster />
+      <div className="App">
+        <Routes>
+          <Route path="/" element={<Index />} />
+          <Route path="/monitoring" element={<MonitoringPage />} />
+        </Routes>
+      </div>
     </Router>
   );
-};
+}
 
 export default App;
