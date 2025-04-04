@@ -1,28 +1,6 @@
 
 import React, { useEffect, useRef } from 'react';
-import { Line } from 'react-chartjs-2';
-import {
-  Chart as ChartJS,
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  Title,
-  Tooltip,
-  Legend,
-  ChartOptions
-} from 'chart.js';
-
-// Register ChartJS components
-ChartJS.register(
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  Title,
-  Tooltip,
-  Legend
-);
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 interface SignalChartProps {
   data: Array<{value: number, time?: number, timestamp?: number}>;
@@ -46,95 +24,63 @@ export const SignalChart: React.FC<SignalChartProps> = ({
   const chartRef = useRef<any>(null);
 
   // Format the data for the chart
-  const chartData = {
-    labels: data.map((_, i) => i.toString()),
-    datasets: [
-      {
-        label: title,
-        data: data.map(d => d.value || 0),
-        fill: false,
-        backgroundColor: color,
-        borderColor: color,
-        tension: 0.3,
-        pointRadius: 0,
-        borderWidth: 1.5,
-      },
-      ...(compareData ? [{
-        label: 'Comparación',
-        data: compareData.map(d => d.value || 0),
-        fill: false,
-        backgroundColor: compareColor,
-        borderColor: compareColor,
-        tension: 0.3,
-        pointRadius: 0,
-        borderWidth: 1.5,
-      }] : []),
-    ],
-  };
+  const chartData = data.map((d, i) => ({
+    name: i.toString(),
+    value: d.value || 0,
+    ...(compareData ? { compareValue: compareData[i]?.value || 0 } : {})
+  }));
 
-  // Chart configuration
-  const options: ChartOptions<'line'> = {
-    responsive: true,
-    maintainAspectRatio: false,
-    animation: {
-      duration: 0 // Disable animations for better performance
-    },
-    scales: {
-      x: {
-        display: false
-      },
-      y: {
-        beginAtZero: false,
-        ticks: {
-          maxTicksLimit: 5
-        }
-      },
-    },
-    plugins: {
-      legend: {
-        display: compareData ? true : false,
-        position: 'top' as const,
-      },
-      tooltip: {
-        enabled: true,
-        mode: 'index' as const,
-        intersect: false,
-      }
-    },
-  };
-
-  // Add markers to chart after rendering
-  useEffect(() => {
-    const chart = chartRef.current;
-    
-    if (chart && markers && markers.length > 0) {
-      const originalDraw = chart.draw;
-      
-      chart.draw = function() {
-        originalDraw.apply(this, arguments);
-        
-        const ctx = chart.ctx;
-        const yAxis = chart.scales.y;
-        const xAxis = chart.scales.x;
-        
-        markers.forEach(marker => {
-          const xPos = xAxis.getPixelForValue(marker.x);
-          const yPos = yAxis.getPixelForValue(marker.y);
-          
-          ctx.save();
-          ctx.beginPath();
-          ctx.arc(xPos, yPos, 4, 0, 2 * Math.PI);
-          ctx.fillStyle = marker.color;
-          ctx.fill();
-          ctx.restore();
-        });
-      };
-    }
-  }, [markers]);
+  // Custom marker rendering component
+  const CustomMarker = ({ cx, cy, color: markerColor }: { cx: number, cy: number, color: string }) => (
+    <circle cx={cx} cy={cy} r={4} fill={markerColor} />
+  );
 
   return (
-    <div style={{ height: `${height}px` }}>
-      <Line ref={chartRef} data={chartData} options={options} />
+    <div style={{ height: `${height}px`, width: '100%' }}>
+      <ResponsiveContainer>
+        <LineChart
+          data={chartData}
+          margin={{ top: 5, right: 5, left: 5, bottom: 5 }}
+          ref={chartRef}
+        >
+          <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+          <XAxis dataKey="name" hide />
+          <YAxis hide />
+          <Tooltip />
+          <Line
+            type="monotone"
+            dataKey="value"
+            stroke={color}
+            dot={false}
+            strokeWidth={1.5}
+            isAnimationActive={false}
+          />
+          {compareData && (
+            <Line
+              type="monotone"
+              dataKey="compareValue"
+              stroke={compareColor}
+              dot={false}
+              strokeWidth={1.5}
+              isAnimationActive={false}
+            />
+          )}
+          {markers.map((marker, index) => {
+            const dataPointIndex = Math.round(marker.x);
+            if (dataPointIndex < chartData.length) {
+              return (
+                <CustomMarker 
+                  key={index}
+                  cx={marker.x} 
+                  cy={marker.y} 
+                  color={marker.color}
+                />
+              );
+            }
+            return null;
+          })}
+        </LineChart>
+      </ResponsiveContainer>
     </div>
   );
 };

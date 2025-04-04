@@ -39,7 +39,7 @@ export function useDiagnosticsCollector() {
     channelData: {}
   });
   
-  const collectorRef = useRef<NodeJS.Timer | null>(null);
+  const collectorRef = useRef<NodeJS.Timeout | null>(null);
   const startTimeRef = useRef<number>(Date.now());
   
   // Start collecting diagnostic data
@@ -81,14 +81,14 @@ export function useDiagnosticsCollector() {
         confidence: diag.peakDetectionConfidence || 0
       }));
       
-      // Create neural network data
+      // Create neural network data - fixes for missing properties
       const neuralPoints = systemDiagnostics
         .filter(diag => diag.processingStage?.includes('neural'))
         .map((diag, index) => ({
-          value: diag.signalQualityMetrics?.neuralActivation || Math.random(),
+          value: diag.signalQualityMetrics?.amplitude || Math.random(), // Fixed: use 'amplitude' instead of 'neuralActivation'
           time: timeSinceStart + index,
           layer: diag.processingStage?.replace('neural-', ''),
-          confidence: diag.processingConfidence || Math.random()
+          confidence: diag.confidenceLevel || Math.random() // Fixed: use 'confidenceLevel' instead of 'processingConfidence'
         }));
       
       // Update system metrics
