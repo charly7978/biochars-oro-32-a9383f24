@@ -1,4 +1,3 @@
-
 import { HeartBeatResult } from './types';
 
 /**
@@ -9,8 +8,6 @@ interface DiagnosticData {
   signalQuality?: string;
   detectionStatus?: string;
   lastProcessedTime?: number;
-  isFingerDetected?: boolean;
-  isArrhythmia?: boolean;
   lastPeakDetected?: number;
   peakStrength?: number;
   lastValidBpmTime?: number;
@@ -24,6 +21,8 @@ interface DiagnosticData {
   processingStatus?: string;
   arrhythmiaTracking?: boolean;
   arrhythmiaCount?: number;
+  isFingerDetected?: boolean;
+  isArrhythmia?: boolean;
 }
 
 /**
@@ -190,7 +189,7 @@ export function processLowConfidenceResult(
         originalConfidence: result.confidence,
         adjustedConfidence: Math.max(0.3, result.confidence),
         arrhythmiaTracking: true,
-        arrhythmiaCount: arrhythmiaCount
+        arrhythmiaCount
       }
     };
     
@@ -206,7 +205,7 @@ export function processLowConfidenceResult(
         ...(result.diagnosticData || {}),
         bpmStatus: 'zero',
         arrhythmiaTracking: true,
-        arrhythmiaCount: arrhythmiaCount
+        arrhythmiaCount
       }
     };
   }
@@ -217,7 +216,7 @@ export function processLowConfidenceResult(
     diagnosticData: {
       ...(result.diagnosticData || {}),
       processingStatus: 'normal',
-      arrhythmiaCount: arrhythmiaCount
+      arrhythmiaCount
     }
   };
 }
@@ -245,8 +244,8 @@ export function isFingerDetected(
   }
   const avgDiff = sumDiffs / (recentValues.length - 1);
   
-  // Need both adequate strength and variation
-  return avgSignal >= threshold && avgDiff >= threshold * 0.2;
+  // Require minimum variability
+  return avgDiff > 0.01;
 }
 
 /**
