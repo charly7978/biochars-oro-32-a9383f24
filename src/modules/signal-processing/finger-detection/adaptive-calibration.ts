@@ -1,4 +1,3 @@
-
 /**
  * Módulo de calibración adaptativa para el detector de dedos
  * Ajusta los umbrales de detección según las condiciones ambientales
@@ -39,8 +38,7 @@ const initialParams: AdaptiveCalibrationParams = {
   lightingCompensation: 0.4,
   motionCompensation: 2.0,
   adaptationRate: 0.15,
-  stabilityFactor: 0.75,
-  [key: string]: number;
+  stabilityFactor: 0.75
 };
 
 // Estado actual de calibración
