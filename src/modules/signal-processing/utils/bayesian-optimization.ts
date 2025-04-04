@@ -48,7 +48,7 @@ export class BayesianOptimizer {
   public addObservation(paramValues: Record<string, number>, score: number): void {
     this.observedValues.push({params: {...paramValues}, score});
     
-    // Keep history bounded
+    // Keep history bounded - memory optimization
     if (this.observedValues.length > this.MAX_HISTORY_SIZE) {
       this.observedValues.shift();
     }
@@ -60,136 +60,159 @@ export class BayesianOptimizer {
    * Compute expected improvement for a parameter set based on observed values
    */
   private computeExpectedImprovement(paramValues: Record<string, number>): number {
-    if (this.observedValues.length < 3) return 0.5; // Not enough data
+    if (this.observedValues.length < 3) return 0.5;
     
-    // Simplified EI calculation - actual Bayesian EI would use Gaussian process
-    const paramDistance = (a: Record<string, number>, b: Record<string, number>) => {
-      return Object.keys(a).reduce((sum, key) => {
-        const paramDef = this.parameters.find(p => p.name === key);
-        if (!paramDef) return sum;
+    // Find best score so far
+    const bestScore = Math.max(...this.observedValues.map(obs => obs.score));
+    
+    // Simple calculation for expected improvement (simplified Bayesian approach)
+    let improvement = 0;
+    
+    // Calculate similarity to each observed point
+    const similarityScores = this.observedValues.map(obs => {
+      let similarity = 0;
+      let totalWeight = 0;
+      
+      // Calculate distance-weighted similarity across all parameters
+      for (const param of this.parameters) {
+        const paramName = param.name;
+        const distance = Math.abs(paramValues[paramName] - obs.params[paramName]);
+        const normalizedDistance = distance / (param.max - param.min);
+        const weight = 1 / (1 + normalizedDistance * 10);
         
-        // Normalize distance by parameter range
-        const range = paramDef.max - paramDef.min;
-        const normalizedDist = Math.abs(a[key] - b[key]) / range;
-        return sum + normalizedDist * normalizedDist;
-      }, 0);
-    };
-    
-    // For each observed point, compute distance and weight
-    const distanceWeights = this.observedValues.map(obs => {
-      const dist = paramDistance(obs.params, paramValues);
-      // Convert distance to similarity (closer = higher weight)
-      return { score: obs.score, weight: Math.exp(-5 * dist) };
+        similarity += weight * obs.score;
+        totalWeight += weight;
+      }
+      
+      return totalWeight > 0 ? similarity / totalWeight : 0;
     });
     
-    // Compute weighted average of scores
-    const totalWeight = distanceWeights.reduce((sum, dw) => sum + dw.weight, 0);
-    if (totalWeight === 0) return 0.5;
+    // Average similarity-weighted improvement potential
+    improvement = Math.max(0, Math.max(...similarityScores) - bestScore);
     
-    const weightedScore = distanceWeights.reduce(
-      (sum, dw) => sum + dw.score * dw.weight, 0
-    ) / totalWeight;
+    // Add exploration bonus
+    const uncertaintyFactor = 1 - Math.min(1, this.observedValues.length / 20);
+    const explorationBonus = this.explorationFactor * uncertaintyFactor;
     
-    // Compute variance as uncertainty measure
-    const variance = distanceWeights.reduce(
-      (sum, dw) => sum + dw.weight * Math.pow(dw.score - weightedScore, 2), 0
-    ) / totalWeight;
-    
-    // Combine mean and variance with exploration factor
-    // This is a simplified acquisition function inspired by Upper Confidence Bound
-    return weightedScore + this.explorationFactor * Math.sqrt(variance);
+    return improvement + explorationBonus;
   }
 
   /**
-   * Suggest next parameter values to try based on previous observations
+   * Calculate the uncertainty/exploration value for a parameter set
    */
-  public suggestNextParameters(): OptimizationResult {
-    if (this.observedValues.length < 3) {
-      // Not enough data for meaningful optimization, return current with some randomness
-      const result: Record<string, number> = {};
-      let totalUncertainty = 0;
+  private calculateUncertainty(paramValues: Record<string, number>): number {
+    if (this.observedValues.length < 2) return 1.0;
+    
+    // Calculate average distance to observed points
+    const distances = this.observedValues.map(obs => {
+      let sumSquaredDistance = 0;
       
-      this.parameters.forEach(param => {
-        // Small random perturbation
-        const range = param.max - param.min;
-        const perturbation = (Math.random() - 0.5) * range * 0.2;
-        result[param.name] = Math.max(param.min, 
-                              Math.min(param.max, param.current + perturbation));
-        totalUncertainty += range * 0.1;
+      for (const param of this.parameters) {
+        const paramName = param.name;
+        const normalizedCurrent = (paramValues[paramName] - param.min) / (param.max - param.min);
+        const normalizedObserved = (obs.params[paramName] - param.min) / (param.max - param.min);
+        sumSquaredDistance += Math.pow(normalizedCurrent - normalizedObserved, 2);
+      }
+      
+      return Math.sqrt(sumSquaredDistance / this.parameters.length);
+    });
+    
+    // Uncertainty is higher when we're far from observed points
+    const avgDistance = distances.reduce((sum, d) => sum + d, 0) / distances.length;
+    return Math.min(1.0, avgDistance * 2);
+  }
+
+  /**
+   * Get next parameter suggestions based on observations 
+   * with memory optimized processing
+   */
+  public suggestNextParameters(sampleCount: number = 10): OptimizationResult {
+    if (this.observedValues.length === 0) {
+      // If no observations yet, return initial parameter values
+      const parameters: Record<string, number> = {};
+      this.parameters.forEach(p => {
+        parameters[p.name] = p.current;
       });
       
       return {
-        parameters: result,
+        parameters,
         expectedImprovement: 0.5,
-        uncertainty: totalUncertainty / this.parameters.length
+        uncertainty: 1.0
       };
     }
     
-    // Start with best observed parameters
-    const bestObservation = [...this.observedValues]
-      .sort((a, b) => b.score - a.score)[0];
+    // Generate candidate parameter sets
+    const candidates: Array<{
+      params: Record<string, number>;
+      improvement: number;
+      uncertainty: number;
+    }> = [];
     
-    // Search space around best observation
-    const candidateCount = 10;
-    const candidates: Array<{params: Record<string, number>, ei: number, uncertainty: number}> = [];
-    
-    // Generate candidates around best observation
-    for (let i = 0; i < candidateCount; i++) {
-      const candidateParams: Record<string, number> = {};
-      let uncertainty = 0;
+    // Sample parameters with some randomness
+    for (let i = 0; i < sampleCount; i++) {
+      const paramSet: Record<string, number> = {};
       
-      this.parameters.forEach(param => {
-        const range = param.max - param.min;
-        // Explore parameter space with random perturbations
-        const perturbation = (Math.random() - 0.5) * range * (0.1 + this.explorationFactor);
-        const value = Math.max(param.min, 
-                     Math.min(param.max, bestObservation.params[param.name] + perturbation));
-        candidateParams[param.name] = value;
+      // Mix of current best and random exploration
+      for (const param of this.parameters) {
+        // Find best observed value for this parameter
+        const bestObs = [...this.observedValues].sort((a, b) => b.score - a.score)[0];
+        const bestValue = bestObs ? bestObs.params[param.name] : param.current;
         
-        // Calculate uncertainty as distance from best known point
-        const paramUncertainty = Math.abs(value - bestObservation.params[param.name]) / range;
-        uncertainty += paramUncertainty;
-      });
+        // Random with bias toward best values
+        const useRandom = Math.random() < 0.3 + (0.4 * (i / sampleCount));
+        if (useRandom) {
+          // Random value within range
+          paramSet[param.name] = param.min + Math.random() * (param.max - param.min);
+        } else {
+          // Small variation around best value
+          const range = (param.max - param.min) * 0.2;
+          let value = bestValue + (Math.random() - 0.5) * range;
+          paramSet[param.name] = Math.min(param.max, Math.max(param.min, value));
+        }
+      }
       
-      const ei = this.computeExpectedImprovement(candidateParams);
+      // Calculate improvement and uncertainty
+      const improvement = this.computeExpectedImprovement(paramSet);
+      const uncertainty = this.calculateUncertainty(paramSet);
+      
       candidates.push({
-        params: candidateParams,
-        ei,
-        uncertainty: uncertainty / this.parameters.length
+        params: paramSet,
+        improvement,
+        uncertainty
       });
     }
     
-    // Sort by expected improvement and pick the best
-    candidates.sort((a, b) => b.ei - a.ei);
-    const bestCandidate = candidates[0];
+    // Rank candidates by a combination of improvement and uncertainty
+    candidates.sort((a, b) => {
+      const scoreA = a.improvement + this.explorationFactor * a.uncertainty;
+      const scoreB = b.improvement + this.explorationFactor * a.uncertainty;
+      return scoreB - scoreA;
+    });
     
-    console.log("BayesianOptimizer: Suggesting parameters with EI", 
-                bestCandidate.ei.toFixed(3), 
-                "uncertainty", bestCandidate.uncertainty.toFixed(3));
-    
+    // Return best candidate
+    const best = candidates[0];
     return {
-      parameters: bestCandidate.params,
-      expectedImprovement: bestCandidate.ei,
-      uncertainty: bestCandidate.uncertainty
+      parameters: best.params,
+      expectedImprovement: best.improvement,
+      uncertainty: best.uncertainty
     };
   }
 
   /**
-   * Set the exploration factor (higher = more exploration)
+   * Set the exploration/exploitation tradeoff
    */
   public setExplorationFactor(factor: number): void {
-    this.explorationFactor = Math.max(0.01, Math.min(1, factor));
+    this.explorationFactor = Math.max(0, Math.min(1, factor));
   }
 
   /**
-   * Get the best parameters found so far
+   * Get the current best parameters
    */
   public getBestParameters(): Record<string, number> | null {
     if (this.observedValues.length === 0) return null;
     
-    const bestObservation = [...this.observedValues]
-      .sort((a, b) => b.score - a.score)[0];
-    
+    // Find best score
+    const bestObservation = [...this.observedValues].sort((a, b) => b.score - a.score)[0];
     return {...bestObservation.params};
   }
 
@@ -198,19 +221,14 @@ export class BayesianOptimizer {
    */
   public reset(): void {
     this.observedValues = [];
+    // We keep the parameters but reset the observations
     console.log("BayesianOptimizer: Reset");
   }
 }
 
 /**
- * Create a new optimizer with default PPG processing parameters
+ * Create a new Bayesian optimizer instance
  */
-export function createDefaultPPGOptimizer(): BayesianOptimizer {
-  return new BayesianOptimizer([
-    { name: "qualityThreshold", min: 0.3, max: 0.9, current: 0.7 },
-    { name: "amplificationFactor", min: 0.5, max: 5.0, current: 2.0 },
-    { name: "adaptationRate", min: 0.01, max: 0.5, current: 0.15 },
-    { name: "filterStrength", min: 0.1, max: 3.0, current: 1.0 },
-    { name: "predictionHorizon", min: 1, max: 10, current: 5 },
-  ]);
+export function createBayesianOptimizer(parameters: OptimizationParameter[]): BayesianOptimizer {
+  return new BayesianOptimizer(parameters);
 }
