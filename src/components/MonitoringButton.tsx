@@ -4,11 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { ActivitySquare } from 'lucide-react';
 
-interface MonitoringButtonProps {
-  className?: string;
-}
-
-const MonitoringButton: React.FC<MonitoringButtonProps> = ({ className }) => {
+const MonitoringButton: React.FC = () => {
   const navigate = useNavigate();
 
   const handleClick = () => {
@@ -19,7 +15,7 @@ const MonitoringButton: React.FC<MonitoringButtonProps> = ({ className }) => {
     <Button 
       onClick={handleClick} 
       variant="outline" 
-      className={`flex items-center gap-2 ${className}`}
+      className="flex items-center gap-2"
     >
       <ActivitySquare className="w-4 h-4" />
       <span>Sistema de Monitoreo</span>

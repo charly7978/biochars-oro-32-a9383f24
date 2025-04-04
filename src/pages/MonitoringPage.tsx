@@ -1,21 +1,12 @@
-
-import React, { useState } from 'react';
+import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Activity, Zap, Layers, Database, Cpu, BarChart2, Fingerprint } from 'lucide-react';
-import { SignalProcessingMonitor } from '@/components/monitoring/SignalProcessingMonitor';
-import { NeuralNetworkMonitor } from '@/components/monitoring/NeuralNetworkMonitor';
-import FingerDetectionMonitor from '@/components/FingerDetectionMonitor';
-import OptimizerMonitor from '@/components/debug/OptimizerMonitor';
-import { SystemPerformanceMonitor } from '@/components/monitoring/SystemPerformanceMonitor';
-import { CalibrationMonitor } from '@/components/monitoring/CalibrationMonitor';
-import { OptimizationState } from '@/modules/signal-processing/utils/parameter-optimization';
+import { ArrowLeft, Activity, Zap, Layers, Fingerprint } from 'lucide-react';
 
 const MonitoringPage: React.FC = () => {
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState("signal-processing");
 
   const handleGoBack = () => {
     navigate('/');
@@ -31,83 +22,45 @@ const MonitoringPage: React.FC = () => {
           <h1 className="text-2xl font-bold">Sistema de Monitoreo Integral</h1>
         </div>
         <div className="text-sm text-muted-foreground">
-          Tiempo Real: {new Date().toLocaleTimeString()}
+          {new Date().toLocaleTimeString()}
         </div>
       </div>
 
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle>Panel de Control y Monitoreo</CardTitle>
+          <CardTitle>Panel de Control</CardTitle>
           <CardDescription>
-            Monitoreo completo del funcionamiento, procesamiento de señales, y sistemas de optimización
+            Monitoreo en tiempo real sin simulaciones
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <Tabs defaultValue="signal-processing" value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <TabsList className="grid grid-cols-6 mb-4">
-              <TabsTrigger value="signal-processing" className="flex gap-2 items-center">
+          <Tabs defaultValue="no-simulation" className="w-full">
+            <TabsList className="grid grid-cols-4 mb-4">
+              <TabsTrigger value="no-simulation" className="flex gap-2 items-center">
                 <Activity className="w-4 h-4" />
-                <span className="hidden sm:inline">Procesamiento de Señal</span>
+                <span>Sin Simulación</span>
               </TabsTrigger>
-              <TabsTrigger value="neural-networks" className="flex gap-2 items-center">
+              <TabsTrigger value="signals" className="flex gap-2 items-center">
                 <Layers className="w-4 h-4" />
-                <span className="hidden sm:inline">Redes Neuronales</span>
+                <span>Señales</span>
               </TabsTrigger>
-              <TabsTrigger value="finger-detection" className="flex gap-2 items-center">
+              <TabsTrigger value="finger" className="flex gap-2 items-center">
                 <Fingerprint className="w-4 h-4" />
-                <span className="hidden sm:inline">Detección de Dedos</span>
+                <span>Detección</span>
               </TabsTrigger>
               <TabsTrigger value="optimization" className="flex gap-2 items-center">
                 <Zap className="w-4 h-4" />
-                <span className="hidden sm:inline">Optimización</span>
-              </TabsTrigger>
-              <TabsTrigger value="system" className="flex gap-2 items-center">
-                <Cpu className="w-4 h-4" />
-                <span className="hidden sm:inline">Rendimiento</span>
-              </TabsTrigger>
-              <TabsTrigger value="calibration" className="flex gap-2 items-center">
-                <BarChart2 className="w-4 h-4" />
-                <span className="hidden sm:inline">Calibración</span>
+                <span>Estado</span>
               </TabsTrigger>
             </TabsList>
 
-            <TabsContent value="signal-processing" className="space-y-4">
-              <SignalProcessingMonitor />
+            <TabsContent value="no-simulation">
+              <div className="text-center py-12 text-muted-foreground">
+                Sistema de monitoreo sin simulaciones
+              </div>
             </TabsContent>
 
-            <TabsContent value="neural-networks" className="space-y-4">
-              <NeuralNetworkMonitor />
-            </TabsContent>
-
-            <TabsContent value="finger-detection" className="space-y-4">
-              <FingerDetectionMonitor />
-            </TabsContent>
-
-            <TabsContent value="optimization" className="space-y-4">
-              <OptimizerMonitor 
-                metrics={{
-                  currentScore: 0,
-                  bestScore: 0,
-                  improvementPercentage: 0,
-                  optimizationCycles: 0,
-                  lastOptimizationTime: null,
-                  paramsHistory: []
-                }}
-                state={OptimizationState.IDLE}
-                isReady={true}
-                onStartOptimization={() => {}}
-                onReset={() => {}}
-                onToggleAuto={() => {}}
-              />
-            </TabsContent>
-
-            <TabsContent value="system" className="space-y-4">
-              <SystemPerformanceMonitor />
-            </TabsContent>
-
-            <TabsContent value="calibration" className="space-y-4">
-              <CalibrationMonitor />
-            </TabsContent>
+            
           </Tabs>
         </CardContent>
       </Card>
