@@ -1,4 +1,3 @@
-
 /**
  * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
  *
@@ -117,11 +116,14 @@ export function createWeakSignalResult(arrhythmiaCounter: number = 0): any {
  * Esta función se ha modificado para NO activar el beep - centralizado en PPGSignalMeter
  * No simulation is used - direct measurement only
  * Now with priority-based processing and diagnostics
+ * Updated signature to match result-processor.ts with optional parameters
  */
 export function handlePeakDetection(
   result: any, 
   lastPeakTimeRef: React.MutableRefObject<number | null>,
-  requestBeepCallback: (value: number) => boolean
+  requestBeepCallback: (value: number) => boolean,
+  isMonitoringRef?: React.MutableRefObject<boolean>,
+  value?: number
 ): void {
   const startTime = performance.now();
   const now = Date.now();
@@ -148,24 +150,27 @@ export function handlePeakDetection(
       result.diagnostics.peakStrength = result.confidence;
       result.diagnostics.detectionStatus = 'peak_detected';
       result.diagnostics.rhythmQuality = result.confidence > 0.7 ? 'excellent' : 
-                                         result.confidence > 0.5 ? 'good' : 
-                                         result.confidence > 0.3 ? 'moderate' : 'weak';
+                                       result.confidence > 0.5 ? 'good' : 
+                                       result.confidence > 0.3 ? 'moderate' : 'weak';
     }
     
-    // EL BEEP SOLO SE MANEJA EN PPGSignalMeter CUANDO SE DIBUJA UN CÍRCULO
-    console.log("Peak-detection: Pico detectado SIN solicitar beep - control exclusivo por PPGSignalMeter", {
-      confianza: result.confidence,
-      valor: 0, // No incluimos el valor por seguridad
-      tiempo: new Date(now).toISOString(),
-      // Log transition state if present
-      transicion: result.transition ? {
-        activa: result.transition.active,
-        progreso: result.transition.progress,
-        direccion: result.transition.direction
-      } : 'no hay transición',
-      isArrhythmia: result.isArrhythmia || false,
-      prioridad: priority
-    });
+    // If monitoring is active and we have a value, consider requesting beep
+    if ((!isMonitoringRef || isMonitoringRef.current) && typeof value !== 'undefined' && value > 0) {
+      // EL BEEP SOLO SE MANEJA EN PPGSignalMeter CUANDO SE DIBUJA UN CÍRCULO
+      console.log("Peak-detection: Pico detectado SIN solicitar beep - control exclusivo por PPGSignalMeter", {
+        confianza: result.confidence,
+        valor: value, // Usar el valor proporcionado
+        tiempo: new Date(now).toISOString(),
+        // Log transition state if present
+        transicion: result.transition ? {
+          activa: result.transition.active,
+          progreso: result.transition.progress,
+          direccion: result.transition.direction
+        } : 'no hay transición',
+        isArrhythmia: result.isArrhythmia || false,
+        prioridad: priority
+      });
+    }
   }
   
   // Registrar diagnóstico con tiempo de procesamiento real

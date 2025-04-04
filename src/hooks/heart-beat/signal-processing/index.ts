@@ -19,11 +19,7 @@ export {
 } from './signal-quality';
 
 export { 
-  handlePeakDetection,
-  getDiagnosticsData,
-  clearDiagnosticsData,
-  getAverageDiagnostics,
-  getDetailedQualityStats
+  handlePeakDetection 
 } from './peak-detection';
 
 export { 
