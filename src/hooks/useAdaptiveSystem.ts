@@ -8,8 +8,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { 
   getAdaptiveSystemCoordinator, 
-  AdaptiveSystemConfig 
-} from '@/modules/signal-processing/utils/adaptive-system-coordinator';
+  AdaptiveSystemConfig,
+  MessageType
+} from '@/modules/signal-processing';
 import { ErrorLevel, logError } from '@/utils/debugUtils';
 
 /**
@@ -91,15 +92,28 @@ export function useAdaptiveSystem(initialConfig?: Partial<AdaptiveSystemConfig>)
   }, []);
   
   /**
+   * Inicia una optimización
+   */
+  const startOptimization = useCallback(() => {
+    sendMessage('adaptive-coordinator', MessageType.OPTIMIZATION_REQUEST, {
+      timestamp: Date.now()
+    }, 'high');
+    setIsOptimizing(true);
+  }, [sendMessage]);
+  
+  /**
    * Actualiza periódicamente el estado del sistema para la UI
    */
   useEffect(() => {
     const intervalId = setInterval(() => {
       setSystemState(coordinator.current.getSystemState());
-    }, 5000);
+    }, 1000);
+    
+    // Solicitar diagnósticos al inicio
+    sendMessage('adaptive-coordinator', MessageType.DIAGNOSTICS_REQUEST, {}, 'low');
     
     return () => clearInterval(intervalId);
-  }, []);
+  }, [sendMessage]);
   
   /**
    * Obtiene el estado actual
@@ -113,6 +127,7 @@ export function useAdaptiveSystem(initialConfig?: Partial<AdaptiveSystemConfig>)
     sendMessage,
     updateConfig,
     resetSystem,
+    startOptimization,
     systemState,
     isOptimizing,
     lastOptimization,

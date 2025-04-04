@@ -124,3 +124,72 @@ export interface OptimizationState {
   parameters: Record<string, number>;
   memoryUsage: MemoryState;
 }
+
+/**
+ * Mensaje para comunicación entre componentes del sistema adaptativo
+ */
+export interface AdaptiveSystemMessage {
+  source: string;
+  destination: string;
+  type: string;
+  payload: any;
+  timestamp?: number;
+  priority?: 'high' | 'medium' | 'low';
+  id?: string;
+}
+
+/**
+ * Parámetro de optimización
+ */
+export interface OptimizationParameter {
+  name: string;
+  min: number;
+  max: number;
+  step?: number;
+  default: number;
+  initialValue?: number;
+  description?: string;
+  weight?: number;
+}
+
+/**
+ * Configuración del sistema adaptativo
+ */
+export interface AdaptiveSystemConfig {
+  enableOptimization: boolean;
+  optimizationInterval: number;
+  adaptationRate: number;
+  fingerDetectionThreshold: number;
+  qualityThreshold: number;
+  memoryManagement: {
+    maxObservations: number;
+    gcInterval: number;
+    maxBufferSize: number;
+  };
+  diagnostics: {
+    enableDetailedLogs: boolean;
+    logLevel: 'debug' | 'info' | 'warn' | 'error';
+    collectMetrics: boolean;
+  };
+}
+
+/**
+ * Resultado de predicción adaptativa
+ */
+export interface PredictionResult {
+  predictedValue: number;
+  confidence: number;
+  predictedTimestamp?: number;
+}
+
+/**
+ * Estado del buffer de memoria circular
+ */
+export interface CircularBufferState {
+  size: number;
+  capacity: number;
+  memoryUsage: number;
+  avgValue: number;
+  minValue: number;
+  maxValue: number;
+}
