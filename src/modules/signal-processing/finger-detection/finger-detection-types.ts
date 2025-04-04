@@ -110,5 +110,6 @@ export interface AdaptiveCalibrationParams {
   amplitudeThreshold?: number;
   falsePositiveReduction?: number;
   falseNegativeReduction?: number;
+  rhythmDetectionThreshold?: number;
   [key: string]: number | undefined;
 }

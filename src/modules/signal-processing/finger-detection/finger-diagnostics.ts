@@ -114,11 +114,22 @@ export function reportFingerDetection(
  * Reporta un evento de diagnóstico genérico
  */
 export function reportDiagnosticEvent(
-  event: Partial<DiagnosticEvent> & { type: DiagnosticEventType, message: string }
+  type: DiagnosticEventType,
+  source: DetectionSource,
+  isFingerDetected: boolean,
+  confidence: number,
+  details?: Record<string, any>
 ): void {
+  const eventMessage = `Event ${type} from source ${source}`;
+  
   fingerDiagnostics.logEvent({
-    ...event,
-    timestamp: event.timestamp || Date.now()
+    type,
+    message: eventMessage,
+    source,
+    isFingerDetected,
+    confidence,
+    details,
+    timestamp: Date.now()
   });
 }
 

@@ -11,6 +11,7 @@
 import { reportDiagnosticEvent } from './finger-diagnostics';
 import { getCalibrationParameters } from './adaptive-calibration';
 import { updateDetectionSource } from './unified-finger-detector';
+import { DiagnosticEventType } from './finger-detection-types';
 
 // Contador de señales débiles consecutivas
 let consecutiveWeakSignalsCount = 0;
@@ -72,7 +73,7 @@ export function checkSignalStrength(
       fingerDetectionConfirmed = false;
       
       reportDiagnosticEvent(
-        'FINGER_LOST',
+        DiagnosticEventType.FINGER_LOST,
         'signal-quality-amplitude',
         false,
         0.8,
@@ -97,7 +98,7 @@ export function checkSignalStrength(
     fingerDetectionConfirmed = true;
     
     reportDiagnosticEvent(
-      'FINGER_DETECTED',
+      DiagnosticEventType.FINGER_DETECTED,
       'signal-quality-amplitude',
       true,
       0.7,
@@ -139,7 +140,7 @@ function calculateSignalQuality(value: number, isWeak: boolean): number {
   const baseQuality = Math.min(100, Math.max(30, Math.abs(value) * 300));
   
   // Ajustar calidad según factores ambientales
-  return baseQuality * calibrationParams.environmentQualityFactor;
+  return baseQuality * (calibrationParams.environmentQualityFactor || 1.0);
 }
 
 /**
@@ -151,11 +152,11 @@ export function shouldProcessMeasurement(value: number): boolean {
   
   // Si la detección está confirmada, ser más permisivo
   if (fingerDetectionConfirmed) {
-    return Math.abs(value) >= calibrationParams.amplitudeThreshold * 0.8;
+    return Math.abs(value) >= (calibrationParams.amplitudeThreshold || 0.25) * 0.8;
   }
   
   // Umbral más alto para evitar procesar ruido
-  return Math.abs(value) >= calibrationParams.amplitudeThreshold * 1.2;
+  return Math.abs(value) >= (calibrationParams.amplitudeThreshold || 0.25) * 1.2;
 }
 
 /**
@@ -171,7 +172,7 @@ export function resetAmplitudeDetector(): void {
   
   // Reportar evento
   reportDiagnosticEvent(
-    'DETECTOR_RESET',
+    DiagnosticEventType.DETECTOR_RESET,
     'signal-quality-amplitude',
     false,
     1.0,

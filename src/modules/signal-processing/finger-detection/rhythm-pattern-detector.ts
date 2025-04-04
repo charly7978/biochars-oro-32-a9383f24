@@ -11,6 +11,7 @@
 import { reportDiagnosticEvent } from './finger-diagnostics';
 import { getCalibrationParameters } from './adaptive-calibration';
 import { updateDetectionSource } from './unified-finger-detector';
+import { DiagnosticEventType } from './finger-detection-types';
 
 // Historial para detección de patrones
 let rhythmDetectionHistory: Array<{time: number, value: number}> = [];
@@ -34,11 +35,11 @@ export function analyzeSignalForRhythmicPattern(
   
   // Obtener parámetros adaptativos
   const calibrationParams = getCalibrationParameters();
-  const thresholdValue = calibrationParams.rhythmDetectionThreshold;
-  const requiredPatterns = Math.round(3 + (1 - calibrationParams.sensitivityLevel) * 2);
+  const thresholdValue = calibrationParams.rhythmDetectionThreshold || 0.2;
+  const requiredPatterns = Math.round(3 + (1 - (calibrationParams.sensitivityLevel || 0.5)) * 2);
   
   // Ajustar sensibilidad
-  const adjustedSensitivity = (sensitivity + calibrationParams.sensitivityLevel) / 2;
+  const adjustedSensitivity = (sensitivity + (calibrationParams.sensitivityLevel || 0.5)) / 2;
   
   // Si ya confirmamos presencia, verificar si sigue siendo válida
   if (confirmedFingerPresence) {
@@ -54,7 +55,7 @@ export function analyzeSignalForRhythmicPattern(
         
         // Reportar evento
         reportDiagnosticEvent(
-          'PATTERN_LOST',
+          DiagnosticEventType.PATTERN_LOST,
           'rhythm-pattern',
           false,
           0.3,
@@ -90,7 +91,7 @@ export function analyzeSignalForRhythmicPattern(
     // Reportar evento cada 2 detecciones
     if (consistentPatternsCount % 2 === 0) {
       reportDiagnosticEvent(
-        'PATTERN_DETECTED',
+        DiagnosticEventType.PATTERN_DETECTED,
         'rhythm-pattern',
         true,
         confidence,
@@ -104,7 +105,7 @@ export function analyzeSignalForRhythmicPattern(
       
       // Reportar transición
       reportDiagnosticEvent(
-        'FINGER_DETECTED',
+        DiagnosticEventType.FINGER_DETECTED,
         'rhythm-pattern',
         true,
         0.8,
@@ -244,12 +245,12 @@ function validateOngoingPattern(): boolean {
   
   // Verificar tiempo desde último pico detectado
   const lastPatternTime = lastPeakTimes[lastPeakTimes.length - 1];
-  const patternTimeoutMs = 5000 + calibrationParams.falseNegativeReduction * 2000;
+  const patternTimeoutMs = 5000 + (calibrationParams.falseNegativeReduction || 0.3) * 2000;
   
   // Si ha pasado mucho tiempo desde el último patrón detectado
   if (now - lastPatternTime > patternTimeoutMs) {
     reportDiagnosticEvent(
-      'PATTERN_TIMEOUT',
+      DiagnosticEventType.PATTERN_TIMEOUT,
       'rhythm-pattern',
       false,
       0.7,
@@ -279,7 +280,7 @@ export function resetRhythmDetector(): void {
   
   // Reportar evento
   reportDiagnosticEvent(
-    'DETECTOR_RESET',
+    DiagnosticEventType.DETECTOR_RESET,
     'rhythm-pattern',
     false,
     1.0,

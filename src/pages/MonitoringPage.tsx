@@ -4,8 +4,10 @@ import { useNavigate } from 'react-router-dom';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Activity, Zap, Layers, Fingerprint } from 'lucide-react';
+import { ArrowLeft, Activity, Zap, Layers, Fingerprint, Signal, Wifi } from 'lucide-react';
 import FingerDetectionMonitor from '@/components/FingerDetectionMonitor';
+import { SignalProcessingMonitor } from '@/components/monitoring/SignalProcessingMonitor';
+import { SignalMonitor } from '@/components/monitoring/SignalMonitor';
 
 const MonitoringPage: React.FC = () => {
   const navigate = useNavigate();
@@ -43,7 +45,7 @@ const MonitoringPage: React.FC = () => {
                 <span>Sin Simulación</span>
               </TabsTrigger>
               <TabsTrigger value="signals" className="flex gap-2 items-center">
-                <Layers className="w-4 h-4" />
+                <Signal className="w-4 h-4" />
                 <span>Señales</span>
               </TabsTrigger>
               <TabsTrigger value="finger" className="flex gap-2 items-center">
@@ -62,10 +64,17 @@ const MonitoringPage: React.FC = () => {
               </div>
             </TabsContent>
             
+            <TabsContent value="signals">
+              <SignalMonitor />
+            </TabsContent>
+            
             <TabsContent value="finger">
               <FingerDetectionMonitor />
             </TabsContent>
             
+            <TabsContent value="optimization">
+              <SignalProcessingMonitor />
+            </TabsContent>
           </Tabs>
         </CardContent>
       </Card>

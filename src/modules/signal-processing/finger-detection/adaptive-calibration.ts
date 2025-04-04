@@ -38,7 +38,13 @@ const initialParams: AdaptiveCalibrationParams = {
   lightingCompensation: 0.4,
   motionCompensation: 2.0,
   adaptationRate: 0.15,
-  stabilityFactor: 0.75
+  stabilityFactor: 0.75,
+  sensitivityLevel: 0.5,
+  environmentQualityFactor: 1.0,
+  amplitudeThreshold: 0.25,
+  falsePositiveReduction: 0.3,
+  falseNegativeReduction: 0.3,
+  rhythmDetectionThreshold: 0.2
 };
 
 // Estado actual de calibración
@@ -85,7 +91,7 @@ export function updateEnvironmentalState(newState: Partial<EnvironmentalState>):
     adaptToMotionChange(oldMotion, newState.motion);
   }
   
-  if (newState.device) {
+  if (newState.device && newState.device.type) {
     currentState.device = { ...currentState.device, ...newState.device };
     
     // Adaptar según dispositivo
@@ -97,16 +103,22 @@ export function updateEnvironmentalState(newState: Partial<EnvironmentalState>):
   currentState.lastUpdate = timestamp;
   
   // Registrar para diagnóstico
-  reportDiagnosticEvent({
-    type: DiagnosticEventType.ENVIRONMENTAL_CHANGE,
-    message: `Environmental state updated: noise=${currentState.noise}, lighting=${currentState.lighting}, motion=${currentState.motion}`,
-    timestamp: Date.now()
-  });
+  reportDiagnosticEvent(
+    DiagnosticEventType.ENVIRONMENTAL_CHANGE,
+    'unified-detection',
+    false,
+    0.5,
+    { 
+      noise: currentState.noise,
+      lighting: currentState.lighting,
+      motion: currentState.motion
+    }
+  );
   
   // Guardar en historial
   updateHistory.push({
     timestamp,
-    state: { ...newState },
+    state: { ...newState as any },
     params: { ...currentParams }
   });
   
@@ -180,11 +192,13 @@ function adaptToDeviceChange(): void {
   // Resetear a valores predeterminados y dejar que se adapte
   currentParams = { ...initialParams };
   
-  reportDiagnosticEvent({
-    type: DiagnosticEventType.CALIBRATION_UPDATE,
-    message: `Calibration reset due to device change: ${JSON.stringify(currentState.device)}`,
-    timestamp: Date.now()
-  });
+  reportDiagnosticEvent(
+    DiagnosticEventType.CALIBRATION_UPDATE,
+    'unified-detection',
+    false,
+    0.5,
+    { deviceChanged: true }
+  );
 }
 
 /**
@@ -206,27 +220,25 @@ function updateParameter(paramName: keyof AdaptiveCalibrationParams, newValue: n
   currentParams[paramName] = (1 - currentParams.adaptationRate) * oldValue + 
                             currentParams.adaptationRate * newValue;
   
-  reportDiagnosticEvent({
-    type: DiagnosticEventType.CALIBRATION_UPDATE,
-    message: `Parameter ${paramName} updated: ${oldValue.toFixed(4)} -> ${(currentParams[paramName] as number).toFixed(4)}`,
-    timestamp: Date.now()
-  });
+  reportDiagnosticEvent(
+    DiagnosticEventType.CALIBRATION_UPDATE,
+    'unified-detection',
+    false,
+    0.5,
+    { 
+      parameter: paramName, 
+      oldValue: oldValue,
+      newValue: currentParams[paramName]
+    }
+  );
 }
 
 /**
  * Obtiene los parámetros de calibración actuales
  */
-export function getCalibrationParameters(): AdaptiveCalibrationParams & { environmentalState: EnvironmentalState } {
-  return {
-    ...currentParams,
-    environmentalState: {
-      noise: currentState.noise,
-      lighting: currentState.lighting,
-      motion: currentState.motion,
-      device: currentState.device,
-      lastUpdate: currentState.lastUpdate
-    }
-  };
+export function getCalibrationParameters(): AdaptiveCalibrationParams {
+  // Return a copy of the current params to avoid direct modification
+  return { ...currentParams };
 }
 
 /**
@@ -237,11 +249,13 @@ export function resetCalibration(): void {
   currentParams = { ...initialParams };
   updateHistory = [];
   
-  reportDiagnosticEvent({
-    type: DiagnosticEventType.CALIBRATION_UPDATE,
-    message: "Calibration parameters reset to default values",
-    timestamp: Date.now()
-  });
+  reportDiagnosticEvent(
+    DiagnosticEventType.CALIBRATION_UPDATE,
+    'unified-detection',
+    false,
+    1.0,
+    { reset: true }
+  );
 }
 
 /**
