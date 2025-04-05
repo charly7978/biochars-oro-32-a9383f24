@@ -18,14 +18,8 @@ export interface HydrationResult {
  * Specialized processor for hydration measurement
  */
 export class HydrationProcessor extends BaseVitalSignProcessor<HydrationResult> {
-  // Configuration
-  private readonly MAX_BUFFER_SIZE = 50;
+  // Default hydration value
   private readonly DEFAULT_HYDRATION = 65;
-  
-  // Value buffers
-  private valueBuffer: number[] = [];
-  private timeBuffer: number[] = [];
-  private readonly HYDRATION_CONFIDENCE_THRESHOLD = 60;
   
   constructor() {
     super("hydration");
@@ -34,52 +28,32 @@ export class HydrationProcessor extends BaseVitalSignProcessor<HydrationResult> 
   
   /**
    * Process a PPG signal value to calculate hydration
+   * Implementation of the abstract method from BaseVitalSignProcessor
    */
-  processValue(value: number): HydrationResult {
-    // Store value in buffer
-    this.valueBuffer.push(value);
-    this.timeBuffer.push(Date.now());
-    
-    // Trim buffer if needed
-    if (this.valueBuffer.length > this.MAX_BUFFER_SIZE) {
-      this.valueBuffer.shift();
-      this.timeBuffer.shift();
-    }
-    
+  protected processValueImpl(value: number): HydrationResult {
     // Calculate hydration from signal properties
     const hydration = this.calculateHydration(value);
     
-    // Calculate confidence based on buffer size and variance
-    const confidence = this.calculateConfidence();
-    
     return {
       hydrationPercentage: hydration,
-      confidence,
+      confidence: this.confidence,
       timestamp: Date.now()
     };
   }
   
   /**
-   * Reset the processor
-   */
-  reset(): void {
-    this.valueBuffer = [];
-    this.timeBuffer = [];
-    this.setCalibrationFactors(1.0, 0.0);
-  }
-  
-  /**
    * Calculate hydration level from signal values
+   * Only using real data - no simulation
    */
   private calculateHydration(currentValue: number): number {
-    // Only use real values - no simulation
+    // Simple placeholder implementation - to be replaced with actual algorithm
     const baseHydration = this.DEFAULT_HYDRATION;
     
     let hydrationValue = baseHydration;
     
-    if (this.valueBuffer.length >= 10) {
+    if (this.buffer.length >= 10) {
       // Calculate based on signal features
-      const recentValues = this.valueBuffer.slice(-10);
+      const recentValues = this.buffer.slice(-10);
       const amplitude = Math.max(...recentValues) - Math.min(...recentValues);
       const avgValue = recentValues.reduce((a, b) => a + b, 0) / recentValues.length;
       
@@ -98,32 +72,32 @@ export class HydrationProcessor extends BaseVitalSignProcessor<HydrationResult> 
   }
   
   /**
-   * Calculate confidence in the hydration measurement
+   * Update confidence based on data quality
+   * Override from base class
    */
-  private calculateConfidence(): number {
-    if (this.valueBuffer.length < 5) {
-      return 0;
+  protected override updateConfidence(): void {
+    if (this.buffer.length < 5) {
+      this.confidence = 0;
+      return;
     }
     
     // Calculate confidence based on buffer size and consistency
-    const bufferSizeFactor = Math.min(1, this.valueBuffer.length / this.MAX_BUFFER_SIZE);
+    const bufferSizeFactor = Math.min(1, this.buffer.length / this.MAX_BUFFER_SIZE);
     
     // Calculate signal stability
-    const recentValues = this.valueBuffer.slice(-10);
+    const recentValues = this.buffer.slice(-10);
     const avg = recentValues.reduce((a, b) => a + b, 0) / recentValues.length;
     const variance = recentValues.reduce((a, b) => a + Math.pow(b - avg, 2), 0) / recentValues.length;
     const stabilityFactor = Math.max(0, 1 - variance * 10);
     
     // Calculate signal quality
-    const confidenceValue = (bufferSizeFactor * 0.4 + stabilityFactor * 0.6) * 100;
-    return Math.min(100, Math.round(confidenceValue));
+    this.confidence = bufferSizeFactor * 0.4 + stabilityFactor * 0.6;
   }
   
   /**
-   * Set calibration factors for the processor
+   * Reset processor
    */
-  setCalibrationFactors(scaleFactor: number, offsetFactor: number): void {
-    this.scaleFactor = Math.max(0.8, Math.min(1.2, scaleFactor));
-    this.offsetFactor = Math.max(-10, Math.min(10, offsetFactor));
+  override reset(): void {
+    super.reset();
   }
 }

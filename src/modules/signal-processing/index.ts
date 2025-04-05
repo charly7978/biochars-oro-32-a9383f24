@@ -8,7 +8,8 @@ export type {
   ProcessedPPGSignal,
   ProcessedHeartbeatSignal,
   SignalProcessingOptions,
-  ISignalProcessor
+  ISignalProcessor,
+  ChannelConfig
 } from './types';
 
 export { ProcessorType } from './types';

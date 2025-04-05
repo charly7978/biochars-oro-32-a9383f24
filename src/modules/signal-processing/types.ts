@@ -38,7 +38,7 @@ export interface ProcessedHeartbeatSignal {
   bpm: number;
   confidence: number;
   isPeak: boolean;
-  rr?: number;
+  rr?: number | null;
 }
 
 /**

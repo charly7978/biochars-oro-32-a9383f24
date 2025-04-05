@@ -1,219 +1,134 @@
 
 /**
- * Base abstract class for specialized signal processing channels
+ * Base class for specialized signal processing channels
+ * Each channel is optimized for a specific vital sign
  */
-
-import { ISignalProcessor } from '../types';
+import { ProcessorType, ChannelConfig } from '../types';
 
 /**
- * Configuration options for specialized channels
+ * Base channel interface
  */
-export interface ChannelConfig {
-  enabled: boolean;
-  name: string;
-  priority: number;
+export interface BaseChannel<T> {
+  processValue(value: number): T;
+  reset(): void;
+  getType(): ProcessorType;
+  getName(): string;
+  getQuality(): number;
 }
 
 /**
- * Base abstract class for all specialized processing channels
+ * Abstract base class for specialized channels
  */
-export abstract class SpecializedChannel<TResult> implements ISignalProcessor {
-  protected config: ChannelConfig;
+export abstract class SpecializedChannel<T> implements BaseChannel<T> {
+  protected type: ProcessorType;
+  protected name: string;
   protected quality: number = 0;
-  protected samples: number[] = [];
-  protected readonly maxSamples: number = 500;
+  protected recentValues: number[] = [];
+  protected readonly MAX_BUFFER_SIZE: number;
+  protected filterStrength: number;
   
-  /**
-   * Create a new specialized channel
-   * @param config Channel configuration
-   */
-  constructor(config?: Partial<ChannelConfig>) {
-    this.config = {
-      enabled: true,
-      name: 'default',
-      priority: 1,
-      ...config
-    };
+  constructor(config: ChannelConfig) {
+    this.type = config.type;
+    this.name = config.name;
+    this.MAX_BUFFER_SIZE = config.bufferSize || 50;
+    this.filterStrength = config.filterStrength || 0.3;
   }
   
   /**
    * Process a signal value
-   * @param value Signal value to process
-   * @returns Processed value
    */
-  public processSignal(value: number): number {
-    if (!this.config.enabled) {
-      return value;
-    }
-    
-    this.addSample(value);
-    this.updateQuality(value);
-    return this.processValue(value);
-  }
+  abstract processValue(value: number): T;
   
   /**
-   * Abstract method to be implemented by derived classes for value processing
-   * @param value Signal value to process
-   * @returns Processed value
+   * Reset the channel state
    */
-  protected abstract processValue(value: number): number;
-  
-  /**
-   * Add sample to buffer
-   * @param value Signal value
-   */
-  protected addSample(value: number): void {
-    this.samples.push(value);
-    if (this.samples.length > this.maxSamples) {
-      this.samples.shift();
-    }
-  }
-  
-  /**
-   * Reset channel state
-   */
-  public reset(): void {
-    this.samples = [];
+  reset(): void {
+    this.recentValues = [];
     this.quality = 0;
   }
   
   /**
-   * Configure the channel
-   * @param options Configuration options
+   * Get the channel type
    */
-  public configure(options: Partial<ChannelConfig>): void {
-    this.config = {
-      ...this.config,
-      ...options
-    };
+  getType(): ProcessorType {
+    return this.type;
   }
   
   /**
-   * Get channel name
-   * @returns Channel name
+   * Get the channel name
    */
-  public getName(): string {
-    return this.config.name;
+  getName(): string {
+    return this.name;
   }
   
   /**
-   * Get channel priority
-   * @returns Channel priority
+   * Get the current signal quality
    */
-  public getPriority(): number {
-    return this.config.priority;
-  }
-  
-  /**
-   * Check if channel is enabled
-   * @returns True if enabled
-   */
-  public isEnabled(): boolean {
-    return this.config.enabled;
-  }
-  
-  /**
-   * Get signal quality
-   * @returns Signal quality value
-   */
-  public getQuality(): number {
+  getQuality(): number {
     return this.quality;
   }
   
   /**
-   * Update signal quality based on new value and history
-   * @param value New signal value
+   * Add a value to the buffer
    */
-  protected updateQuality(value: number): void {
-    // Base implementation with simple quality determination
-    // Derived classes should implement their own logic
-    if (this.samples.length < 10) {
-      this.quality = 0.3; // Initial quality is low
-      return;
+  protected addToBuffer(value: number): void {
+    this.recentValues.push(value);
+    if (this.recentValues.length > this.MAX_BUFFER_SIZE) {
+      this.recentValues.shift();
+    }
+  }
+  
+  /**
+   * Apply an SMA filter to the signal
+   */
+  protected applySMAFilter(value: number): number {
+    if (this.recentValues.length === 0) return value;
+    
+    const windowSize = Math.min(5, this.recentValues.length);
+    const values = this.recentValues.slice(-windowSize);
+    return [...values, value].reduce((a, b) => a + b, 0) / (windowSize + 1);
+  }
+  
+  /**
+   * Apply an EMA filter to the signal
+   */
+  protected applyEMAFilter(value: number): number {
+    if (this.recentValues.length === 0) return value;
+    
+    const lastValue = this.recentValues[this.recentValues.length - 1];
+    return this.filterStrength * value + (1 - this.filterStrength) * lastValue;
+  }
+  
+  /**
+   * Calculate signal quality based on signal properties
+   */
+  protected calculateSignalQuality(): number {
+    if (this.recentValues.length < 10) return 0;
+    
+    // Calculate mean and variance
+    const mean = this.recentValues.reduce((a, b) => a + b, 0) / this.recentValues.length;
+    const variance = this.recentValues.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / this.recentValues.length;
+    
+    // Low variance (flat signal) or extremely high variance (noise) both indicate poor quality
+    const minVariance = 0.0001;
+    const maxVariance = 0.1;
+    
+    if (variance < minVariance || variance > maxVariance) {
+      return Math.max(0, Math.min(100, variance < minVariance ? 
+        variance / minVariance * 50 : maxVariance / variance * 50));
     }
     
-    // Calculate basic variation metrics
-    const recent = this.samples.slice(-10);
-    const mean = recent.reduce((sum, val) => sum + val, 0) / recent.length;
-    const stdDev = Math.sqrt(
-      recent.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / recent.length
-    );
+    // Amplitude factor
+    const min = Math.min(...this.recentValues);
+    const max = Math.max(...this.recentValues);
+    const amplitude = max - min;
+    const amplitudeFactor = Math.min(amplitude, 0.5) / 0.5;
     
-    // Normalize standard deviation as a percentage of the mean
-    const cv = Math.abs(stdDev / mean);
+    // Buffer size factor
+    const bufferSizeFactor = Math.min(this.recentValues.length / 30, 1);
     
-    // Convert coefficient of variation to a quality metric
-    // Lower variation means higher quality
-    let baseQuality = 0;
-    if (cv < 0.1) {
-      baseQuality = 0.9; // Very stable signal
-    } else if (cv < 0.2) {
-      baseQuality = 0.7; // Good signal
-    } else if (cv < 0.5) {
-      baseQuality = 0.5; // Moderate signal
-    } else if (cv < 1.0) {
-      baseQuality = 0.3; // Poor signal
-    } else {
-      baseQuality = 0.1; // Very poor signal
-    }
-    
-    // Apply smoothing with previous quality (simple EMA)
-    this.quality = this.quality * 0.7 + baseQuality * 0.3;
-  }
-  
-  /**
-   * Get result from the channel
-   * @returns Channel specific result
-   */
-  public abstract getResult(): TResult;
-}
-
-/**
- * Default result type for basic channels
- */
-export interface DefaultChannelResult {
-  value: number;
-  quality: number;
-}
-
-/**
- * Generic processor channel for simple value processing
- */
-export class GenericProcessorChannel extends SpecializedChannel<DefaultChannelResult> {
-  private processor: (value: number) => number;
-  private lastProcessed: number = 0;
-  
-  /**
-   * Create a new generic processor channel
-   * @param processor Function to process values
-   * @param config Channel configuration
-   */
-  constructor(
-    processor: (value: number) => number,
-    config?: Partial<ChannelConfig>
-  ) {
-    super(config);
-    this.processor = processor;
-  }
-  
-  /**
-   * Process value using the provided processor function
-   * @param value Signal value
-   * @returns Processed value
-   */
-  protected processValue(value: number): number {
-    this.lastProcessed = this.processor(value);
-    return this.lastProcessed;
-  }
-  
-  /**
-   * Get channel result
-   * @returns Result with processed value and quality
-   */
-  public getResult(): DefaultChannelResult {
-    return {
-      value: this.lastProcessed,
-      quality: this.quality
-    };
+    // Calculate quality
+    const quality = (amplitudeFactor * 0.6 + bufferSizeFactor * 0.4) * 100;
+    return Math.max(0, Math.min(100, quality));
   }
 }

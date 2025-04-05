@@ -7,7 +7,12 @@
 export { VitalSignsProcessor } from './VitalSignsProcessor';
 
 // Export type definitions for vital signs
-export type { VitalSignsResult, LipidsResult } from './types/vital-signs-result';
+export type { 
+  VitalSignsResult, 
+  LipidsResult, 
+  VitalSignProcessorInterface,
+  ProcessorFeedback
+} from './types/vital-signs-result';
 
 // Export the confidence calculator
 export { ConfidenceCalculator } from './calculators/confidence-calculator';

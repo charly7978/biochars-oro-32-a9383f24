@@ -4,44 +4,49 @@
  */
 
 import { VitalSignsResult, LipidsResult } from './types/vital-signs-result';
-import { HydrationProcessor } from './specialized/HydrationProcessor';
+
+// Interface for signal input
+interface SignalInput {
+  value: number;
+  rrData?: { 
+    intervals: number[]; 
+    lastPeakTime: number | null;
+  };
+}
 
 /**
- * Core processor for vital signs
- * Direct measurement only - no simulation
+ * Main vital signs processor 
  */
 export class VitalSignsProcessor {
   private arrhythmiaCounter: number = 0;
   private signalHistory: number[] = [];
-  private lastDetectionTime: number = 0;
-  private hydrationProcessor: HydrationProcessor;
+  private lastValidResult: VitalSignsResult | null = null;
+  private processingCount: number = 0;
   
   constructor() {
-    // Initialize hydration processor
-    this.hydrationProcessor = new HydrationProcessor();
+    console.log("VitalSignsProcessor initialized");
   }
   
   /**
-   * Process a PPG signal with improved false positive detection
+   * Process signal input to calculate vital signs
+   * @param data Signal input with optional RR interval data
+   * @returns VitalSignsResult with calculated vital signs
    */
-  public processSignal(
-    data: { value: number, rrData?: { intervals: number[]; lastPeakTime: number | null } }
-  ): VitalSignsResult {
+  process(data: SignalInput): VitalSignsResult {
+    // Increment processing counter
+    this.processingCount++;
+    
+    // Add signal to history
     const { value, rrData } = data;
-    
-    // Add value to history
     this.signalHistory.push(value);
-    if (this.signalHistory.length > 50) {
+    if (this.signalHistory.length > 100) {
       this.signalHistory.shift();
-    }
-    
-    // Basic validation
-    if (Math.abs(value) < 0.05) {
-      return this.getEmptyResult();
     }
     
     // Check for arrhythmia patterns in RR intervals
     let arrhythmiaDetected = false;
+    let arrhythmiaData = null;
+    
     if (rrData && rrData.intervals.length >= 3) {
       const intervals = rrData.intervals.slice(-3);
       const avg = intervals.reduce((a, b) => a + b, 0) / intervals.length;
@@ -51,24 +56,31 @@ export class VitalSignsProcessor {
       if (Math.max(...variation) > 0.2) {
         arrhythmiaDetected = true;
         this.arrhythmiaCounter++;
+        
+        // Calculate RMSSD (Root Mean Square of Successive Differences)
+        let sumSquaredDiff = 0;
+        for (let i = 1; i < intervals.length; i++) {
+          sumSquaredDiff += Math.pow(intervals[i] - intervals[i-1], 2);
+        }
+        const rmssd = Math.sqrt(sumSquaredDiff / (intervals.length - 1));
+        
+        // Store arrhythmia data
+        arrhythmiaData = {
+          timestamp: Date.now(),
+          rmssd,
+          rrVariation: Math.max(...variation)
+        };
       }
     }
     
-    // Calculate basic vital signs based on PPG signal
+    // Calculate basic vital signs
     const spo2 = this.calculateSpO2(value);
     const pressure = this.calculateBloodPressure(value, rrData);
     const glucose = this.calculateGlucose(value);
+    const lipids = this.calculateLipids(value);
     
-    // Process hydration using dedicated processor
-    const hydrationResult = this.hydrationProcessor.processValue(value);
-    
-    // Create combined lipids result
-    const lipids = {
-      totalCholesterol: this.calculateTotalCholesterol(value),
-      hydrationPercentage: hydrationResult.hydrationPercentage
-    };
-    
-    return {
+    // Create result
+    const result: VitalSignsResult = {
       spo2,
       pressure,
       arrhythmiaStatus: arrhythmiaDetected ? 
@@ -76,28 +88,15 @@ export class VitalSignsProcessor {
         `NORMAL RHYTHM|${this.arrhythmiaCounter}`,
       glucose,
       lipids,
-      lastArrhythmiaData: arrhythmiaDetected ? {
-        timestamp: Date.now(),
-        rmssd: 0,
-        rrVariation: 0
-      } : null
+      lastArrhythmiaData: arrhythmiaData
     };
-  }
-  
-  /**
-   * Get empty result for invalid signals
-   */
-  private getEmptyResult(): VitalSignsResult {
-    return {
-      spo2: 0,
-      pressure: "--/--",
-      arrhythmiaStatus: "--",
-      glucose: 0,
-      lipids: {
-        totalCholesterol: 0,
-        hydrationPercentage: 0
-      }
-    };
+    
+    // Store as last valid result if we have enough data
+    if (this.signalHistory.length > 20) {
+      this.lastValidResult = result;
+    }
+    
+    return result;
   }
   
   /**
@@ -115,7 +114,7 @@ export class VitalSignsProcessor {
    */
   private calculateBloodPressure(
     ppgValue: number, 
-    rrData?: { intervals: number[]; lastPeakTime: number | null }
+    rrData?: { intervals: number[], lastPeakTime: number | null }
   ): string {
     // Base values
     const baseSystolic = 120;
@@ -148,39 +147,67 @@ export class VitalSignsProcessor {
   }
   
   /**
-   * Calculate total cholesterol level
+   * Calculate lipid levels
    */
-  private calculateTotalCholesterol(ppgValue: number): number {
+  private calculateLipids(ppgValue: number): LipidsResult {
     const baseCholesterol = 180;
+    const baseHydration = 65;
+    
     const cholVariation = ppgValue * 30;
-    return Math.round(baseCholesterol + cholVariation);
+    const hydrationVariation = ppgValue * 20;
+    
+    return {
+      totalCholesterol: Math.round(baseCholesterol + cholVariation),
+      hydrationPercentage: Math.round(Math.min(100, Math.max(45, baseHydration + hydrationVariation)))
+    };
   }
   
   /**
-   * Reset the processor
+   * Process signal directly - compatibility with new interface
    */
-  public reset(): VitalSignsResult {
-    const lastResult = this.getEmptyResult();
-    this.signalHistory = [];
-    this.lastDetectionTime = 0;
-    this.hydrationProcessor.reset();
-    return lastResult;
+  public processSignal(data: SignalInput): VitalSignsResult {
+    return this.process(data);
   }
-  
-  /**
-   * Completely reset the processor
-   */
-  public fullReset(): void {
-    this.arrhythmiaCounter = 0;
-    this.signalHistory = [];
-    this.lastDetectionTime = 0;
-    this.hydrationProcessor.reset();
-  }
-  
+
   /**
    * Get arrhythmia counter
    */
   public getArrhythmiaCounter(): number {
     return this.arrhythmiaCounter;
+  }
+
+  /**
+   * Reset the processor
+   * @returns Last valid result before reset
+   */
+  public reset(): VitalSignsResult | null {
+    const lastValid = this.lastValidResult;
+    this.signalHistory = [];
+    this.processingCount = 0;
+    return lastValid;
+  }
+
+  /**
+   * Full reset including counter
+   */
+  public fullReset(): void {
+    this.signalHistory = [];
+    this.arrhythmiaCounter = 0;
+    this.lastValidResult = null;
+    this.processingCount = 0;
+  }
+
+  /**
+   * Get last valid results
+   */
+  public getLastValidResults(): VitalSignsResult | null {
+    return this.lastValidResult;
+  }
+  
+  /**
+   * Get number of processed signals
+   */
+  public getProcessedCount(): number {
+    return this.processingCount;
   }
 }

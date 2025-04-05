@@ -75,14 +75,8 @@ export const useSignalProcessing = () => {
       });
     }
 
-    // Fixed: Convert parameters to expected format before calling processSignal
-    const input: SignalInput = {
-      value,
-      rrData
-    };
-    
     // Process signal directly - no simulation
-    const result = processorRef.current.processSignal(input);
+    const result = processorRef.current.processSignal({ value, rrData });
     
     return result;
   }, []);
@@ -109,10 +103,10 @@ export const useSignalProcessing = () => {
     
     console.log("useVitalSignsProcessor: Reset initiated - DIRECT MEASUREMENT mode only");
     
-    processorRef.current.reset();
+    const lastValidResults = processorRef.current.reset();
     
     console.log("useVitalSignsProcessor: Reset completed - all values at zero for direct measurement");
-    return null;
+    return lastValidResults;
   }, []);
   
   /**
@@ -148,6 +142,23 @@ export const useSignalProcessing = () => {
     };
   }, []);
 
+  /**
+   * Start processing
+   */
+  const startProcessing = useCallback(() => {
+    console.log("useVitalSignsProcessor: Starting processing");
+    if (!processorRef.current) {
+      initializeProcessor();
+    }
+  }, [initializeProcessor]);
+
+  /**
+   * Stop processing
+   */
+  const stopProcessing = useCallback(() => {
+    console.log("useVitalSignsProcessor: Stopping processing");
+  }, []);
+
   return {
     processSignal,
     initializeProcessor,
@@ -155,6 +166,8 @@ export const useSignalProcessing = () => {
     fullReset,
     getArrhythmiaCounter,
     getDebugInfo,
+    startProcessing,
+    stopProcessing,
     processorRef,
     processedSignals,
     signalLog
