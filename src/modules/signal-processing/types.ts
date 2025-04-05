@@ -32,19 +32,17 @@ export interface SignalProcessingOptions {
   
   // Tasa de adaptación
   adaptationRate?: number;
+  
+  // Enable WebGPU acceleration if available
+  useWebGPU?: boolean;
 }
 
 /**
- * Interfaz común para todos los procesadores de señal
+ * Basic interface for all signal processors
  */
-export interface SignalProcessor<T> {
-  // Procesa un valor de señal y devuelve un resultado
-  processSignal(value: number): T;
-  
-  // Configuración del procesador
+export interface ISignalProcessor {
+  processSignal(value: number): any;
   configure(options: SignalProcessingOptions): void;
-  
-  // Reinicia el procesador
   reset(): void;
 }
 
@@ -101,6 +99,18 @@ export interface ProcessedHeartbeatSignal {
   
   // Variabilidad del ritmo cardíaco
   heartRateVariability: number | null;
+  
+  // Added for compatibility with existing code
+  rr?: any;
+}
+
+/**
+ * Feedback from processor to adjust parameters
+ */
+export interface ProcessorFeedback {
+  quality: number;
+  calibrationStatus: 'none' | 'in_progress' | 'completed' | 'failed';
+  lastUpdated: number;
 }
 
 /**
@@ -109,19 +119,4 @@ export interface ProcessedHeartbeatSignal {
 export enum ProcessorType {
   PPG = 'ppg',
   HEARTBEAT = 'heartbeat'
-}
-
-/**
- * Opciones para el sistema de procesamiento completo
- */
-export interface ProcessingSystemOptions extends SignalProcessingOptions {
-  // Tipo de procesador a utilizar
-  processorType?: ProcessorType;
-  
-  // Frecuencia de muestreo objetivo
-  targetSampleRate?: number;
-  
-  // Funciones de callback
-  onResultsReady?: (result: ProcessedPPGSignal | ProcessedHeartbeatSignal) => void;
-  onError?: (error: Error) => void;
 }

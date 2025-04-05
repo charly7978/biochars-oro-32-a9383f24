@@ -11,7 +11,8 @@ export enum VitalSignType {
   GLUCOSE = 'glucose',
   HYDRATION = 'hydration',
   CARDIAC = 'cardiac',
-  LIPIDS = 'lipids' // Kept for backward compatibility
+  LIPIDS = 'lipids', // Kept for backward compatibility
+  HEARTBEAT = 'heartbeat' // Added for cardiac processor
 }
 
 /**
