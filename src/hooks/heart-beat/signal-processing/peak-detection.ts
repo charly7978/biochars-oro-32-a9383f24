@@ -30,7 +30,9 @@ export function clearDiagnosticsData() {
 export function handlePeakDetection(
   result: HeartBeatResult, 
   lastPeakTimeRef: React.MutableRefObject<number | null>,
-  requestImmediateBeep: (value: number) => boolean
+  requestImmediateBeep: (value: number) => boolean,
+  isMonitoringRef?: React.MutableRefObject<boolean>,
+  value?: number
 ): void {
   try {
     if (result?.isPeak) {
