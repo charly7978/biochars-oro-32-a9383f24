@@ -1,3 +1,4 @@
+
 /**
  * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
  * 
@@ -97,14 +98,24 @@ export function usePrecisionVitalSigns() {
   }, [signalProcessing]);
   
   // Procesar señal
-  const processSignal = useCallback((signal: ProcessedSignal): PrecisionVitalSignsResult | null => {
+  const processSignal = useCallback((signal: Partial<ProcessedSignal>): PrecisionVitalSignsResult | null => {
     if (!processorRef.current || !state.isProcessing) {
       return null;
     }
     
     try {
+      // Create a complete ProcessedSignal object
+      const processedSignal: ProcessedSignal = {
+        timestamp: signal.timestamp || Date.now(),
+        rawValue: signal.rawValue || 0,
+        filteredValue: signal.filteredValue || 0,
+        quality: signal.quality || 0,
+        fingerDetected: signal.fingerDetected || false,
+        roi: signal.roi || { x: 0, y: 0, width: 0, height: 0 }
+      };
+      
       // Procesar señal con precisión mejorada
-      const result = processorRef.current.processSignal(signal);
+      const result = processorRef.current.processSignal(processedSignal);
       
       // Actualizar estado con el resultado
       setState(prev => ({
@@ -130,23 +141,17 @@ export function usePrecisionVitalSigns() {
   
   // Escuchar cambios en la señal procesada
   useEffect(() => {
-    if (!state.isProcessing || !signalProcessing.fingerDetected) {
+    if (!state.isProcessing || !signalProcessing.fingerDetected || !signalProcessing.lastResult) {
       return;
     }
     
     // Crear objeto de señal procesada
-    const processedSignal: ProcessedSignal = {
+    const processedSignal: Partial<ProcessedSignal> = {
       timestamp: Date.now(),
-      rawValue: signalProcessing.lastResult?.rawValue || 0,
-      filteredValue: signalProcessing.filteredValue || 0,
+      rawValue: signalProcessing.lastResult.rawValue,
+      filteredValue: signalProcessing.lastResult.filteredValue,
       quality: signalProcessing.signalQuality,
-      fingerDetected: signalProcessing.fingerDetected,
-      roi: {
-        x: 0,
-        y: 0,
-        width: 100,
-        height: 100
-      }
+      fingerDetected: signalProcessing.fingerDetected
     };
     
     // Procesar señal
@@ -154,10 +159,9 @@ export function usePrecisionVitalSigns() {
     
   }, [
     state.isProcessing,
-    signalProcessing.filteredValue,
+    signalProcessing.lastResult,
     signalProcessing.fingerDetected,
     signalProcessing.signalQuality,
-    signalProcessing.lastResult,
     processSignal
   ]);
   
@@ -206,7 +210,10 @@ export function usePrecisionVitalSigns() {
     if (!processorRef.current) return;
     
     processorRef.current.reset();
-    signalProcessing.reset();
+    
+    if (signalProcessing && typeof signalProcessing.stopProcessing === 'function') {
+      signalProcessing.stopProcessing();
+    }
     
     setState({
       isProcessing: false,

@@ -1,9 +1,10 @@
-
 /**
  * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
  * 
  * Definiciones de tipos para procesamiento de señal
  */
+
+import { VitalSignType } from '../../types/signal';
 
 /**
  * Opciones de configuración para procesadores de señal
@@ -33,6 +34,9 @@ export interface SignalProcessingOptions {
   // Tasa de adaptación
   adaptationRate?: number;
 }
+
+// Export the enhanced VitalSignType for use in other modules
+export { VitalSignType };
 
 /**
  * Interfaz común para todos los procesadores de señal
