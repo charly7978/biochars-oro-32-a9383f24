@@ -5,37 +5,17 @@
  * Central export for vital signs module
  */
 
-// Export the VitalSignsProcessor
-export { VitalSignsProcessor } from './VitalSignsProcessor';
-
-// Create a type definition for VitalSignsResult
-export interface VitalSignsResult {
-  spo2: number;
-  pressure: string;
-  arrhythmiaStatus: string;
-  glucose: number;
-  lipids: {
-    totalCholesterol: number;
-    triglycerides: number;
-  };
-  lastArrhythmiaData?: any;
-  confidence?: {
-    glucose: number;
-    lipids: number;
-    overall: number;
-  };
-}
-
 // Export the traditional processor
+export { VitalSignsProcessor } from './VitalSignsProcessor';
+export type { VitalSignsResult } from './VitalSignsProcessor';
+
+// Export the new modular processor
 export { ModularVitalSignsProcessor } from './ModularVitalSignsProcessor';
+export type { VitalSignsResult as ModularVitalSignsResult } from './ModularVitalSignsProcessor';
 
-// Export the precision processor with advanced features
-export { PrecisionVitalSignsProcessor } from './PrecisionVitalSignsProcessor'; 
+// Export the new precision processor with advanced features
+export { PrecisionVitalSignsProcessor } from './PrecisionVitalSignsProcessor';
 export type { PrecisionVitalSignsResult } from './PrecisionVitalSignsProcessor';
-
-// Export hybrid processor with neural network enhancements
-export { HybridVitalSignsProcessor } from './HybridVitalSignsProcessor';
-export type { HybridProcessingOptions } from './HybridVitalSignsProcessor';
 
 // Export calibration module
 export { CalibrationManager } from './calibration/CalibrationManager';

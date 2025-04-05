@@ -3,7 +3,8 @@
  *
  * Blood pressure processor with improved precision
  */
-import { calculateAmplitude, findPeaksAndValleys, calculateStandardDeviation, applySMAFilter } from './utils';
+import { calculateAmplitude, findPeaksAndValleys, calculateStandardDeviation } from './utils';
+import { applySMAFilter } from './utils/filter-utils';
 
 export class BloodPressureProcessor {
   // Expanded buffer size for greater stability
@@ -30,6 +31,9 @@ export class BloodPressureProcessor {
   private qualityHistory: number[] = [];
   private readonly QUALITY_BUFFER_SIZE = 10;
   
+  // For SMA filtering
+  private filterBuffer: number[] = [];
+  
   // Keep track of last calculation time to prevent sticking
   private lastCalculationTime: number = 0;
   private forceRecalculationInterval: number = 5000; // Force recalculation every 5 seconds
@@ -55,8 +59,18 @@ export class BloodPressureProcessor {
       };
     }
 
-    // Apply noise reduction first - use the updated applySMAFilter
-    const filteredValues = applySMAFilter(values, 5);
+    // Apply noise reduction first - fixed to handle filter buffer correctly
+    const filteredValues: number[] = [];
+    let currentFilterBuffer = [...this.filterBuffer];
+    
+    for (const val of values) {
+      const result = applySMAFilter(val, currentFilterBuffer, 5);
+      filteredValues.push(result.filteredValue);
+      currentFilterBuffer = result.updatedBuffer;
+    }
+    
+    // Update filter buffer for next time
+    this.filterBuffer = currentFilterBuffer;
     
     // Signal quality validation
     const signalAmplitude = Math.max(...filteredValues) - Math.min(...filteredValues);
@@ -242,6 +256,31 @@ export class BloodPressureProcessor {
       diastolic: resultDiastolic,
       precision
     };
+  }
+  
+  /**
+   * Process a single PPG value
+   * Wrapper method for compatibility with other processors
+   */
+  public processValue(value: number): {
+    systolic: number;
+    diastolic: number;
+    precision: number;
+  } {
+    // Create a single-element array with the value
+    return this.calculateBloodPressure([value]);
+  }
+  
+  /**
+   * Get the confidence level of the blood pressure measurement
+   */
+  public getConfidence(): number {
+    if (this.systolicBuffer.length === 0) {
+      return 0;
+    }
+    
+    const { precision } = this.calculateFinalValues();
+    return precision;
   }
   
   /**
