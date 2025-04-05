@@ -1,6 +1,6 @@
 
 /**
- * Enhanced signal processor for PPG signals with standardized interfaces
+ * Simple signal processor for PPG signals
  */
 
 export class SignalProcessor {
@@ -8,18 +8,7 @@ export class SignalProcessor {
   private readonly MAX_BUFFER_SIZE = 300;
   
   /**
-   * Process a signal value and return filtered result
-   * @param value Raw signal value to process
-   * @returns Filtered signal value
-   */
-  public processSignal(value: number): number {
-    return this.applySMAFilter(value);
-  }
-  
-  /**
    * Apply Simple Moving Average filter
-   * @param value Raw signal value
-   * @returns Filtered value
    */
   public applySMAFilter(value: number): number {
     // Add to buffer
@@ -39,7 +28,6 @@ export class SignalProcessor {
   
   /**
    * Get PPG values buffer
-   * @returns Array of stored PPG values
    */
   public getPPGValues(): number[] {
     return this.ppgValues;
@@ -50,14 +38,5 @@ export class SignalProcessor {
    */
   public reset(): void {
     this.ppgValues = [];
-  }
-  
-  /**
-   * Configure the signal processor with options
-   * @param options Configuration options for the processor
-   */
-  public configure(options: any): void {
-    // Default implementation does nothing
-    // Extended processors can override this
   }
 }

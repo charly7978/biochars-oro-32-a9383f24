@@ -1,6 +1,10 @@
 
 /**
- * Standardized interface for vital signs measurement results
+ * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
+ */
+
+/**
+ * Interface for vital signs measurement results
  * Direct measurement only, no simulation
  */
 export interface VitalSignsResult {
@@ -10,7 +14,7 @@ export interface VitalSignsResult {
   glucose: number;
   lipids: {
     totalCholesterol: number;
-    hydrationPercentage: number;  // Using hydrationPercentage instead of triglycerides
+    hydrationPercentage: number;  // Changed from triglycerides to hydrationPercentage
   };
   confidence?: {
     glucose: number;
@@ -22,12 +26,4 @@ export interface VitalSignsResult {
     rmssd: number;
     rrVariation: number;
   } | null;
-}
-
-/**
- * Interface for lipids measurement result
- */
-export interface LipidsResult {
-  totalCholesterol: number;
-  hydrationPercentage: number;
 }

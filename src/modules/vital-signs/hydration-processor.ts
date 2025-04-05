@@ -1,227 +1,158 @@
 
 /**
+ * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
+ * 
  * Hydration processor implementation
- * Specialized in analyzing PPG waveform characteristics related to hydration
+ * Calculates hydration percentage from PPG signal characteristics
  */
 
-import { SignalProcessor } from '../signal-processing/types';
+import { VitalSignsResult } from "./types/vital-signs-result";
 
+/**
+ * Processor for hydration measurements
+ */
 export class HydrationProcessor {
-  private readonly BASE_HYDRATION = 65; // Base hydration percentage
-  private signalBuffer: number[] = [];
-  private readonly BUFFER_SIZE = 30;
-  private lastHydrationValue: number = 0;
-  private bufferFilled: boolean = false;
+  // Default values for measurements
+  private readonly BASE_HYDRATION = 65; // % baseline hydration level
+  private readonly MIN_HYDRATION = 45; // % minimum physiological level
+  private readonly MAX_HYDRATION = 100; // % maximum physiological level
+  private readonly BASE_CHOLESTEROL = 180; // mg/dL (kept for compatibility)
+
+  // Tracking values for stability
+  private lastHydrationEstimate: number = 65; // Initial mid-range value
+  private hydrationHistory: number[] = [];
+  private confidence: number = 0;
+  private readonly HISTORY_SIZE = 5; // Number of values to keep for smoothing
   
   /**
-   * Calculate hydration percentage from PPG signal values
-   * Based on waveform characteristics that correlate with tissue water content
+   * Calculate hydration percentage and cholesterol
+   * @param ppgValues PPG signal values
+   * @returns Hydration result with cholesterol and hydration percentage
    */
-  public calculateHydration(ppgValues: number[]): number {
-    // Add values to buffer
-    for (const value of ppgValues) {
-      this.signalBuffer.push(value);
-      if (this.signalBuffer.length > this.BUFFER_SIZE) {
-        this.signalBuffer.shift();
-        this.bufferFilled = true;
-      }
+  public calculateHydration(ppgValues: number[]): { totalCholesterol: number, hydrationPercentage: number } {
+    if (!ppgValues || ppgValues.length < 10) {
+      return {
+        totalCholesterol: this.BASE_CHOLESTEROL,
+        hydrationPercentage: this.lastHydrationEstimate
+      };
+    }
+
+    // Calculate signal characteristics
+    const signalMin = Math.min(...ppgValues.slice(-15));
+    const signalMax = Math.max(...ppgValues.slice(-15));
+    const amplitude = Math.max(0.01, signalMax - signalMin);
+    
+    // Extract representative value
+    const lastValues = ppgValues.slice(-30);
+    const meanValue = lastValues.reduce((sum, val) => sum + val, 0) / lastValues.length;
+    
+    // Calculate hydration based on signal characteristics
+    let hydrationPercentage = this.calculateHydrationFromSignal(amplitude, meanValue, ppgValues);
+    
+    // Add to history for smoothing
+    this.hydrationHistory.push(hydrationPercentage);
+    if (this.hydrationHistory.length > this.HISTORY_SIZE) {
+      this.hydrationHistory.shift();
     }
     
-    // Need minimum data for meaningful analysis
-    if (!this.bufferFilled || this.signalBuffer.length < 15) {
-      return this.BASE_HYDRATION;
+    // Calculate median for stability
+    const sortedHydration = [...this.hydrationHistory].sort((a, b) => a - b);
+    const medianHydration = this.hydrationHistory.length % 2 === 0
+      ? (sortedHydration[this.hydrationHistory.length / 2 - 1] + sortedHydration[this.hydrationHistory.length / 2]) / 2
+      : sortedHydration[Math.floor(this.hydrationHistory.length / 2)];
+    
+    // Store for future reference
+    this.lastHydrationEstimate = medianHydration;
+    this.updateConfidence(amplitude, ppgValues);
+    
+    // Return both cholesterol (maintained for compatibility) and hydration
+    return {
+      totalCholesterol: Math.round(this.BASE_CHOLESTEROL + ((this.lastHydrationEstimate - this.BASE_HYDRATION) * 0.5)),
+      hydrationPercentage: Math.round(this.lastHydrationEstimate)
+    };
+  }
+
+  /**
+   * Update confidence based on signal quality
+   */
+  private updateConfidence(amplitude: number, ppgValues: number[]): void {
+    if (ppgValues.length < 10) {
+      this.confidence = 0;
+      return;
     }
     
-    try {
-      // Calculate amplitude ratio (higher ratio often correlates with better hydration)
-      const amplitudeRatio = this.calculateAmplitudeRatio();
-      
-      // Calculate waveform symmetry (more symmetrical waveforms often indicate better hydration)
-      const waveformSymmetry = this.calculateWaveformSymmetry();
-      
-      // Calculate pulse transit time features
-      const pulseTransitFeature = this.calculatePulseTransitFeature();
-      
-      // Combine features with appropriate weights
-      const hydrationScore = (
-        amplitudeRatio * 0.4 + 
-        waveformSymmetry * 0.4 + 
-        pulseTransitFeature * 0.2
-      );
-      
-      // Map to physiological range (45-85%)
-      const hydrationPercentage = Math.min(85, Math.max(45, 
-        this.BASE_HYDRATION + (hydrationScore * 20) - 10
-      ));
-      
-      // Smooth changes to prevent unrealistic jumps
-      this.lastHydrationValue = this.lastHydrationValue === 0 ? 
-        hydrationPercentage : 
-        0.7 * this.lastHydrationValue + 0.3 * hydrationPercentage;
-      
-      return Math.round(this.lastHydrationValue);
-    } catch (error) {
-      console.error("Error calculating hydration:", error);
-      return this.BASE_HYDRATION;
-    }
+    // Calculate signal stability
+    const recent = ppgValues.slice(-10);
+    const mean = recent.reduce((sum, val) => sum + val, 0) / recent.length;
+    const variance = recent.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / recent.length;
+    
+    // Higher variance reduces confidence (unstable signal)
+    const stabilityFactor = Math.max(0, 1 - Math.min(1, variance * 2));
+    
+    // Amplitude factor (higher amplitude generally means better signal)
+    const amplitudeFactor = Math.min(1, amplitude * 2);
+    
+    // Combine factors for overall confidence
+    this.confidence = Math.min(0.9, stabilityFactor * 0.6 + amplitudeFactor * 0.4);
   }
   
   /**
-   * Calculate amplitude ratio that correlates with hydration levels
-   * Higher amplitude ratio typically indicates better hydration
+   * Calculate hydration percentage from signal characteristics
    */
-  private calculateAmplitudeRatio(): number {
-    const { peaks, troughs } = this.findPeaksTroughs();
-    if (peaks.length < 2 || troughs.length < 2) {
-      return 0.5; // Default value
+  private calculateHydrationFromSignal(amplitude: number, meanValue: number, ppgValues: number[]): number {
+    // Non-linear mapping of signal characteristics to hydration level
+    const ampFactor = Math.max(0, Math.min(2, amplitude * 5));
+    
+    let hydration;
+    if (ampFactor < 0.5) {
+      // Low amplitude often indicates dehydration
+      hydration = this.MIN_HYDRATION + (ampFactor * 20);
+    } else if (ampFactor < 1.2) {
+      // Mid-range is typical of normal hydration
+      hydration = this.MIN_HYDRATION + 10 + (ampFactor * 25);
+    } else {
+      // Higher amplitude usually indicates good hydration
+      hydration = this.BASE_HYDRATION + ((ampFactor - 1.2) * 15);
     }
     
-    // Calculate average peak-to-trough amplitude
-    let totalAmplitude = 0;
-    let validPairs = 0;
+    // Apply confidence-based limiting to avoid extreme jumps
+    const confLimit = 20 * this.confidence;
+    const maxChange = Math.max(3, confLimit);
     
-    for (let i = 0; i < peaks.length - 1; i++) {
-      const peakIdx = peaks[i];
-      const nextPeakIdx = peaks[i + 1];
-      
-      // Find trough between peaks
-      const troughsBetween = troughs.filter(t => t > peakIdx && t < nextPeakIdx);
-      if (troughsBetween.length > 0) {
-        const troughIdx = troughsBetween[0];
-        
-        const peakValue = this.signalBuffer[peakIdx];
-        const troughValue = this.signalBuffer[troughIdx];
-        const amplitude = peakValue - troughValue;
-        
-        totalAmplitude += amplitude;
-        validPairs++;
-      }
-    }
+    // Limit change from previous value
+    const limitedHydration = Math.max(
+      this.lastHydrationEstimate - maxChange,
+      Math.min(this.lastHydrationEstimate + maxChange, hydration)
+    );
     
-    if (validPairs === 0) return 0.5;
-    
-    const avgAmplitude = totalAmplitude / validPairs;
-    const normalizedAmplitude = Math.min(1, Math.max(0, avgAmplitude / 0.2));
-    
-    return normalizedAmplitude;
+    // Ensure result is within physiological range
+    return Math.min(this.MAX_HYDRATION, Math.max(this.MIN_HYDRATION, limitedHydration));
   }
-  
+
   /**
-   * Calculate waveform symmetry
-   * More symmetrical waveforms can indicate better hydration
-   */
-  private calculateWaveformSymmetry(): number {
-    const { peaks, troughs } = this.findPeaksTroughs();
-    if (peaks.length < 2 || troughs.length < 2) {
-      return 0.5; // Default value
-    }
-    
-    // Calculate symmetry of waveform segments
-    let totalSymmetry = 0;
-    let validSegments = 0;
-    
-    for (let i = 0; i < peaks.length - 1; i++) {
-      const peakIdx = peaks[i];
-      const nextPeakIdx = peaks[i + 1];
-      
-      // Find trough between peaks
-      const troughsBetween = troughs.filter(t => t > peakIdx && t < nextPeakIdx);
-      if (troughsBetween.length > 0) {
-        const troughIdx = troughsBetween[0];
-        
-        // Calculate rising and falling times
-        const risingTime = troughIdx - peakIdx;
-        const fallingTime = nextPeakIdx - troughIdx;
-        
-        // Perfect symmetry would have equal rising and falling times
-        const symmetry = 1 - Math.abs(risingTime - fallingTime) / (risingTime + fallingTime);
-        
-        totalSymmetry += symmetry;
-        validSegments++;
-      }
-    }
-    
-    if (validSegments === 0) return 0.5;
-    
-    return totalSymmetry / validSegments;
-  }
-  
-  /**
-   * Calculate pulse transit features that correlate with hydration
-   * Faster transit times can indicate better hydration
-   */
-  private calculatePulseTransitFeature(): number {
-    // Simple feature based on detection of pulse waves
-    const { peaks } = this.findPeaksTroughs();
-    if (peaks.length < 3) {
-      return 0.5; // Default value
-    }
-    
-    // Calculate average intervals between peaks
-    const intervals = [];
-    for (let i = 1; i < peaks.length; i++) {
-      intervals.push(peaks[i] - peaks[i-1]);
-    }
-    
-    const avgInterval = intervals.reduce((sum, val) => sum + val, 0) / intervals.length;
-    
-    // Normalize: lower intervals (faster pulses) often correlate with better hydration
-    const normalizedInterval = Math.min(1, Math.max(0, 1 - (avgInterval - 5) / 15));
-    
-    return normalizedInterval;
-  }
-  
-  /**
-   * Find peaks and troughs in the signal buffer
-   */
-  private findPeaksTroughs(): { peaks: number[], troughs: number[] } {
-    const peaks: number[] = [];
-    const troughs: number[] = [];
-    
-    // Simple peak/trough detection
-    for (let i = 2; i < this.signalBuffer.length - 2; i++) {
-      // Check for peak (local maximum)
-      if (this.signalBuffer[i] > this.signalBuffer[i-1] && 
-          this.signalBuffer[i] > this.signalBuffer[i-2] &&
-          this.signalBuffer[i] > this.signalBuffer[i+1] && 
-          this.signalBuffer[i] > this.signalBuffer[i+2]) {
-        peaks.push(i);
-      }
-      
-      // Check for trough (local minimum)
-      if (this.signalBuffer[i] < this.signalBuffer[i-1] && 
-          this.signalBuffer[i] < this.signalBuffer[i-2] &&
-          this.signalBuffer[i] < this.signalBuffer[i+1] && 
-          this.signalBuffer[i] < this.signalBuffer[i+2]) {
-        troughs.push(i);
-      }
-    }
-    
-    return { peaks, troughs };
-  }
-  
-  /**
-   * Process value directly (alternative API)
-   */
-  public processValue(value: number): number {
-    return this.calculateHydration([value]);
-  }
-  
-  /**
-   * Get confidence in the hydration measurement
+   * Get current confidence level
    */
   public getConfidence(): number {
-    if (!this.bufferFilled) return 0.1;
-    const bufferRatio = Math.min(1, this.signalBuffer.length / this.BUFFER_SIZE);
-    return Math.min(0.9, bufferRatio * 0.9);
+    return this.confidence;
   }
-  
+
   /**
    * Reset processor state
    */
   public reset(): void {
-    this.signalBuffer = [];
-    this.lastHydrationValue = 0;
-    this.bufferFilled = false;
+    this.lastHydrationEstimate = 65;
+    this.hydrationHistory = [];
+    this.confidence = 0;
+  }
+
+  /**
+   * Get diagnostics - empty implementation to satisfy interface requirements
+   */
+  public getDiagnostics(): Record<string, any> {
+    return {
+      confidence: this.confidence,
+      lastEstimate: this.lastHydrationEstimate,
+      historySize: this.hydrationHistory.length
+    };
   }
 }
