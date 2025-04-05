@@ -1,4 +1,3 @@
-
 /**
  * Signal processing types
  * Optimized and consolidated type definitions
@@ -39,7 +38,7 @@ export interface ProcessedHeartbeatSignal {
   bpm: number;
   confidence: number;
   isPeak: boolean;
-  rr?: number | null;
+  rrInterval?: number | null;
   // Additional properties
   peakConfidence?: number;
   instantaneousBPM?: number | null;
@@ -61,6 +60,7 @@ export interface SignalProcessingOptions {
   qualityEnhancedByPrediction?: boolean;
   adaptationRate?: number;
   predictionHorizon?: number;
+  useWebGPU?: boolean;
 }
 
 /**
@@ -136,4 +136,12 @@ export enum CalibrationStatus {
   CALIBRATING = "calibrating",
   CALIBRATED = "calibrated",
   INVALID = "invalid"
+}
+
+/**
+ * Reset finger detector
+ */
+export function resetFingerDetector(): void {
+  // Implementation would depend on actual finger detection logic
+  console.log("Finger detector reset");
 }

@@ -78,7 +78,7 @@ export class TransformerCNNModel {
     // Embed input with CNN
     let embedded = tf.layers.reshape({
       targetShape: [sequenceLength, inputShape[0] / sequenceLength]
-    }).apply(input);
+    }).apply(input) as tf.SymbolicTensor;
     
     // Add positional embeddings
     const positions = tf.range(0, sequenceLength).expandDims(0);
@@ -86,7 +86,7 @@ export class TransformerCNNModel {
       inputDim: sequenceLength,
       outputDim: embeddingDim,
       inputLength: sequenceLength
-    }).apply(positions);
+    }).apply(positions) as tf.SymbolicTensor;
     
     // CNN layers for feature extraction
     let features = tf.layers.conv1d({
@@ -94,64 +94,63 @@ export class TransformerCNNModel {
       kernelSize: 3,
       padding: 'same',
       activation: 'relu'
-    }).apply(embedded);
+    }).apply(embedded) as tf.SymbolicTensor;
     
-    features = tf.layers.batchNormalization().apply(features);
-    features = tf.layers.maxPooling1d({poolSize: 2}).apply(features);
+    features = tf.layers.batchNormalization().apply(features) as tf.SymbolicTensor;
+    features = tf.layers.maxPooling1d({poolSize: 2}).apply(features) as tf.SymbolicTensor;
     
     features = tf.layers.conv1d({
       filters: embeddingDim * 2,
       kernelSize: 3,
       padding: 'same',
       activation: 'relu'
-    }).apply(features);
+    }).apply(features) as tf.SymbolicTensor;
     
-    features = tf.layers.batchNormalization().apply(features);
+    features = tf.layers.batchNormalization().apply(features) as tf.SymbolicTensor;
     
     // Apply transformer layers
     let transformerOutput = features;
     
     for (let i = 0; i < numLayers; i++) {
       // Self-attention mechanism
-      const query = tf.layers.dense({units: embeddingDim}).apply(transformerOutput);
-      const key = tf.layers.dense({units: embeddingDim}).apply(transformerOutput);
-      const value = tf.layers.dense({units: embeddingDim}).apply(transformerOutput);
+      const query = tf.layers.dense({units: embeddingDim}).apply(transformerOutput) as tf.SymbolicTensor;
+      const key = tf.layers.dense({units: embeddingDim}).apply(transformerOutput) as tf.SymbolicTensor;
+      const value = tf.layers.dense({units: embeddingDim}).apply(transformerOutput) as tf.SymbolicTensor;
       
       // Multi-head attention (simplified for TFJS compatibility)
-      // Note: TFJS doesn't have direct multiHeadAttention layer, so we implement key concepts
-      const attentionScore = tf.layers.dot({axes: -1}).apply([query, key]);
-      const attentionWeights = tf.layers.activation({activation: 'softmax'}).apply(attentionScore);
-      const contextVector = tf.layers.dot({axes: [2, 1]}).apply([attentionWeights, value]);
+      const attentionScore = tf.layers.dot({axes: -1}).apply([query, key]) as tf.SymbolicTensor;
+      const attentionWeights = tf.layers.activation({activation: 'softmax'}).apply(attentionScore) as tf.SymbolicTensor;
+      const contextVector = tf.layers.dot({axes: [2, 1]}).apply([attentionWeights, value]) as tf.SymbolicTensor;
       
       // Add & Norm
-      const attentionOutput = tf.layers.add().apply([transformerOutput, contextVector]);
-      const normalizedAttention = tf.layers.layerNormalization().apply(attentionOutput);
+      const attentionOutput = tf.layers.add().apply([transformerOutput, contextVector]) as tf.SymbolicTensor;
+      const normalizedAttention = tf.layers.layerNormalization().apply(attentionOutput) as tf.SymbolicTensor;
       
       // Feed-forward network
-      const ffn = tf.layers.dense({units: intermediateSize, activation: 'relu'}).apply(normalizedAttention);
-      const ffnOutput = tf.layers.dense({units: embeddingDim}).apply(ffn);
+      const ffn = tf.layers.dense({units: intermediateSize, activation: 'relu'}).apply(normalizedAttention) as tf.SymbolicTensor;
+      const ffnOutput = tf.layers.dense({units: embeddingDim}).apply(ffn) as tf.SymbolicTensor;
       
       // Add & Norm
-      const output = tf.layers.add().apply([normalizedAttention, ffnOutput]);
-      transformerOutput = tf.layers.layerNormalization().apply(output);
+      const output = tf.layers.add().apply([normalizedAttention, ffnOutput]) as tf.SymbolicTensor;
+      transformerOutput = tf.layers.layerNormalization().apply(output) as tf.SymbolicTensor;
       
       // Apply dropout
       if (dropout > 0) {
-        transformerOutput = tf.layers.dropout({rate: dropout}).apply(transformerOutput);
+        transformerOutput = tf.layers.dropout({rate: dropout}).apply(transformerOutput) as tf.SymbolicTensor;
       }
     }
     
     // Global pooling
-    const pooled = tf.layers.globalAveragePooling1d().apply(transformerOutput);
+    const pooled = tf.layers.globalAveragePooling1d().apply(transformerOutput) as tf.SymbolicTensor;
     
     // Output layer
     const output = tf.layers.dense({
       units: outputShape[0],
       activation: 'linear'
-    }).apply(pooled);
+    }).apply(pooled) as tf.SymbolicTensor;
     
     // Create and compile model
-    const model = tf.model({inputs: input, outputs: output as tf.SymbolicTensor});
+    const model = tf.model({inputs: input, outputs: output});
     
     model.compile({
       optimizer: 'adam',
@@ -192,13 +191,13 @@ export class TransformerCNNModel {
   /**
    * Load pre-trained weights
    */
-  public async loadWeights(path: string): Promise<boolean> {
+  public async loadWeights(weightMap: tf.NamedTensorMap): Promise<boolean> {
     try {
       if (!this.model) {
         await this.initialize(this.useWebGPU);
       }
       
-      await this.model!.loadWeights(path);
+      await this.model!.loadWeights(weightMap);
       return true;
     } catch (error) {
       console.error("Error loading weights:", error);

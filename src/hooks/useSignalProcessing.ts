@@ -65,14 +65,14 @@ export function useSignalProcessing() {
     const createProcessors = async () => {
       if (!ppgProcessorRef.current) {
         console.log("useSignalProcessing: Creating PPG processor");
-        const { default: SignalProcessor } = await import('../modules/signal-processing/ppg-processor');
-        ppgProcessorRef.current = new SignalProcessor();
+        const PPGProcessor = await import('../modules/signal-processing/ppg-processor');
+        ppgProcessorRef.current = new PPGProcessor.PPGSignalProcessor();
       }
       
       if (!heartbeatProcessorRef.current) {
         console.log("useSignalProcessing: Creating heartbeat processor");
-        const { default: HeartBeatProcessor } = await import('../modules/signal-processing/heartbeat-processor');
-        heartbeatProcessorRef.current = new HeartBeatProcessor();
+        const HeartbeatProcessor = await import('../modules/signal-processing/heartbeat-processor');
+        heartbeatProcessorRef.current = new HeartbeatProcessor.HeartBeatProcessor();
       }
     };
     

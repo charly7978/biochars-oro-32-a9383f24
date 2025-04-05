@@ -1,68 +1,43 @@
 
 /**
- * Result types for vital signs processing
+ * Type definitions for vital signs results
  */
 
-/**
- * Lipids measurement result
- */
-export interface LipidsResult {
-  totalCholesterol: number;
-  hydrationPercentage: number;
-}
-
-/**
- * Complete vital signs result object
- */
+// Result of vital signs processing
 export interface VitalSignsResult {
   spo2: number;
   pressure: string;
   arrhythmiaStatus: string;
   glucose: number;
   lipids: LipidsResult;
+  confidence?: {
+    glucose: number;
+    lipids: number;
+    overall: number;
+  };
   lastArrhythmiaData?: {
     timestamp: number;
-    rmssd?: number;
-    rrVariation?: number;
+    rmssd: number;
+    rrVariation: number;
   } | null;
-  /**
-   * Optional confidence values for measurements
-   */
-  confidence?: {
-    spo2?: number;
-    pressure?: number;
-    glucose?: number;
-    lipids?: number;
-    overall?: number;
-  };
 }
 
-/**
- * Base interface for vital sign processor implementations
- */
-export interface VitalSignProcessorInterface<T> {
-  /**
-   * Process a raw signal value to calculate a vital sign
-   */
-  processValue(value: number): T;
-  
-  /**
-   * Reset the processor state
-   */
-  reset(): void;
-  
-  /**
-   * Get the processor name or identifier
-   */
-  getProcessorName(): string;
+// Lipids result interface
+export interface LipidsResult {
+  totalCholesterol: number;
+  hydrationPercentage: number;
+  triglycerides?: number;
 }
 
-/**
- * Standard interface for vital sign processing feedback
- */
+// Processor interface
+export interface VitalSignProcessorInterface {
+  processSignal(value: number): any;
+  reset(): VitalSignsResult | null;
+}
+
+// Processor feedback
 export interface ProcessorFeedback {
   quality: number;
-  calibrationStatus: 'uncalibrated' | 'calibrating' | 'calibrated';
+  calibrationStatus: string;
   lastUpdated: number;
-  diagnosticInfo?: Record<string, any>;
 }

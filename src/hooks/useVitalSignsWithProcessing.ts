@@ -139,7 +139,7 @@ export function useVitalSignsWithProcessing(options?: UseVitalSignsWithProcessin
         
         // Increment counter and update timestamp
         processedFramesRef.current++;
-        lastProcessTimeRef.current = now;
+        lastProcessTimeRef.current = Date.now();
       }
     } catch (error) {
       console.error("Error in integrated processing:", error);

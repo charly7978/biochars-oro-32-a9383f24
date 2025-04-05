@@ -1,4 +1,3 @@
-
 /**
  * Specialized channel for SpO2 signal processing
  * Optimizes the signal specifically for oxygen saturation measurement
@@ -6,12 +5,12 @@
  */
 
 import { SpecializedChannel, ChannelConfig } from './SpecializedChannel';
-import { VitalSignType } from '../../../types/signal';
+import { ProcessorType } from '../types';
 
 /**
  * SpO2-specific channel
  */
-export class SpO2Channel extends SpecializedChannel {
+export class SpO2Channel extends SpecializedChannel<number> {
   // SpO2-specific parameters
   private readonly PERFUSION_WEIGHT = 0.65;   // Weight for perfusion components
   private readonly ABSORPTION_WEIGHT = 0.35;  // Weight for absorption components
@@ -23,14 +22,18 @@ export class SpO2Channel extends SpecializedChannel {
   private readonly COMPONENT_BUFFER_SIZE = 50; // Buffer size for AC/DC components
   
   constructor(config: ChannelConfig) {
-    super(VitalSignType.SPO2, config);
+    super(config);
+  }
+  
+  /**
+   * Process signal for SpO2 analysis
+   */
+  processSignal(value: number): number {
+    return this.applyChannelSpecificOptimization(value);
   }
   
   /**
    * Apply SpO2-specific optimization to the signal
-   * - Emphasizes AC/DC ratio critical for oxygen saturation
-   * - Enhances perfusion-related components
-   * - Optimizes for absorption characteristics
    */
   protected applyChannelSpecificOptimization(value: number): number {
     // Extract AC and DC components

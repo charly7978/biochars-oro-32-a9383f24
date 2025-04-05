@@ -1,20 +1,17 @@
-
 /**
- * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
- * 
  * Specialized channel for blood pressure signal processing
  * Optimizes the signal specifically for systolic/diastolic measurement
  * Focuses on pulse wave characteristics and transit time features
  */
 
 import { SpecializedChannel, ChannelConfig } from './SpecializedChannel';
-import { VitalSignType } from '../../../types/signal';
+import { ProcessorType } from '../types';
 import { calculateStandardDeviation, applySMAFilter } from '../../vital-signs/utils';
 
 /**
  * Blood pressure-specific channel with improved precision
  */
-export class BloodPressureChannel extends SpecializedChannel {
+export class BloodPressureChannel extends SpecializedChannel<number> {
   // BP-specific parameters
   private readonly PULSE_WAVE_EMPHASIS = 1.5;   // Enhanced emphasis on pulse wave features
   private readonly SYSTOLIC_WEIGHT = 0.7;       // Increased weight for systolic components
@@ -31,7 +28,14 @@ export class BloodPressureChannel extends SpecializedChannel {
   private readonly QUALITY_BUFFER_SIZE = 20;
   
   constructor(config: ChannelConfig) {
-    super(VitalSignType.BLOOD_PRESSURE, config);
+    super(config);
+  }
+  
+  /**
+   * Process signal for blood pressure
+   */
+  processSignal(value: number): number {
+    return this.applyChannelSpecificOptimization(value);
   }
   
   /**
@@ -345,7 +349,7 @@ export class BloodPressureChannel extends SpecializedChannel {
   /**
    * Reset channel state
    */
-  public override reset(): void {
+  reset(): void {
     super.reset();
     this.pulseRiseTimeBuffer = [];
     this.pulsePeakBuffer = [];
@@ -356,7 +360,7 @@ export class BloodPressureChannel extends SpecializedChannel {
   /**
    * Get pulse wave characteristics for BP calculation with improved precision
    */
-  public getPulseWaveCharacteristics(): {
+  getPulseWaveCharacteristics(): {
     avgPeakAmplitude: number;
     avgValleyAmplitude: number;
     avgRiseTime: number;
