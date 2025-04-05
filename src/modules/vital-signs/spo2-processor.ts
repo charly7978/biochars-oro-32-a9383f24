@@ -3,46 +3,11 @@
  * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
  */
 
-/**
- * Utilidades para cálculos de señal PPG
- */
-export const calculateAC = (values: number[]): number => {
-  const recentValues = values.slice(-30);
-  const min = Math.min(...recentValues);
-  const max = Math.max(...recentValues);
-  return max - min;
-};
+import { calculateAC, calculateDC } from './utils';
 
-export const calculateDC = (values: number[]): number => {
-  const recentValues = values.slice(-30);
-  const sum = recentValues.reduce((acc, val) => acc + val, 0);
-  return sum / recentValues.length;
-};
-
-/**
- * Procesador especializado para cálculo de SpO2
- */
 export class SpO2Processor {
   private readonly SPO2_BUFFER_SIZE = 10;
   private spo2Buffer: number[] = [];
-  private valueBuffer: number[] = [];
-
-  /**
-   * Process new PPG value and add to buffer
-   */
-  public processValue(value: number): number {
-    this.valueBuffer.push(value);
-    if (this.valueBuffer.length > 50) {
-      this.valueBuffer.shift();
-    }
-    
-    // Calculate SpO2 if we have enough values
-    if (this.valueBuffer.length >= 30) {
-      return this.calculateSpO2(this.valueBuffer);
-    }
-    
-    return this.getLastValidSpo2(1);
-  }
 
   /**
    * Calculates the oxygen saturation (SpO2) from real PPG values
@@ -113,6 +78,5 @@ export class SpO2Processor {
    */
   public reset(): void {
     this.spo2Buffer = [];
-    this.valueBuffer = [];
   }
 }
