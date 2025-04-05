@@ -16,12 +16,12 @@ export interface VitalSignsResult {
   glucose: number;
   lipids: {
     totalCholesterol: number;
-    triglycerides: number;
+    hydrationPercentage: number;  // Changed from triglycerides to hydrationPercentage
   };
   lastArrhythmiaData?: any;
   confidence?: {
     glucose: number;
-    lipids: number;
+    lipids: number;  // Kept as 'lipids' for backward compatibility
     overall: number;
   };
 }
@@ -52,7 +52,7 @@ export type { EnvironmentalConditions, AdjustmentFactors } from './environment/E
 // Export specialized processors
 export * from './specialized/BaseVitalSignProcessor';
 export * from './specialized/GlucoseProcessor';
-export * from './specialized/LipidsProcessor';
+export * from './specialized/HydrationProcessor';  // Export new HydrationProcessor instead of LipidsProcessor
 export * from './specialized/BloodPressureProcessor';
 export * from './specialized/SpO2Processor';
 export * from './specialized/CardiacProcessor';

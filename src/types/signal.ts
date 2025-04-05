@@ -142,7 +142,7 @@ export interface OptimizedSignalChannel {
  */
 export enum VitalSignType {
   GLUCOSE = 'glucose',
-  LIPIDS = 'lipids',
+  HYDRATION = 'hydration',
   BLOOD_PRESSURE = 'blood_pressure',
   SPO2 = 'spo2',
   CARDIAC = 'cardiac'
