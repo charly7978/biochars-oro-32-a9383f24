@@ -1,213 +1,204 @@
-
 /**
  * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
  * 
- * System coordinator for adaptive signal processing systems
+ * Coordinador del sistema adaptativo
+ * Maneja la comunicación y coordinación entre diferentes componentes
  */
+
 import { logError, ErrorLevel } from '@/utils/debugUtils';
 
-// Define message types for the adaptive system
+/**
+ * Tipos de mensajes soportados
+ */
 export enum MessageType {
-  CONFIG_UPDATE = 'config_update',
-  RECALIBRATION_REQUEST = 'recalibration_request',
-  QUALITY_UPDATE = 'quality_update',
-  SENSITIVITY_UPDATE = 'sensitivity_update',
-  THRESHOLD_UPDATE = 'threshold_update',
-  RESET_REQUEST = 'reset_request',
-  DIAGNOSTICS_REQUEST = 'diagnostics_request'
-}
-
-// Define adaptive system message interface
-export interface AdaptiveSystemMessage {
-  type: MessageType;
-  timestamp: number;
-  source: string;
-  data?: any;
-  target?: string;
+  FINGER_DETECTED = 'finger-detected',
+  SIGNAL_QUALITY_UPDATE = 'signal-quality-update',
+  OPTIMIZATION_REQUEST = 'optimization-request',
+  OPTIMIZATION_RESULT = 'optimization-result',
+  ERROR = 'error',
+  DIAGNOSTIC = 'diagnostic'
 }
 
 /**
- * Coordinator for adaptive system components
+ * Interfaz para mensajes del sistema adaptativo
  */
-export class AdaptiveSystemCoordinator {
-  private systemState: Record<string, any> = {
-    quality: 0,
-    sensitivity: 1.0,
-    thresholds: {},
-    calibrationState: 'uncalibrated',
-    lastUpdated: Date.now(),
-  };
-  
-  private messageHandlers: Map<MessageType, ((message: AdaptiveSystemMessage) => void)[]> = new Map();
-  private components: Set<string> = new Set();
-  
-  /**
-   * Register a component with the coordinator
-   */
-  public registerComponent(componentId: string): void {
-    this.components.add(componentId);
-    console.log(`AdaptiveSystem: Component registered: ${componentId}`);
-  }
-  
-  /**
-   * Subscribe to message types
-   */
-  public subscribe(
-    messageType: MessageType, 
-    handler: (message: AdaptiveSystemMessage) => void
-  ): () => void {
-    const handlers = this.messageHandlers.get(messageType) || [];
-    handlers.push(handler);
-    this.messageHandlers.set(messageType, handlers);
-    
-    return () => {
-      const currentHandlers = this.messageHandlers.get(messageType) || [];
-      this.messageHandlers.set(
-        messageType,
-        currentHandlers.filter(h => h !== handler)
-      );
-    };
-  }
+export interface AdaptiveSystemMessage {
+  type: MessageType;
+  source: string;
+  data: any;
+  timestamp: number;
+}
+
+/**
+ * Interfaz para el coordinador del sistema adaptativo
+ */
+export interface AdaptiveSystemCoordinator {
+  sendMessage(message: AdaptiveSystemMessage): void;
+  registerComponent(componentName: string, messageTypes: MessageType[]): void;
+  unregisterComponent(componentName: string): void;
+  processMessage(message: AdaptiveSystemMessage): void;
+  configure(config: any): void;
+  reset(): void;
+}
+
+/**
+ * Implementación del coordinador del sistema adaptativo
+ */
+class AdaptiveSystemCoordinatorImpl implements AdaptiveSystemCoordinator {
+  private components: Record<string, MessageType[]> = {};
+  private config: any = {};
   
   /**
-   * Send message to the adaptive system
+   * Envía un mensaje a todos los componentes registrados
    */
   public sendMessage(message: AdaptiveSystemMessage): void {
-    const handlers = this.messageHandlers.get(message.type) || [];
-    
-    // Broadcast to all handlers
-    handlers.forEach(handler => {
-      try {
-        // Only send to target if specified
-        if (message.target && message.target !== handler.name) {
-          return;
-        }
-        
-        handler(message);
-      } catch (error) {
-        logError(
-          `Error handling adaptive system message: ${error}`,
-          ErrorLevel.ERROR,
-          'AdaptiveSystem',
-          { messageType: message.type, error }
-        );
-      }
-    });
-    
-    // Update system state based on message
-    this.updateSystemState(message);
-  }
-  
-  /**
-   * Update system state based on message
-   */
-  private updateSystemState(message: AdaptiveSystemMessage): void {
-    this.systemState.lastUpdated = Date.now();
-    
-    switch (message.type) {
-      case MessageType.CONFIG_UPDATE:
-        if (message.data) {
-          this.systemState = {
-            ...this.systemState,
-            ...message.data
-          };
-        }
-        break;
-        
-      case MessageType.QUALITY_UPDATE:
-        if (message.data && typeof message.data.quality === 'number') {
-          this.systemState.quality = message.data.quality;
-        }
-        break;
-        
-      case MessageType.SENSITIVITY_UPDATE:
-        if (message.data && typeof message.data.sensitivity === 'number') {
-          this.systemState.sensitivity = message.data.sensitivity;
-        }
-        break;
-        
-      case MessageType.THRESHOLD_UPDATE:
-        if (message.data && message.data.thresholds) {
-          this.systemState.thresholds = {
-            ...this.systemState.thresholds,
-            ...message.data.thresholds
-          };
-        }
-        break;
-        
-      case MessageType.RESET_REQUEST:
-        // Reset to default state
-        this.systemState = {
-          quality: 0,
-          sensitivity: 1.0,
-          thresholds: {},
-          calibrationState: 'uncalibrated',
-          lastUpdated: Date.now(),
-        };
-        
-        // Log the reset
-        logError(
-          'Adaptive system reset requested',
-          ErrorLevel.INFO,
-          'AdaptiveSystem',
-          { timestamp: new Date().toISOString() }
-        );
-        break;
-        
-      case MessageType.DIAGNOSTICS_REQUEST:
-        // Just log the current state
-        logError(
-          'Adaptive system diagnostics requested',
-          ErrorLevel.INFO,
-          'AdaptiveSystem',
-          { 
-            state: this.systemState,
-            components: Array.from(this.components),
-            messageHandlers: Array.from(this.messageHandlers.keys()).map(key => key.toString())
+    try {
+      message.timestamp = Date.now();
+      
+      for (const componentName in this.components) {
+        if (this.components.hasOwnProperty(componentName)) {
+          const supportedTypes = this.components[componentName];
+          
+          if (supportedTypes.includes(message.type)) {
+            this.processMessage({ ...message, destination: componentName });
           }
-        );
-        break;
+        }
+      }
+    } catch (error) {
+      logError(
+        `Error al enviar mensaje: ${error}`,
+        ErrorLevel.ERROR,
+        "AdaptiveSystemCoordinator"
+      );
     }
   }
   
   /**
-   * Process a value through the adaptive system
+   * Registra un componente en el sistema
    */
-  public processValue(value: number, metadata?: any): number {
-    // Apply sensitivity scaling
-    const sensitivity = this.systemState.sensitivity || 1.0;
-    return value * sensitivity;
+  public registerComponent(componentName: string, messageTypes: MessageType[]): void {
+    try {
+      this.components[componentName] = messageTypes;
+      logError(
+        `Componente registrado: ${componentName} - Tipos: ${messageTypes.join(', ')}`,
+        ErrorLevel.INFO,
+        "AdaptiveSystemCoordinator"
+      );
+    } catch (error) {
+      logError(
+        `Error al registrar componente: ${componentName} - ${error}`,
+        ErrorLevel.ERROR,
+        "AdaptiveSystemCoordinator"
+      );
+    }
   }
   
   /**
-   * Get current system state
+   * Elimina un componente del sistema
    */
-  public getSystemState(): Record<string, any> {
-    return { ...this.systemState };
+  public unregisterComponent(componentName: string): void {
+    try {
+      delete this.components[componentName];
+      logError(
+        `Componente eliminado: ${componentName}`,
+        ErrorLevel.INFO,
+        "AdaptiveSystemCoordinator"
+      );
+    } catch (error) {
+      logError(
+        `Error al eliminar componente: ${componentName} - ${error}`,
+        ErrorLevel.ERROR,
+        "AdaptiveSystemCoordinator"
+      );
+    }
   }
   
   /**
-   * Update system configuration
+   * Procesa un mensaje específico para un componente
    */
-  public updateConfig(config: Record<string, any>): void {
-    this.systemState = {
-      ...this.systemState,
-      ...config,
-      lastUpdated: Date.now()
-    };
+  public processMessage(message: AdaptiveSystemMessage): void {
+    try {
+      if (!message.destination) {
+        logError(
+          `Mensaje sin destino: ${message.type} from ${message.source}`,
+          ErrorLevel.WARNING,
+          "AdaptiveSystemCoordinator"
+        );
+        return;
+      }
+      
+      // Simular procesamiento (reemplazar con lógica real)
+      logError(
+        `Mensaje procesado: ${message.type} from ${message.source} to ${message.destination}`,
+        ErrorLevel.DEBUG,
+        "AdaptiveSystemCoordinator"
+      );
+      
+      // Aquí se podría invocar una función específica del componente
+      // o actualizar el estado del componente directamente
+      
+    } catch (error) {
+      logError(
+        `Error al procesar mensaje: ${message.type} - ${error}`,
+        ErrorLevel.ERROR,
+        "AdaptiveSystemCoordinator"
+      );
+    }
+  }
+  
+  /**
+   * Configura el coordinador con opciones personalizadas
+   */
+  public configure(config: any): void {
+    try {
+      this.config = { ...this.config, ...config };
+      logError(
+        `Sistema adaptativo configurado: ${JSON.stringify(this.config)}`,
+        ErrorLevel.INFO,
+        "AdaptiveSystemCoordinator"
+      );
+    } catch (error) {
+      logError(
+        `Error al configurar sistema adaptativo: ${error}`,
+        ErrorLevel.ERROR,
+        "AdaptiveSystemCoordinator"
+      );
+    }
+  }
+  
+  /**
+   * Reinicia el coordinador y todos sus componentes
+   */
+  public reset(): void {
+    try {
+      this.components = {};
+      this.config = {};
+      logError(
+        "Sistema adaptativo reiniciado",
+        ErrorLevel.INFO,
+        "AdaptiveSystemCoordinator"
+      );
+    } catch (error) {
+      logError(
+        `Error al reiniciar sistema adaptativo: ${error}`,
+        ErrorLevel.ERROR,
+        "AdaptiveSystemCoordinator"
+      );
+    }
   }
 }
 
+// Singleton instance
+let adaptiveSystemCoordinator: AdaptiveSystemCoordinator | null = null;
+
 /**
- * Get or create the adaptive system coordinator
+ * Obtiene la instancia del coordinador del sistema adaptativo
  */
 export function getAdaptiveSystemCoordinator(): AdaptiveSystemCoordinator {
-  // Use global to create a singleton
-  const globalAny = global as any;
-  
-  if (!globalAny.__adaptiveSystemCoordinator) {
-    globalAny.__adaptiveSystemCoordinator = new AdaptiveSystemCoordinator();
+  if (!adaptiveSystemCoordinator) {
+    adaptiveSystemCoordinator = new AdaptiveSystemCoordinatorImpl();
   }
-  
-  return globalAny.__adaptiveSystemCoordinator;
+  return adaptiveSystemCoordinator;
 }
+
+export type { AdaptiveSystemCoordinator };

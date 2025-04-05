@@ -13,58 +13,9 @@ export * from './types';
 export * from './ppg-processor';
 export * from './heartbeat-processor';
 
-// Exportar sistema de detección de dedos unificado
-export {
-  unifiedFingerDetector,
-  resetFingerDetector,
-  getFingerDetectionState,
-  updateDetectionSource,
-  adaptDetectionThresholds,
-  isFingerDetected,
-  getDetectionConfidence
-} from './finger-detection/unified-finger-detector';
-
-export type {
-  DetectionSource,
-  DetectionState,
-  DiagnosticEvent,
-  DiagnosticEventType,
-  AdaptiveCalibrationParams,
-  EnvironmentalState
-} from './finger-detection/finger-detection-types';
-
-export {
-  fingerDiagnostics,
-  reportFingerDetection,
-  reportDiagnosticEvent,
-  getDiagnosticStats,
-  clearDiagnosticEvents
-} from './finger-detection/finger-diagnostics';
-
-export {
-  adaptiveCalibration,
-  getCalibrationParameters,
-  updateEnvironmentalState,
-  resetCalibration
-} from './finger-detection/adaptive-calibration';
-
-export {
-  analyzeSignalForRhythmicPattern,
-  resetRhythmDetector,
-  isFingerDetectedByRhythm,
-  getConsistentPatternsCount
-} from './finger-detection/rhythm-pattern-detector';
-
-export {
-  checkSignalStrength,
-  shouldProcessMeasurement,
-  resetAmplitudeDetector,
-  getLastSignalQuality,
-  isFingerDetectedByAmplitude
-} from './finger-detection/amplitude-detector';
-
 // Exportar utilidades adaptativas 
 export { getAdaptivePredictor } from './utils/adaptive-predictor';
+export { unifiedFingerDetector, resetFingerDetector } from './utils/unified-finger-detector';
 
 // Exportar optimizador bayesiano
 export { 

@@ -48,10 +48,10 @@ export class HeartbeatProcessor implements SignalProcessor<ProcessedHeartbeatSig
     
     if (this.useAdaptiveControl) {
       // Update the adaptive predictor with the current value
-      this.adaptivePredictor.addValue(value);
+      this.adaptivePredictor.update(timestamp, value, 1.0);
       
       // Get prediction for the current time
-      const prediction = this.adaptivePredictor.predict();
+      const prediction = this.adaptivePredictor.predict(timestamp);
       predictionQuality = prediction.confidence * 100;
       
       // Use filtered value from predictor for enhanced peak detection
@@ -263,6 +263,9 @@ export class HeartbeatProcessor implements SignalProcessor<ProcessedHeartbeatSig
     if (options.qualityEnhancedByPrediction !== undefined) {
       this.qualityEnhancedByPrediction = options.qualityEnhancedByPrediction;
     }
+    
+    // Also configure the adaptive predictor
+    this.adaptivePredictor.configure(options);
   }
   
   /**
