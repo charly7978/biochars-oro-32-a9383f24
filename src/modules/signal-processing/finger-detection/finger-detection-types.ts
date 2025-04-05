@@ -6,11 +6,20 @@
 /**
  * Fuentes de detección disponibles
  */
-export enum DetectionSource {
-  AMPLITUDE = 'amplitude',
-  RHYTHM = 'rhythm',
-  COMBINED = 'combined'
-}
+export type DetectionSource = 
+  | 'amplitude' 
+  | 'rhythm' 
+  | 'combined'
+  | 'ppg-extractor'
+  | 'signal-quality-amplitude'
+  | 'signal-quality-pattern'
+  | 'signal-quality-state'
+  | 'weak-signal-result'
+  | 'rhythm-pattern'
+  | 'brightness'
+  | 'camera-analysis'
+  | 'motion-detection'
+  | 'unified-detection';
 
 /**
  * Resultados de detección por fuente
@@ -27,9 +36,12 @@ export interface SourceDetectionResult {
 export interface DetectionState {
   detected: boolean;
   confidence: number;
+  isFingerDetected: boolean;
   amplitude: SourceDetectionResult;
   rhythm: SourceDetectionResult;
+  sources: Record<string, { detected: boolean, confidence: number }>;
   lastUpdate: number;
+  thresholds?: Record<string, number>;
 }
 
 /**
@@ -42,7 +54,13 @@ export enum DiagnosticEventType {
   ENVIRONMENTAL_CHANGE = 'environmental_change',
   SIGNAL_QUALITY = 'signal_quality',
   ERROR = 'error',
-  INFO = 'info'
+  INFO = 'info',
+  FINGER_DETECTED = 'FINGER_DETECTED',
+  FINGER_LOST = 'FINGER_LOST',
+  DETECTOR_RESET = 'DETECTOR_RESET',
+  PATTERN_DETECTED = 'PATTERN_DETECTED',
+  PATTERN_LOST = 'PATTERN_LOST',
+  PATTERN_TIMEOUT = 'PATTERN_TIMEOUT'
 }
 
 /**
@@ -51,6 +69,9 @@ export enum DiagnosticEventType {
 export interface DiagnosticEvent {
   type: DiagnosticEventType;
   message: string;
+  source?: DetectionSource;
+  isFingerDetected?: boolean;
+  confidence?: number;
   details?: Record<string, any>;
   timestamp: number;
 }
@@ -62,10 +83,14 @@ export interface EnvironmentalState {
   noise: number;
   lighting: number;
   motion: number;
+  brightness?: number; 
+  movement?: number; 
+  signalToNoiseRatio?: number;
   device?: {
     type: string;
     model?: string;
     capabilities?: string[];
+    camera?: any;
   };
   lastUpdate?: number;
 }
@@ -80,5 +105,12 @@ export interface AdaptiveCalibrationParams {
   motionCompensation: number;
   adaptationRate: number;
   stabilityFactor: number;
-  [key: string]: number;
+  sensitivityLevel?: number;
+  environmentQualityFactor?: number;
+  amplitudeThreshold?: number;
+  falsePositiveReduction?: number;
+  falseNegativeReduction?: number;
+  rhythmDetectionThreshold?: number;
+  environmentalState?: EnvironmentalState;
+  [key: string]: number | EnvironmentalState | undefined;
 }

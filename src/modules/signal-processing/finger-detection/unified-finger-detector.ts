@@ -14,7 +14,8 @@ import { logError, ErrorLevel } from '@/utils/debugUtils';
 import { 
   DetectionSource, 
   DetectionState,
-  DiagnosticEventType
+  DiagnosticEventType,
+  SourceDetectionResult
 } from './finger-detection-types';
 import { 
   reportFingerDetection, 
@@ -39,7 +40,10 @@ export class UnifiedFingerDetector {
   private stateChangeCounter: number = 0;
   
   // Factores de peso para fuentes específicas
-  private sourceWeights: Record<DetectionSource, number> = {
+  private sourceWeights: Record<string, number> = {
+    'amplitude': 1.0,
+    'rhythm': 1.0,
+    'combined': 1.0,
     'ppg-extractor': 1.0,
     'signal-quality-amplitude': 0.9,
     'signal-quality-pattern': 1.2,
@@ -109,7 +113,7 @@ export class UnifiedFingerDetector {
    */
   public getDetectionState(): DetectionState {
     const calibrationParams = getCalibrationParameters();
-    const sourcesObject: Record<DetectionSource, { detected: boolean, confidence: number }> = {} as Record<DetectionSource, { detected: boolean, confidence: number }>;
+    const sourcesObject: Record<string, { detected: boolean, confidence: number }> = {} as Record<string, { detected: boolean, confidence: number }>;
     
     // Convertir Map a objeto para más fácil consumo
     this.detectionSources.forEach((value, key) => {
@@ -120,9 +124,19 @@ export class UnifiedFingerDetector {
     });
     
     return {
+      detected: this.isFingerDetected,
       isFingerDetected: this.isFingerDetected,
       confidence: this.detectionConfidence,
+      amplitude: {
+        detected: this.detectionSources.get('amplitude')?.detected || false,
+        confidence: this.detectionSources.get('amplitude')?.confidence || 0
+      },
+      rhythm: {
+        detected: this.detectionSources.get('rhythm')?.detected || false,
+        confidence: this.detectionSources.get('rhythm')?.confidence || 0
+      },
       sources: sourcesObject,
+      lastUpdate: Date.now(),
       thresholds: {
         sensitivityLevel: calibrationParams.sensitivityLevel,
         qualityFactor: calibrationParams.environmentQualityFactor,
@@ -155,7 +169,7 @@ export class UnifiedFingerDetector {
     
     // Reportar evento de reseteo
     reportDiagnosticEvent(
-      'DETECTOR_RESET',
+      DiagnosticEventType.DETECTOR_RESET,
       'unified-detection',
       false,
       1.0,
@@ -243,7 +257,8 @@ export class UnifiedFingerDetector {
     }
     
     // Aplicar factor de sensibilidad
-    const sensitivityAdjustedThreshold = 0.5 * (2 - calibrationParams.sensitivityLevel);
+    const sensitivityLevel = calibrationParams.sensitivityLevel || 0.5;
+    const sensitivityAdjustedThreshold = 0.5 * (2 - sensitivityLevel);
     
     // Determinar nuevo estado de detección
     let newDetected = newConfidence >= sensitivityAdjustedThreshold;

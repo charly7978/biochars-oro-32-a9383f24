@@ -2,193 +2,239 @@
 /**
  * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
  * 
- * Detector de dedos basado en amplitud de señal
- * 
- * IMPORTANTE: Este módulo detecta la presencia de dedos basado en la amplitud
- * y calidad de la señal PPG. Se integra con el detector unificado.
+ * Detector de presencia de dedos basado en amplitud de señal
  */
 
-import { reportDiagnosticEvent } from './finger-diagnostics';
+import { logError, ErrorLevel } from '@/utils/debugUtils';
+import { DiagnosticEventType } from './finger-detection-types';
+import { reportDiagnosticEvent, reportFingerDetection } from './finger-diagnostics';
 import { getCalibrationParameters } from './adaptive-calibration';
 import { updateDetectionSource } from './unified-finger-detector';
 
-// Contador de señales débiles consecutivas
-let consecutiveWeakSignalsCount = 0;
-let lastSignalQuality = 0;
-let fingerDetectionConfirmed = false;
+// Estado del detector de amplitud
+interface AmplitudeDetectorState {
+  isFingerDetected: boolean;
+  lastDetectionTime: number;
+  lastConfidence: number;
+  signalQuality: number;
+  signalStrength: number;
+  consecutiveStrong: number;
+  consecutiveWeak: number;
+  threshold: number;
+  calibrationProgress: number;
+}
+
+// Estado global
+let state: AmplitudeDetectorState = {
+  isFingerDetected: false,
+  lastDetectionTime: 0,
+  lastConfidence: 0,
+  signalQuality: 0,
+  signalStrength: 0,
+  consecutiveStrong: 0,
+  consecutiveWeak: 0,
+  threshold: 20,
+  calibrationProgress: 0
+};
 
 /**
- * Comprueba si la señal es demasiado débil, indicando posible ausencia de dedo
+ * Verifica si la fuerza de señal indica presencia de un dedo
  */
-export function checkSignalStrength(
-  value: number,
-  config?: {
-    lowSignalThreshold?: number,
-    maxWeakSignalCount?: number
-  }
-): {
-  isWeakSignal: boolean,
-  updatedWeakSignalsCount: number,
-  quality: number
-} {
-  // Obtener calibración actual
+export function checkSignalStrength(value: number, rawValue?: number): boolean {
+  const now = Date.now();
   const calibrationParams = getCalibrationParameters();
   
-  // Usar umbrales adaptivos (o valores por defecto si no se proporcionan)
-  const finalConfig = {
-    lowSignalThreshold: config?.lowSignalThreshold || calibrationParams.amplitudeThreshold,
-    maxWeakSignalCount: config?.maxWeakSignalCount || 5
-  };
+  // Obtener umbral dinámico de los parámetros de calibración
+  const dynamicThreshold = calibrationParams.amplitudeThreshold || 20;
+  state.threshold = dynamicThreshold;
   
-  // Verificar si la señal es débil
-  const isCurrentSignalWeak = Math.abs(value) < finalConfig.lowSignalThreshold;
+  // Implementar histéresis con contadores
+  const REQUIRED_STRONG = 3;  // Frames consecutivos fuertes para detección
+  const REQUIRED_WEAK = 5;    // Frames consecutivos débiles para pérdida
   
-  // Actualizar contador de señales débiles
-  if (isCurrentSignalWeak) {
-    consecutiveWeakSignalsCount++;
+  // Actualizar fuerza de señal
+  state.signalStrength = Math.abs(value);
+  
+  const isStrongSignal = state.signalStrength >= dynamicThreshold;
+  
+  if (isStrongSignal) {
+    state.consecutiveStrong++;
+    state.consecutiveWeak = 0;
   } else {
-    // Reducir el contador más gradualmente para evitar oscilaciones
-    consecutiveWeakSignalsCount = Math.max(0, consecutiveWeakSignalsCount - 1);
+    state.consecutiveWeak++;
+    state.consecutiveStrong = 0;
   }
   
-  // Determinar si la señal es demasiado débil
-  const isWeakSignal = consecutiveWeakSignalsCount >= finalConfig.maxWeakSignalCount;
+  // Determinar estado de detección con histéresis
+  let newDetectionState = state.isFingerDetected;
   
-  // Calcular calidad de señal basada en amplitud
-  const signalQuality = calculateSignalQuality(value, isWeakSignal);
-  lastSignalQuality = signalQuality;
-  
-  // Si la señal es débil pero habíamos confirmado detección, ser más tolerante
-  if (fingerDetectionConfirmed && isWeakSignal) {
-    // Actualizar estado de detección en detector unificado con confianza reducida
-    updateDetectionSource(
-      'signal-quality-amplitude',
-      consecutiveWeakSignalsCount < finalConfig.maxWeakSignalCount * 1.5,
-      Math.max(0.1, 0.6 - (consecutiveWeakSignalsCount / (finalConfig.maxWeakSignalCount * 2)))
-    );
+  if (!state.isFingerDetected && state.consecutiveStrong >= REQUIRED_STRONG) {
+    // Transición a detectado
+    newDetectionState = true;
     
-    // Registrar evento si perdemos totalmente la detección
-    if (consecutiveWeakSignalsCount >= finalConfig.maxWeakSignalCount * 1.5) {
-      fingerDetectionConfirmed = false;
-      
-      reportDiagnosticEvent(
-        'FINGER_LOST',
-        'signal-quality-amplitude',
-        false,
-        0.8,
-        {
-          weakSignalsCount: consecutiveWeakSignalsCount,
-          threshold: finalConfig.maxWeakSignalCount,
-          value: Math.abs(value),
-          amplitudeThreshold: finalConfig.lowSignalThreshold
-        }
-      );
-    }
-    
-    return {
-      isWeakSignal: consecutiveWeakSignalsCount >= finalConfig.maxWeakSignalCount * 1.5,
-      updatedWeakSignalsCount: consecutiveWeakSignalsCount,
-      quality: signalQuality
-    };
-  }
-  
-  // Si la señal es fuerte consistentemente, confirmar detección
-  if (!isWeakSignal && !fingerDetectionConfirmed && consecutiveWeakSignalsCount === 0) {
-    fingerDetectionConfirmed = true;
-    
-    reportDiagnosticEvent(
-      'FINGER_DETECTED',
-      'signal-quality-amplitude',
-      true,
-      0.7,
+    reportFingerDetection(
+      true, 
+      state.signalStrength / (dynamicThreshold * 2),
+      'amplitude',
       {
-        value: Math.abs(value),
-        amplitudeThreshold: finalConfig.lowSignalThreshold,
-        quality: signalQuality
+        threshold: dynamicThreshold,
+        signalStrength: state.signalStrength,
+        consecutiveStrong: state.consecutiveStrong
+      }
+    );
+  } else if (state.isFingerDetected && state.consecutiveWeak >= REQUIRED_WEAK) {
+    // Transición a no detectado
+    newDetectionState = false;
+    
+    reportFingerDetection(
+      false,
+      1 - (state.signalStrength / dynamicThreshold),
+      'amplitude',
+      {
+        threshold: dynamicThreshold,
+        signalStrength: state.signalStrength,
+        consecutiveWeak: state.consecutiveWeak
       }
     );
   }
   
-  // Actualizar estado de detección en detector unificado
-  updateDetectionSource(
-    'signal-quality-amplitude',
-    !isWeakSignal,
-    isWeakSignal ? 0.3 : 0.7
-  );
-  
-  return {
-    isWeakSignal,
-    updatedWeakSignalsCount: consecutiveWeakSignalsCount,
-    quality: signalQuality
-  };
-}
-
-/**
- * Calcula la calidad de la señal basada en amplitud y otras métricas
- */
-function calculateSignalQuality(value: number, isWeak: boolean): number {
-  // Obtener calibración actual
-  const calibrationParams = getCalibrationParameters();
-  
-  // Si la señal es débil, calidad baja
-  if (isWeak) {
-    return Math.max(10, Math.min(40, Math.abs(value) * 200));
+  // Si cambió el estado, actualizar
+  if (newDetectionState !== state.isFingerDetected) {
+    state.isFingerDetected = newDetectionState;
+    state.lastDetectionTime = now;
+    
+    // Calcular confianza basada en la distancia al umbral
+    let confidence = 0;
+    if (state.isFingerDetected) {
+      confidence = Math.min(1, state.signalStrength / (dynamicThreshold * 2));
+    } else {
+      confidence = Math.max(0, 1 - (state.signalStrength / dynamicThreshold));
+    }
+    
+    // Limitar confianza a rango válido
+    confidence = Math.max(0, Math.min(1, confidence));
+    state.lastConfidence = confidence;
+    
+    // Reportar al detector unificado
+    updateDetectionSource('amplitude', state.isFingerDetected, confidence);
   }
   
-  // Calidad basada en amplitud de señal
-  const baseQuality = Math.min(100, Math.max(30, Math.abs(value) * 300));
-  
-  // Ajustar calidad según factores ambientales
-  return baseQuality * calibrationParams.environmentQualityFactor;
+  return state.isFingerDetected;
 }
 
 /**
- * Determina si se debe procesar una medición basado en fuerza de señal
+ * Decide si la señal es de calidad suficiente para procesamiento
  */
-export function shouldProcessMeasurement(value: number): boolean {
-  // Obtener calibración actual
-  const calibrationParams = getCalibrationParameters();
+export function shouldProcessMeasurement(
+  value: number, 
+  quality: number,
+  threshold?: number
+): boolean {
+  // Actualizar calidad de señal
+  state.signalQuality = quality;
   
-  // Si la detección está confirmada, ser más permisivo
-  if (fingerDetectionConfirmed) {
-    return Math.abs(value) >= calibrationParams.amplitudeThreshold * 0.8;
+  // Usar umbral adaptativo o por defecto
+  const actualThreshold = threshold || getCalibrationParameters()?.amplitudeThreshold || 20;
+  
+  // Verificar amplitud contra umbral
+  const isValueAboveThreshold = Math.abs(value) >= actualThreshold;
+  
+  // Decisión basada en amplitud y calidad (calidad mínima 20%)
+  const shouldProcess = isValueAboveThreshold && quality >= 20;
+  
+  // Reportar si la calidad es muy baja
+  if (quality < 20 && state.isFingerDetected) {
+    reportDiagnosticEvent(
+      DiagnosticEventType.SIGNAL_QUALITY,
+      'signal-quality-amplitude',
+      state.isFingerDetected,
+      quality / 100,
+      {
+        quality,
+        message: "Calidad de señal demasiado baja para procesamiento",
+        value
+      }
+    );
+    
+    // Actualizar fuente de calidad
+    updateDetectionSource('signal-quality-amplitude', false, quality / 100);
+  } else if (quality >= 20 && state.isFingerDetected) {
+    // Actualizar fuente de calidad
+    updateDetectionSource('signal-quality-amplitude', true, quality / 100);
   }
   
-  // Umbral más alto para evitar procesar ruido
-  return Math.abs(value) >= calibrationParams.amplitudeThreshold * 1.2;
+  return shouldProcess;
 }
 
 /**
- * Reinicia el estado de detección basada en amplitud
+ * Reinicia el detector de amplitud
  */
 export function resetAmplitudeDetector(): void {
-  consecutiveWeakSignalsCount = 0;
-  lastSignalQuality = 0;
-  fingerDetectionConfirmed = false;
+  state = {
+    isFingerDetected: false,
+    lastDetectionTime: 0,
+    lastConfidence: 0,
+    signalQuality: 0,
+    signalStrength: 0,
+    consecutiveStrong: 0,
+    consecutiveWeak: 0,
+    threshold: 20,
+    calibrationProgress: 0
+  };
   
   // Actualizar detector unificado
-  updateDetectionSource('signal-quality-amplitude', false, 0);
+  updateDetectionSource('amplitude', false, 0);
   
-  // Reportar evento
-  reportDiagnosticEvent(
-    'DETECTOR_RESET',
-    'signal-quality-amplitude',
-    false,
-    1.0,
-    { source: 'amplitude-detector-reset' }
+  logError(
+    "AmplitudeDetector: Detector por amplitud reiniciado",
+    ErrorLevel.INFO,
+    "AmplitudeDetector"
   );
 }
 
 /**
- * Obtiene la última calidad de señal calculada
+ * Obtiene la última calidad de señal registrada
  */
 export function getLastSignalQuality(): number {
-  return lastSignalQuality;
+  return state.signalQuality;
 }
 
 /**
- * Verifica si hay un dedo detectado por amplitud
+ * Detecta un dedo con señal débil
+ */
+export function getWeakSignalResult(value: number): { detected: boolean, confidence: number } {
+  // Usar umbral mucho más bajo para señales débiles
+  const weakThreshold = state.threshold * 0.3;
+  
+  const isDetected = Math.abs(value) >= weakThreshold;
+  
+  // Calcular confianza limitada
+  const confidence = isDetected 
+    ? Math.min(0.5, Math.abs(value) / state.threshold)
+    : 0;
+  
+  // Reportar al detector unificado si ha cambiado
+  if (isDetected !== state.isFingerDetected) {
+    updateDetectionSource('weak-signal-result', isDetected, confidence);
+    
+    reportDiagnosticEvent(
+      isDetected ? DiagnosticEventType.FINGER_DETECTED : DiagnosticEventType.FINGER_LOST,
+      'weak-signal-result',
+      isDetected,
+      confidence,
+      {
+        threshold: weakThreshold,
+        value: Math.abs(value)
+      }
+    );
+  }
+  
+  return { detected: isDetected, confidence };
+}
+
+/**
+ * Comprueba si un dedo está actualmente detectado por amplitud
  */
 export function isFingerDetectedByAmplitude(): boolean {
-  return fingerDetectionConfirmed;
+  return state.isFingerDetected;
 }

@@ -2,140 +2,194 @@
 /**
  * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
  * 
- * Sistema de diagnósticos para la detección de dedos
- * 
- * IMPORTANTE: Este sistema registra y analiza eventos de detección
- * para facilitar el diagnóstico de problemas y mejora continua.
+ * Sistema de diagnóstico para la detección de dedos
  */
 
 import { logError, ErrorLevel } from '@/utils/debugUtils';
-import { DiagnosticEvent, DiagnosticEventType, DetectionSource } from './finger-detection-types';
+import { 
+  DetectionSource, 
+  DiagnosticEvent,
+  DiagnosticEventType 
+} from './finger-detection-types';
 
 /**
- * Clase para gestionar diagnósticos de detección de dedos
+ * Clase para gestionar eventos de diagnóstico
  */
 class FingerDiagnostics {
   private events: DiagnosticEvent[] = [];
   private maxEvents: number = 100;
   
   /**
-   * Registra un evento diagnóstico
+   * Reporta un evento de detección de dedo
    */
-  public logEvent(event: DiagnosticEvent): void {
-    // Añadir timestamp si no existe
-    if (!event.timestamp) {
-      event.timestamp = Date.now();
-    }
+  public reportFingerDetection(isDetected: boolean, confidence: number, source: DetectionSource, details?: Record<string, any>): void {
+    const eventType = isDetected ? DiagnosticEventType.FINGER_DETECTED : DiagnosticEventType.FINGER_LOST;
+    const message = isDetected 
+      ? `Dedo detectado por fuente '${source}' con confianza ${confidence.toFixed(2)}`
+      : `Dedo perdido por fuente '${source}' con confianza ${confidence.toFixed(2)}`;
     
-    // Agregar al inicio para tener los más recientes primero
-    this.events.unshift(event);
+    this.addEvent({
+      type: eventType,
+      message,
+      source,
+      isFingerDetected: isDetected,
+      confidence,
+      details,
+      timestamp: Date.now()
+    });
     
-    // Limitar número de eventos
-    if (this.events.length > this.maxEvents) {
-      this.events = this.events.slice(0, this.maxEvents);
-    }
-    
-    // Registrar eventos importantes
-    if (['FINGER_DETECTED', 'FINGER_LOST', 'DETECTOR_RESET'].includes(event.eventType)) {
-      logError(
-        `FingerDiagnostics: ${event.eventType} from ${event.source} with confidence ${event.confidence}`,
-        ErrorLevel.INFO,
-        "FingerDetection"
-      );
-    }
+    logError(
+      message,
+      isDetected ? ErrorLevel.INFO : ErrorLevel.WARNING,
+      "FingerDiagnostics"
+    );
   }
   
   /**
-   * Obtiene los eventos más recientes
+   * Reporta un evento de diagnóstico general
    */
-  public getRecentEvents(count: number = 10): DiagnosticEvent[] {
-    return this.events.slice(0, count);
+  public reportDiagnosticEvent(
+    type: DiagnosticEventType,
+    source: DetectionSource,
+    fingerDetected: boolean,
+    confidence: number,
+    details?: Record<string, any>
+  ): void {
+    let message: string;
+    
+    switch (type) {
+      case DiagnosticEventType.DETECTION_CHANGE:
+        message = `Cambio de detección en '${source}'`;
+        break;
+      case DiagnosticEventType.THRESHOLD_ADAPTATION:
+        message = `Adaptación de umbral en '${source}'`;
+        break;
+      case DiagnosticEventType.CALIBRATION_UPDATE:
+        message = `Actualización de calibración en '${source}'`;
+        break;
+      case DiagnosticEventType.ENVIRONMENTAL_CHANGE:
+        message = `Cambio ambiental detectado por '${source}'`;
+        break;
+      case DiagnosticEventType.SIGNAL_QUALITY:
+        message = `Calidad de señal actualizada por '${source}'`;
+        break;
+      case DiagnosticEventType.ERROR:
+        message = `Error en '${source}'`;
+        break;
+      case DiagnosticEventType.INFO:
+        message = `Información de '${source}'`;
+        break;
+      case DiagnosticEventType.PATTERN_DETECTED:
+        message = `Patrón rítmico detectado por '${source}'`;
+        break;
+      case DiagnosticEventType.PATTERN_LOST:
+        message = `Patrón rítmico perdido por '${source}'`;
+        break;
+      case DiagnosticEventType.PATTERN_TIMEOUT:
+        message = `Tiempo de espera agotado para patrón en '${source}'`;
+        break;
+      case DiagnosticEventType.DETECTOR_RESET:
+        message = `Detector '${source}' reiniciado`;
+        break;
+      default:
+        message = `Evento de diagnóstico en '${source}'`;
+    }
+    
+    if (details && details.customMessage) {
+      message = details.customMessage;
+    }
+    
+    this.addEvent({
+      type,
+      message,
+      source,
+      isFingerDetected: fingerDetected,
+      confidence,
+      details,
+      timestamp: Date.now()
+    });
+    
+    logError(
+      message,
+      type === DiagnosticEventType.ERROR ? ErrorLevel.ERROR : ErrorLevel.INFO,
+      "FingerDiagnostics"
+    );
+  }
+  
+  /**
+   * Añade un evento a la lista
+   */
+  private addEvent(event: DiagnosticEvent): void {
+    this.events.push(event);
+    
+    // Limitar tamaño del historial
+    if (this.events.length > this.maxEvents) {
+      this.events = this.events.slice(-this.maxEvents);
+    }
   }
   
   /**
    * Obtiene estadísticas de diagnóstico
    */
-  public getStatistics(): Record<string, any> {
-    // Contar eventos por tipo
-    const eventCounts: Record<string, number> = {};
+  public getStats(): {
+    events: DiagnosticEvent[],
+    counters: Record<DiagnosticEventType, number>,
+    sources: Record<string, number>
+  } {
+    const counters: Record<DiagnosticEventType, number> = {} as Record<DiagnosticEventType, number>;
+    const sources: Record<string, number> = {};
     
-    this.events.forEach(event => {
-      if (!eventCounts[event.eventType]) {
-        eventCounts[event.eventType] = 0;
-      }
-      eventCounts[event.eventType]++;
+    // Inicializar contadores
+    Object.values(DiagnosticEventType).forEach(type => {
+      counters[type] = 0;
     });
     
-    // Calcular confianza promedio
-    const confidenceSum = this.events.reduce((sum, event) => sum + event.confidence, 0);
-    const avgConfidence = this.events.length > 0 ? confidenceSum / this.events.length : 0;
+    // Contar eventos
+    this.events.forEach(event => {
+      counters[event.type]++;
+      
+      if (event.source) {
+        sources[event.source] = (sources[event.source] || 0) + 1;
+      }
+    });
     
     return {
-      totalEvents: this.events.length,
-      eventCounts,
-      avgConfidence,
-      lastEvent: this.events[0]
+      events: this.events,
+      counters,
+      sources
     };
   }
   
   /**
-   * Limpia todos los eventos
+   * Limpia eventos de diagnóstico
    */
   public clearEvents(): void {
     this.events = [];
+    logError(
+      "Eventos de diagnóstico limpiados",
+      ErrorLevel.INFO,
+      "FingerDiagnostics"
+    );
+  }
+  
+  /**
+   * Configura el tamaño máximo del historial
+   */
+  public setMaxEvents(max: number): void {
+    this.maxEvents = Math.max(10, max);
+    
+    // Aplicar nuevo límite
+    if (this.events.length > this.maxEvents) {
+      this.events = this.events.slice(-this.maxEvents);
+    }
   }
 }
 
-// Instancia singleton para diagnósticos
+// Singleton
 export const fingerDiagnostics = new FingerDiagnostics();
 
-/**
- * Reporta detección de dedo
- */
-export function reportFingerDetection(
-  isDetected: boolean, 
-  confidence: number, 
-  source: DetectionSource, 
-  details?: Record<string, any>
-): void {
-  fingerDiagnostics.logEvent({
-    eventType: isDetected ? 'FINGER_DETECTED' : 'FINGER_LOST',
-    source,
-    isFingerDetected: isDetected,
-    confidence,
-    details
-  });
-}
-
-/**
- * Reporta un evento de diagnóstico genérico
- */
-export function reportDiagnosticEvent(
-  eventType: DiagnosticEventType,
-  source: DetectionSource,
-  isFingerDetected: boolean,
-  confidence: number,
-  details?: Record<string, any>
-): void {
-  fingerDiagnostics.logEvent({
-    eventType,
-    source,
-    isFingerDetected,
-    confidence,
-    details
-  });
-}
-
-/**
- * Obtiene estadísticas recientes de diagnóstico
- */
-export function getDiagnosticStats(): Record<string, any> {
-  return fingerDiagnostics.getStatistics();
-}
-
-/**
- * Limpia los eventos de diagnóstico
- */
-export function clearDiagnosticEvents(): void {
-  fingerDiagnostics.clearEvents();
-}
+// Funciones de utilidad
+export const reportFingerDetection = fingerDiagnostics.reportFingerDetection.bind(fingerDiagnostics);
+export const reportDiagnosticEvent = fingerDiagnostics.reportDiagnosticEvent.bind(fingerDiagnostics);
+export const getDiagnosticStats = fingerDiagnostics.getStats.bind(fingerDiagnostics);
+export const clearDiagnosticEvents = fingerDiagnostics.clearEvents.bind(fingerDiagnostics);
