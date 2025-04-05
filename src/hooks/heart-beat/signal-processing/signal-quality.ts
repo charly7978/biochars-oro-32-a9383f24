@@ -1,3 +1,4 @@
+
 /**
  * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
  *
@@ -17,7 +18,7 @@ let fingDetectionConfirmed = false;
 let signalMean = 0;
 let signalVariance = 0;
 let consecutiveStableFrames = 0;
-const REQUIRED_STABLE_FRAMES = 12; // Reducido de 15 para detección más rápida
+const REQUIRED_STABLE_FRAMES = 15; // Must have physiologically stable signal for this many frames
 
 // Track time-based consistency
 let lastProcessTime = 0;
@@ -113,10 +114,10 @@ export function checkWeakSignal(
     }
   }
   
-  // Use higher thresholds if not specified but con valores más sensibles
+  // Use higher thresholds if not specified
   const finalConfig = {
-    lowSignalThreshold: config.lowSignalThreshold || 0.26, // Reducido de 0.30 para mayor sensibilidad
-    maxWeakSignalCount: config.maxWeakSignalCount || 6    
+    lowSignalThreshold: config.lowSignalThreshold || 0.30, // Increased from 0.25
+    maxWeakSignalCount: config.maxWeakSignalCount || 6    // Increased from 5
   };
   
   // If finger detection was previously confirmed but we have many consecutive weak signals,
@@ -188,9 +189,8 @@ export function resetSignalQualityState() {
  * Now integrated with unified finger detector
  */
 export function isFingerDetected(): boolean {
-  // Adjust detection to be more sensitive
   const localDetection = fingDetectionConfirmed || 
-                        (patternDetectionCount >= 2 && consecutiveStableFrames >= REQUIRED_STABLE_FRAMES); // Reducido de 3 a 2
+                        (patternDetectionCount >= 3 && consecutiveStableFrames >= REQUIRED_STABLE_FRAMES);
   
   // Actualizar detector unificado con nuestro estado
   unifiedFingerDetector.updateSource(
@@ -215,11 +215,11 @@ export function shouldProcessMeasurement(value: number): boolean {
   
   // If finger detection is confirmed by pattern, allow processing even if signal is slightly weak
   if (unifiedDetection.isFingerDetected && consecutiveStableFrames >= REQUIRED_STABLE_FRAMES) {
-    return Math.abs(value) >= 0.15; // Reducido de 0.18 para mayor sensibilidad
+    return Math.abs(value) >= 0.18; // Lower threshold for confirmed finger
   }
   
   // Higher threshold to avoid processing weak signals (likely noise)
-  return Math.abs(value) >= 0.25; // Reducido de 0.30 para mayor sensibilidad
+  return Math.abs(value) >= 0.30; // Increased from 0.25
 }
 
 /**

@@ -1,308 +1,372 @@
-
 /**
- * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
+ * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE
  * 
- * Predictor adaptativo para señales biométricas
- * Implementa algoritmos de predicción para mejorar la calidad de señal
+ * Advanced adaptive prediction for signal processing
+ * Integrates Bayesian optimization and Gaussian process modeling
  */
-import { PredictionResult, SignalProcessingOptions } from '../types';
-import { CircularBuffer } from './circular-buffer';
-import { logError, ErrorLevel } from '@/utils/debugUtils';
+
+import { BayesianOptimizer, createDefaultPPGOptimizer } from './bayesian-optimization';
+import { GaussianProcessModel, DataPoint, GPPrediction } from './gaussian-process';
+import { SignalProcessingOptions } from '../types';
 
 /**
- * Interfaz del predictor adaptativo
+ * State of the adaptive model
  */
-export interface AdaptivePredictor {
-  update(timestamp: number, value: number, confidence: number): void;
-  predict(timestamp: number): PredictionResult;
-  reset(): void;
-  configure(options: Partial<SignalProcessingOptions>): void;
-  getState(): any;
+export interface AdaptiveModelState {
+  // Buffer statistics
+  bufferSize: number;
+  
+  // Quality statistics
+  averageQuality: number;
+  qualityStability: number;
+  
+  // Prediction statistics
+  averagePredictionError: number;
+  predictionConfidence: number;
+  
+  // Parameter optimization
+  optimizedParameters: Record<string, number>;
+  improvementRate: number;
 }
 
 /**
- * Implementación predeterminada del predictor adaptativo
+ * Prediction result
  */
-class DefaultAdaptivePredictor implements AdaptivePredictor {
-  private valuesBuffer: CircularBuffer<{ timestamp: number; value: number; confidence: number }>;
-  private lastPrediction: PredictionResult | null = null;
-  private adaptationRate: number = 0.25;
-  private modelWeights: number[] = [0.5, 0.3, 0.15, 0.05];
-  private confidenceThreshold: number = 0.5;
+export interface PredictionResult {
+  predictedValue: number;
+  confidence: number;
+  anomalyScore: number;
+  correctedValue: number | null;
+}
+
+/**
+ * Advanced adaptive predictor for PPG signal
+ * Combines multiple models for robust prediction
+ */
+export class AdaptivePredictor {
+  // Signal buffer and statistics
+  private readonly buffer: {time: number, value: number, quality: number}[] = [];
+  private readonly MAX_BUFFER_SIZE = 30;
   
+  // Recent anomaly statistics
+  private anomalyCount = 0;
+  private anomalyThreshold = 0.5;
+  
+  // Advanced modeling components
+  private gaussianProcess: GaussianProcessModel;
+  private bayesianOptimizer: BayesianOptimizer;
+  
+  // Statistics tracking
+  private predictionErrors: number[] = [];
+  private readonly MAX_ERRORS_TRACKED = 20;
+  private lastPrediction: number | null = null;
+  private adaptationRate = 0.1;
+  
+  // Configuration
+  private options: SignalProcessingOptions = {
+    amplificationFactor: 2.0,
+    filterStrength: 1.0,
+    qualityThreshold: 0.7,
+    fingerDetectionSensitivity: 0.8,
+    useAdaptiveControl: true,
+    qualityEnhancedByPrediction: true,
+    predictionHorizon: 5,
+    adaptationRate: 0.15
+  };
+
   constructor() {
-    this.valuesBuffer = new CircularBuffer(20, true, true);
+    this.gaussianProcess = new GaussianProcessModel();
+    this.bayesianOptimizer = createDefaultPPGOptimizer();
+    
+    console.log("AdaptivePredictor: Initialized with GP and Bayesian optimization");
   }
-  
+
   /**
-   * Actualiza el modelo con un nuevo valor observado
+   * Update the adaptive model with a new signal value
    */
-  public update(timestamp: number, value: number, confidence: number): void {
-    try {
-      // Almacenar valor con timestamp y confianza
-      this.valuesBuffer.push({ timestamp, value, confidence });
+  public update(time: number, value: number, quality: number): void {
+    // Add to buffer
+    this.buffer.push({time, value, quality});
+    if (this.buffer.length > this.MAX_BUFFER_SIZE) {
+      this.buffer.shift();
+    }
+    
+    // Update GP model
+    this.gaussianProcess.addObservation({
+      time,
+      value,
+      uncertainty: 1.0 - quality
+    });
+    
+    // Check prediction error if we had a previous prediction
+    if (this.lastPrediction !== null) {
+      const error = Math.abs(value - this.lastPrediction);
+      this.predictionErrors.push(error);
       
-      // Actualizar pesos del modelo si la confianza es alta
-      if (confidence > this.confidenceThreshold && this.valuesBuffer.getSize() >= 4) {
-        this.updateModelWeights();
+      if (this.predictionErrors.length > this.MAX_ERRORS_TRACKED) {
+        this.predictionErrors.shift();
       }
-    } catch (error) {
-      logError(
-        `Error actualizando predictor adaptativo: ${error}`,
-        ErrorLevel.WARNING,
-        "AdaptivePredictor"
-      );
+      
+      // Use prediction error to optimize parameters
+      if (this.predictionErrors.length >= 5) {
+        const avgError = this.predictionErrors.reduce((sum, e) => sum + e, 0) / 
+                        this.predictionErrors.length;
+        const score = Math.max(0, 1.0 - avgError / 10.0);
+        
+        this.bayesianOptimizer.addObservation({
+          qualityThreshold: this.options.qualityThreshold || 0.7,
+          amplificationFactor: this.options.amplificationFactor || 2.0,
+          adaptationRate: this.options.adaptationRate || 0.15,
+          filterStrength: this.options.filterStrength || 1.0,
+          predictionHorizon: this.options.predictionHorizon || 5
+        }, score);
+        
+        // Every 10 updates, see if we can improve parameters
+        if (this.buffer.length % 10 === 0) {
+          this.optimizeParameters();
+        }
+      }
+    }
+    
+    // Update GP kernel parameters occasionally
+    if (this.buffer.length % 5 === 0) {
+      this.gaussianProcess.updateParameters();
     }
   }
-  
+
   /**
-   * Predice el valor para un timestamp dado
+   * Predict the next value
    */
-  public predict(timestamp: number): PredictionResult {
-    try {
-      // Si no hay suficientes datos, no se puede predecir
-      if (this.valuesBuffer.getSize() < 2) {
-        const lastValue = this.valuesBuffer.getSize() > 0 
-          ? this.valuesBuffer.getLastN(1)[0].value 
-          : 0;
-          
-        return {
-          predictedValue: lastValue,
-          confidence: 0.1
-        };
-      }
-      
-      // Obtener valores recientes
-      const recentValues = this.valuesBuffer.getLastN(4);
-      
-      // Calcular intervalos de tiempo para ajustar la predicción
-      const intervals: number[] = [];
-      for (let i = 1; i < recentValues.length; i++) {
-        intervals.push(recentValues[i].timestamp - recentValues[i-1].timestamp);
-      }
-      
-      // Calcular intervalo promedio
-      const avgInterval = intervals.reduce((sum, interval) => sum + interval, 0) / 
-                         Math.max(1, intervals.length);
-      
-      // Calcular tiempo transcurrido desde la última muestra
-      const mostRecent = recentValues[recentValues.length - 1];
-      const elapsed = timestamp - mostRecent.timestamp;
-      
-      // Ajustar predicción según tiempo transcurrido
-      let timeWeight = Math.min(1, elapsed / (avgInterval * 2));
-      
-      // Modelo de predicción ponderado
-      let predictedValue = 0;
-      let totalWeight = 0;
-      
-      for (let i = 0; i < Math.min(this.modelWeights.length, recentValues.length); i++) {
-        const index = recentValues.length - 1 - i;
-        const weight = this.modelWeights[i] * recentValues[index].confidence;
-        predictedValue += recentValues[index].value * weight;
-        totalWeight += weight;
-      }
-      
-      // Normalizar por peso total
-      if (totalWeight > 0) {
-        predictedValue /= totalWeight;
-      } else {
-        predictedValue = recentValues[recentValues.length - 1].value;
-      }
-      
-      // Calcular confianza basada en consistencia y tiempo
-      const valueVariability = this.calculateVariability(recentValues.map(v => v.value));
-      const timeVariability = intervals.length > 1 ? 
-        this.calculateVariability(intervals) : 1;
-        
-      // Menor variabilidad = mayor confianza
-      const consistencyFactor = Math.max(0, 1 - valueVariability);
-      const timingFactor = Math.max(0, 1 - timeVariability);
-      const timeDecay = Math.max(0, 1 - timeWeight);
-      
-      // Combinar factores para confianza final
-      const confidence = 0.7 * consistencyFactor + 
-                        0.2 * timingFactor + 
-                        0.1 * timeDecay;
-      
-      // Guardar predicción
-      this.lastPrediction = {
-        predictedValue,
-        confidence,
-        predictedTimestamp: timestamp
-      };
-      
-      return this.lastPrediction;
-    } catch (error) {
-      logError(
-        `Error en predicción adaptativa: ${error}`,
-        ErrorLevel.WARNING,
-        "AdaptivePredictor"
-      );
-      
-      // Valor por defecto en caso de error
-      const fallbackValue = this.valuesBuffer.getSize() > 0 
-        ? this.valuesBuffer.getLastN(1)[0].value 
-        : 0;
-        
+  public predict(time: number): PredictionResult {
+    if (this.buffer.length < 3) {
       return {
-        predictedValue: fallbackValue,
-        confidence: 0.1,
-        predictedTimestamp: timestamp
+        predictedValue: 0,
+        confidence: 0,
+        anomalyScore: 0,
+        correctedValue: null
       };
     }
-  }
-  
-  /**
-   * Actualiza los pesos del modelo basados en datos recientes
-   */
-  private updateModelWeights(): void {
-    // Solo actualizar si hay suficientes datos
-    if (this.valuesBuffer.getSize() < 4) return;
     
-    try {
-      // Obtener valores recientes
-      const recentValues = this.valuesBuffer.getLastN(6);
-      
-      // Calcular error de predicción anterior si existe
-      if (this.lastPrediction && this.lastPrediction.predictedTimestamp) {
-        // Buscar valor real para el timestamp predicho
-        const predictedTime = this.lastPrediction.predictedTimestamp;
-        
-        // Encontrar muestras que rodean el tiempo de predicción
-        let lowerIndex = -1;
-        let upperIndex = -1;
-        
-        for (let i = 0; i < recentValues.length - 1; i++) {
-          if (recentValues[i].timestamp <= predictedTime && 
-              recentValues[i+1].timestamp >= predictedTime) {
-            lowerIndex = i;
-            upperIndex = i + 1;
-            break;
-          }
-        }
-        
-        // Si encontramos muestras que rodean la predicción
-        if (lowerIndex >= 0 && upperIndex >= 0) {
-          // Interpolar para obtener el valor estimado real
-          const lowerValue = recentValues[lowerIndex];
-          const upperValue = recentValues[upperIndex];
-          
-          const timeFraction = (predictedTime - lowerValue.timestamp) / 
-                              (upperValue.timestamp - lowerValue.timestamp);
-                              
-          const estimatedRealValue = lowerValue.value + 
-            timeFraction * (upperValue.value - lowerValue.value);
-          
-          // Calcular error
-          const predictionError = Math.abs(estimatedRealValue - this.lastPrediction.predictedValue);
-          
-          // Ajustar pesos según el error (menor error = menos ajuste)
-          const errorFactor = Math.min(1, predictionError / (Math.abs(estimatedRealValue) + 0.0001));
-          
-          // Aplicar adaptación
-          for (let i = 0; i < this.modelWeights.length; i++) {
-            // Los pesos más recientes se ajustan más cuando hay error
-            const weightIndex = this.modelWeights.length - 1 - i;
-            const adjustmentFactor = this.adaptationRate * errorFactor * (1 - i * 0.2);
-            
-            // Ajustar hacia mayor influencia de valores más recientes si el error es alto
-            if (i === 0) {
-              this.modelWeights[weightIndex] += adjustmentFactor * 0.1;
-            } else {
-              this.modelWeights[weightIndex] -= adjustmentFactor * 0.05;
-            }
-            
-            // Asegurar que el peso esté en rango [0.01, 0.7]
-            this.modelWeights[weightIndex] = Math.max(0.01, 
-              Math.min(0.7, this.modelWeights[weightIndex]));
-          }
-          
-          // Normalizar pesos
-          const totalWeight = this.modelWeights.reduce((sum, w) => sum + w, 0);
-          for (let i = 0; i < this.modelWeights.length; i++) {
-            this.modelWeights[i] /= totalWeight;
-          }
-        }
-      }
-    } catch (error) {
-      logError(
-        `Error actualizando pesos del modelo: ${error}`,
-        ErrorLevel.WARNING,
-        "AdaptivePredictor"
-      );
-    }
-  }
-  
-  /**
-   * Calcula la variabilidad normalizada de un conjunto de valores
-   */
-  private calculateVariability(values: number[]): number {
-    if (values.length < 2) return 0;
+    // Use GP to predict
+    const gpPrediction = this.gaussianProcess.predict(time);
     
-    const mean = values.reduce((sum, val) => sum + val, 0) / values.length;
+    // Calculate linear prediction as fallback
+    const recent = this.buffer.slice(-3);
+    const linearPrediction = this.predictLinear(time);
     
-    if (Math.abs(mean) < 0.0001) return 1; // Evitar división por cero
+    // Detect if the GP prediction might be an anomaly
+    const recentValues = this.buffer.slice(-5).map(b => b.value);
+    const recentMean = recentValues.reduce((sum, v) => sum + v, 0) / recentValues.length;
+    const recentStd = Math.sqrt(
+      recentValues.reduce((sum, v) => sum + Math.pow(v - recentMean, 2), 0) / recentValues.length
+    );
     
-    const sumSquaredDiff = values.reduce((sum, val) => {
-      return sum + Math.pow(val - mean, 2);
-    }, 0);
+    // Anomaly detection
+    const deviationFromRecent = Math.abs(gpPrediction.mean - recentMean);
+    const anomalyScore = recentStd > 0 ? deviationFromRecent / (recentStd * 3) : 0;
     
-    // Coeficiente de variación normalizado a [0,1]
-    const cv = Math.sqrt(sumSquaredDiff / values.length) / Math.abs(mean);
-    return Math.min(1, cv);
-  }
-  
-  /**
-   * Configura el predictor
-   */
-  public configure(options: Partial<SignalProcessingOptions>): void {
-    if (options.adaptationRate !== undefined) {
-      this.adaptationRate = Math.max(0.1, Math.min(0.5, options.adaptationRate));
+    // Final prediction is weighted average
+    const gpWeight = Math.max(0.3, Math.min(0.9, gpPrediction.confidence));
+    const predictedValue = gpPrediction.mean * gpWeight + linearPrediction * (1 - gpWeight);
+    
+    // Correct if anomaly detected
+    let correctedValue = null;
+    if (anomalyScore > this.anomalyThreshold) {
+      this.anomalyCount++;
+      correctedValue = linearPrediction;
+    } else {
+      this.anomalyCount = Math.max(0, this.anomalyCount - 1);
     }
     
-    if (options.confidenceThreshold !== undefined) {
-      this.confidenceThreshold = Math.max(0.2, Math.min(0.8, options.confidenceThreshold));
-    }
-  }
-  
-  /**
-   * Reinicia el predictor
-   */
-  public reset(): void {
-    this.valuesBuffer.clear();
-    this.lastPrediction = null;
-    this.modelWeights = [0.5, 0.3, 0.15, 0.05];
-  }
-  
-  /**
-   * Obtiene el estado actual del predictor
-   */
-  public getState(): any {
+    // Store for error tracking
+    this.lastPrediction = predictedValue;
+    
     return {
-      bufferSize: this.valuesBuffer.getSize(),
-      adaptationRate: this.adaptationRate,
-      modelWeights: [...this.modelWeights],
-      confidenceThreshold: this.confidenceThreshold,
-      lastPrediction: this.lastPrediction,
-      bufferStats: this.valuesBuffer.getState()
+      predictedValue,
+      confidence: gpPrediction.confidence,
+      anomalyScore,
+      correctedValue
     };
   }
-}
 
-// Instancia singleton
-let adaptivePredictor: AdaptivePredictor | null = null;
+  /**
+   * Simple linear prediction based on recent values
+   */
+  private predictLinear(time: number): number {
+    if (this.buffer.length < 2) return 0;
+    
+    const recent = this.buffer.slice(-2);
+    const deltaTime = recent[1].time - recent[0].time;
+    const deltaValue = recent[1].value - recent[0].value;
+    
+    if (deltaTime === 0) return recent[1].value;
+    
+    const slope = deltaValue / deltaTime;
+    const timeFromLatest = time - recent[1].time;
+    
+    return recent[1].value + slope * timeFromLatest;
+  }
+
+  /**
+   * Optimize parameters using Bayesian optimization
+   */
+  private optimizeParameters(): void {
+    const nextParams = this.bayesianOptimizer.suggestNextParameters();
+    
+    // Only update if expected improvement is significant
+    if (nextParams.expectedImprovement > 0.2) {
+      const currentParams = {
+        qualityThreshold: this.options.qualityThreshold || 0.7,
+        amplificationFactor: this.options.amplificationFactor || 2.0,
+        adaptationRate: this.options.adaptationRate || 0.15,
+        filterStrength: this.options.filterStrength || 1.0,
+        predictionHorizon: this.options.predictionHorizon || 5
+      };
+      
+      // Gradually adapt parameters
+      Object.keys(nextParams.parameters).forEach(key => {
+        const current = currentParams[key];
+        const suggested = nextParams.parameters[key];
+        
+        // Use adaptation rate to smooth changes
+        this.options[key] = current * (1 - this.adaptationRate) + 
+                           suggested * this.adaptationRate;
+      });
+      
+      console.log("AdaptivePredictor: Updated parameters", {
+        qualityThreshold: this.options.qualityThreshold?.toFixed(2),
+        amplificationFactor: this.options.amplificationFactor?.toFixed(2),
+        adaptationRate: this.options.adaptationRate?.toFixed(3),
+        filterStrength: this.options.filterStrength?.toFixed(2),
+        predictionHorizon: this.options.predictionHorizon
+      });
+    }
+  }
+
+  /**
+   * Detect and correct anomalies in a signal value
+   */
+  public correctAnomaly(time: number, value: number, quality: number): number {
+    if (this.buffer.length < 5) return value;
+    
+    // Predict what the value should be
+    const prediction = this.predict(time);
+    
+    // If high anomaly score and low quality, correct the value
+    if (prediction.anomalyScore > this.anomalyThreshold && quality < 0.6) {
+      console.log("AdaptivePredictor: Correcting anomaly", {
+        original: value.toFixed(2),
+        corrected: prediction.predictedValue.toFixed(2),
+        anomalyScore: prediction.anomalyScore.toFixed(2),
+        quality
+      });
+      
+      // Blend original and prediction based on quality
+      const correctionStrength = 1.0 - quality;
+      return value * (1 - correctionStrength) + prediction.predictedValue * correctionStrength;
+    }
+    
+    return value;
+  }
+
+  /**
+   * Calculate the probability that a signal contains an artifact
+   */
+  public calculateArtifactProbability(): number {
+    if (this.buffer.length < 10) return 0;
+    
+    // Use recent prediction errors and anomaly count
+    const avgPredictionError = this.predictionErrors.length > 0 ? 
+      this.predictionErrors.reduce((sum, e) => sum + e, 0) / this.predictionErrors.length : 0;
+    
+    // Normalize and combine factors
+    const errorFactor = Math.min(1, avgPredictionError / 10);
+    const anomalyFactor = Math.min(1, this.anomalyCount / 5);
+    
+    return (errorFactor * 0.6 + anomalyFactor * 0.4);
+  }
+
+  /**
+   * Get the current state of the adaptive model
+   */
+  public getState(): AdaptiveModelState {
+    const avgQuality = this.buffer.length > 0 ? 
+      this.buffer.reduce((sum, b) => sum + b.quality, 0) / this.buffer.length : 0;
+    
+    const qualityVariation = this.buffer.length > 1 ? 
+      Math.sqrt(this.buffer.reduce((sum, b) => sum + Math.pow(b.quality - avgQuality, 2), 0) / this.buffer.length) : 0;
+    
+    const avgPredictionError = this.predictionErrors.length > 0 ? 
+      this.predictionErrors.reduce((sum, e) => sum + e, 0) / this.predictionErrors.length : 0;
+    
+    // Calculate confidence in prediction
+    const errorNormalized = Math.min(1, avgPredictionError / 10);
+    const predictionConfidence = 1.0 - errorNormalized;
+    
+    // Get latest optimized parameters
+    const bestParams = this.bayesianOptimizer.getBestParameters() || {};
+    
+    return {
+      bufferSize: this.buffer.length,
+      averageQuality: avgQuality,
+      qualityStability: 1.0 - Math.min(1, qualityVariation),
+      averagePredictionError: avgPredictionError,
+      predictionConfidence,
+      optimizedParameters: bestParams,
+      improvementRate: this.adaptationRate
+    };
+  }
+
+  /**
+   * Configure the predictor
+   */
+  public configure(options: SignalProcessingOptions): void {
+    this.options = {...this.options, ...options};
+    
+    // Update related parameters
+    if (options.adaptationRate !== undefined) {
+      this.adaptationRate = options.adaptationRate;
+    }
+    
+    console.log("AdaptivePredictor: Configured with options", this.options);
+  }
+
+  /**
+   * Reset the predictor state
+   */
+  public reset(): void {
+    this.buffer.length = 0;
+    this.predictionErrors.length = 0;
+    this.lastPrediction = null;
+    this.anomalyCount = 0;
+    
+    this.gaussianProcess.reset();
+    this.bayesianOptimizer.reset();
+    
+    console.log("AdaptivePredictor: Reset");
+  }
+}
 
 /**
- * Obtiene o crea la instancia del predictor adaptativo
+ * Singleton instance for global use
+ */
+let globalAdaptivePredictor: AdaptivePredictor | null = null;
+
+/**
+ * Get the global adaptive predictor instance
  */
 export function getAdaptivePredictor(): AdaptivePredictor {
-  if (!adaptivePredictor) {
-    adaptivePredictor = new DefaultAdaptivePredictor();
+  if (!globalAdaptivePredictor) {
+    globalAdaptivePredictor = new AdaptivePredictor();
   }
-  
-  return adaptivePredictor;
+  return globalAdaptivePredictor;
 }
 
-// Re-exportar interfaz para uso externo
-export { PredictionResult };
+/**
+ * Reset the global adaptive predictor
+ */
+export function resetAdaptivePredictor(): void {
+  if (globalAdaptivePredictor) {
+    globalAdaptivePredictor.reset();
+  }
+}

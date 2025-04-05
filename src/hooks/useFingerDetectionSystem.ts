@@ -2,315 +2,315 @@
 /**
  * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
  * 
- * Sistema unificado de detección de dedos mejorado
- * Hook para usar el sistema de detección de dedos en componentes React
+ * Hook para manejo del sistema de detección de dedos avanzado
+ * Proporciona integración con componentes React para el sistema unificado,
+ * diagnósticos y calibración adaptativa
  */
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { DetectionSource } from '@/modules/signal-processing/utils/unified-finger-detector';
-import { ErrorLevel, logError } from '@/utils/debugUtils';
 
-/**
- * Estado de detección de dedos
- */
-export interface DetectionState {
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { unifiedFingerDetector } from '@/modules/signal-processing/utils/unified-finger-detector';
+import { 
+  fingerDiagnostics, 
+  startDiagnosticsSession,
+  endDiagnosticsSession,
+  DiagnosticSession
+} from '@/modules/signal-processing/utils/finger-diagnostics';
+import {
+  adaptiveCalibration,
+  getCalibrationParameters,
+  setCalibrationParameters,
+  CalibrationParameters,
+  EnvironmentalState,
+  updateEnvironmentalState
+} from '@/modules/signal-processing/utils/adaptive-calibration';
+import { resetFingerDetector } from '@/modules/signal-processing/utils/finger-detector';
+import { useToast } from '@/hooks/use-toast';
+
+// Interfaz para el estado de detección
+interface DetectionState {
   isFingerDetected: boolean;
   confidence: number;
   consensusLevel: number;
-  qualityScore: number;
-  sources: Record<string, { value: number, weight: number, age: number }>;
-  calibrationParams: {
-    sensitivityLevel: number;
-    qualityFactor: number;
-    environmentFactor: number;
-    adaptationRate: number;
-  };
-  diagnostics: {
-    falsePositives: number;
-    falseNegatives: number;
-    detectionEvents: number;
-    lossEvents: number;
-    lastCalibrationTime: number;
-    averageDetectionConfidence: number;
-  };
+}
+
+// Interfaz para estadísticas detalladas
+interface DetailedStats {
+  sources: Record<string, any>;
+  history: Array<any>;
+  detectionResult: boolean;
+  confidence: number;
 }
 
 /**
- * Hook para usar el sistema de detección de dedos unificado
+ * Hook personalizado para integrar el sistema de detección de dedos
+ * con componentes React
  */
-export function useFingerDetectionSystem() {
-  // Estado de detección
+export function useFingerDetectionSystem(options: {
+  enableDebugLogs?: boolean;
+  enableDiagnostics?: boolean;
+  enableAdaptiveCalibration?: boolean;
+  diagnosticsSessionId?: string;
+  onDetectionChange?: (isDetected: boolean) => void;
+} = {}) {
+  // Valores por defecto
+  const {
+    enableDebugLogs = true,
+    enableDiagnostics = true,
+    enableAdaptiveCalibration = true,
+    diagnosticsSessionId = `session-${Date.now()}`,
+    onDetectionChange
+  } = options;
+  
+  // Estado para React
   const [detectionState, setDetectionState] = useState<DetectionState>({
     isFingerDetected: false,
     confidence: 0,
-    consensusLevel: 0,
-    qualityScore: 0,
-    sources: {},
-    calibrationParams: {
-      sensitivityLevel: 0.5,
-      qualityFactor: 1.0,
-      environmentFactor: 1.0,
-      adaptationRate: 0.2
-    },
-    diagnostics: {
-      falsePositives: 0,
-      falseNegatives: 0,
-      detectionEvents: 0,
-      lossEvents: 0,
-      lastCalibrationTime: Date.now(),
-      averageDetectionConfidence: 0
-    }
+    consensusLevel: 0
   });
   
-  // Referencias para evitar ciclos de actualización
-  const stateRef = useRef<DetectionState>(detectionState);
-  stateRef.current = detectionState;
+  const [diagnosticsState, setDiagnosticsState] = useState({
+    isRecording: false,
+    currentSessionId: '',
+    totalEvents: 0
+  });
   
-  /**
-   * Actualiza una fuente de información en el sistema
-   */
-  const updateSource = useCallback((source: DetectionSource, value: number, threshold: number = 0.5) => {
-    // Actualizar el estado con la nueva fuente
-    setDetectionState(prevState => {
-      // Copiar fuentes actuales
-      const sources = { ...prevState.sources };
+  const [calibrationParams, setCalibrationParams] = useState<CalibrationParameters>(
+    getCalibrationParameters()
+  );
+  
+  const { toast } = useToast();
+  const lastDetectionState = useRef<boolean>(false);
+  const sessionRef = useRef<string | null>(null);
+  const updateIntervalRef = useRef<number | null>(null);
+  
+  // Inicializar componentes
+  useEffect(() => {
+    // Configurar modo debug
+    unifiedFingerDetector.setDebug(enableDebugLogs);
+    
+    // Iniciar sesión de diagnóstico si está habilitado
+    if (enableDiagnostics) {
+      const sessionId = startDiagnosticsSession(diagnosticsSessionId);
+      sessionRef.current = sessionId;
       
-      // Actualizar o añadir fuente
-      sources[source] = {
-        value,
-        weight: prevState.sources[source]?.weight || 1.0,
-        age: 0
-      };
-      
-      // Calcular nivel de consenso
-      let totalWeight = 0;
-      let weightedSum = 0;
-      
-      Object.entries(sources).forEach(([_, data]) => {
-        const sourceWeight = data.weight * Math.max(0, 1 - data.age / 10);
-        weightedSum += data.value * sourceWeight;
-        totalWeight += sourceWeight;
+      setDiagnosticsState({
+        isRecording: true,
+        currentSessionId: sessionId,
+        totalEvents: 0
       });
       
-      const consensusLevel = totalWeight > 0 ? weightedSum / totalWeight : 0;
-      
-      // Determinar si el dedo está detectado basado en umbral
-      const sensitivityAdjustedThreshold = threshold * (2 - prevState.calibrationParams.sensitivityLevel);
-      const isFingerDetected = consensusLevel >= sensitivityAdjustedThreshold;
-      
-      // Calcular confianza
-      const confidence = Math.min(1, consensusLevel * 1.2);
-      
-      // Actualizar diagnósticos
-      const diagnostics = { ...prevState.diagnostics };
-      
-      if (isFingerDetected && !prevState.isFingerDetected) {
-        diagnostics.detectionEvents++;
-      } else if (!isFingerDetected && prevState.isFingerDetected) {
-        diagnostics.lossEvents++;
+      // Notificar al usuario
+      if (enableDebugLogs) {
+        toast({
+          title: "Diagnóstico de detección iniciado",
+          description: `Sesión: ${sessionId}`,
+          duration: 3000
+        });
       }
+    }
+    
+    // Iniciar calibración adaptativa si está habilitada
+    if (enableAdaptiveCalibration) {
+      adaptiveCalibration.start();
       
-      // Actualizar confianza promedio
-      diagnostics.averageDetectionConfidence = 
-        0.9 * diagnostics.averageDetectionConfidence + 0.1 * confidence;
+      // Actualizar parámetros iniciales
+      setCalibrationParams(getCalibrationParameters());
+    }
+    
+    // Configurar intervalo para actualizar estado
+    updateIntervalRef.current = window.setInterval(() => {
+      // Obtener estado actual
+      const currentState = unifiedFingerDetector.getDetectionState();
       
-      return {
-        ...prevState,
-        isFingerDetected,
-        confidence,
-        consensusLevel,
-        sources,
-        diagnostics
-      };
-    });
-  }, []);
-  
-  /**
-   * Restablece el sistema de detección
-   */
-  const reset = useCallback(() => {
-    setDetectionState({
-      isFingerDetected: false,
-      confidence: 0,
-      consensusLevel: 0,
-      qualityScore: 0,
-      sources: {},
-      calibrationParams: {
-        sensitivityLevel: 0.5,
-        qualityFactor: 1.0,
-        environmentFactor: 1.0,
-        adaptationRate: 0.2
-      },
-      diagnostics: {
-        falsePositives: 0,
-        falseNegatives: 0,
-        detectionEvents: 0,
-        lossEvents: 0,
-        lastCalibrationTime: Date.now(),
-        averageDetectionConfidence: 0
-      }
-    });
-  }, []);
-  
-  /**
-   * Obtiene estadísticas detalladas
-   */
-  const getDetailedStats = useCallback(() => {
-    return {
-      detection: {
-        isFingerDetected: stateRef.current.isFingerDetected,
-        confidence: stateRef.current.confidence,
-        consensusLevel: stateRef.current.consensusLevel,
-        qualityScore: stateRef.current.qualityScore
-      },
-      sources: stateRef.current.sources,
-      calibration: stateRef.current.calibrationParams,
-      diagnostics: stateRef.current.diagnostics
-    };
-  }, []);
-  
-  /**
-   * Adapta los pesos basados en factores de calidad y movimiento
-   */
-  const adaptWeights = useCallback((qualityFactor: number, movementFactor: number) => {
-    setDetectionState(prevState => {
-      // Ajustar nivel de sensibilidad basado en factores
-      const newSensitivity = Math.max(0.3, Math.min(0.9, 
-        prevState.calibrationParams.sensitivityLevel * (1 + (qualityFactor - 0.5) * 0.2)
-      ));
+      // Actualizar estado de React
+      setDetectionState(currentState);
       
-      return {
-        ...prevState,
-        calibrationParams: {
-          ...prevState.calibrationParams,
-          sensitivityLevel: newSensitivity,
-          qualityFactor: Math.max(0.5, Math.min(1.5, qualityFactor)),
-          environmentFactor: Math.max(0.5, Math.min(1.5, 
-            prevState.calibrationParams.environmentFactor * (1 + (movementFactor - 0.5) * 0.1)
-          ))
+      // Verificar cambios en la detección
+      if (currentState.isFingerDetected !== lastDetectionState.current) {
+        lastDetectionState.current = currentState.isFingerDetected;
+        
+        // Notificar cambio si se proporcionó callback
+        if (onDetectionChange) {
+          onDetectionChange(currentState.isFingerDetected);
         }
-      };
-    });
+        
+        // Mostrar toast en modo debug
+        if (enableDebugLogs) {
+          toast({
+            title: currentState.isFingerDetected ? "Dedo detectado" : "Dedo removido",
+            description: `Confianza: ${Math.round(currentState.confidence * 100)}%`,
+            duration: 2000
+          });
+        }
+      }
+      
+      // Actualizar estado de diagnóstico
+      if (enableDiagnostics) {
+        const currentDiagState = fingerDiagnostics.getDiagnosticsState();
+        setDiagnosticsState({
+          isRecording: currentDiagState.isRecording,
+          currentSessionId: currentDiagState.currentSessionId || '',
+          totalEvents: currentDiagState.currentSessionEvents
+        });
+      }
+      
+      // Actualizar parámetros de calibración
+      if (enableAdaptiveCalibration) {
+        setCalibrationParams(getCalibrationParameters());
+      }
+      
+    }, 500); // Actualizar cada medio segundo
+    
+    // Limpieza
+    return () => {
+      // Detener intervalo
+      if (updateIntervalRef.current !== null) {
+        clearInterval(updateIntervalRef.current);
+      }
+      
+      // Finalizar sesión de diagnóstico
+      if (enableDiagnostics && sessionRef.current) {
+        endDiagnosticsSession();
+      }
+      
+      // Detener calibración adaptativa
+      if (enableAdaptiveCalibration) {
+        adaptiveCalibration.stop();
+      }
+    };
+  }, [
+    enableDebugLogs, 
+    enableDiagnostics, 
+    enableAdaptiveCalibration, 
+    diagnosticsSessionId,
+    onDetectionChange,
+    toast
+  ]);
+  
+  /**
+   * Obtiene estadísticas detalladas del detector
+   */
+  const getDetailedStats = useCallback((): DetailedStats => {
+    return unifiedFingerDetector.getDetailedStats();
   }, []);
+  
+  /**
+   * Actualiza el estado ambiental
+   */
+  const updateEnvironment = useCallback((state: Partial<EnvironmentalState>): void => {
+    updateEnvironmentalState(state);
+  }, []);
+  
+  /**
+   * Fuerza una detección manual (para pruebas)
+   */
+  const setManualOverride = useCallback((isDetected: boolean, enabled: boolean = true): void => {
+    unifiedFingerDetector.setManualOverride(isDetected, enabled);
+    
+    if (enableDebugLogs) {
+      toast({
+        title: `Anulación manual ${enabled ? 'activada' : 'desactivada'}`,
+        description: enabled ? (isDetected ? "Forzando detección de dedo" : "Forzando sin detección") : "Modo normal",
+        duration: 3000
+      });
+    }
+  }, [enableDebugLogs, toast]);
   
   /**
    * Actualiza los parámetros de calibración
    */
-  const updateCalibration = useCallback((params: Partial<DetectionState['calibrationParams']>) => {
-    setDetectionState(prevState => ({
-      ...prevState,
-      calibrationParams: {
-        ...prevState.calibrationParams,
-        ...params
-      },
-      diagnostics: {
-        ...prevState.diagnostics,
-        lastCalibrationTime: Date.now()
-      }
-    }));
+  const updateCalibration = useCallback((params: Partial<CalibrationParameters>): void => {
+    setCalibrationParameters(params);
+    setCalibrationParams(getCalibrationParameters());
+    
+    if (enableDebugLogs) {
+      toast({
+        title: "Calibración actualizada",
+        description: "Parámetros de detección modificados",
+        duration: 2000
+      });
+    }
+  }, [enableDebugLogs, toast]);
+  
+  /**
+   * Obtiene la sesión de diagnóstico actual
+   */
+  const getDiagnosticSession = useCallback((): DiagnosticSession | null => {
+    return fingerDiagnostics.getSession();
   }, []);
   
   /**
-   * Establece el modo de override manual
+   * Exporta datos de diagnóstico para análisis
    */
-  const setManualOverride = useCallback((override: boolean) => {
-    if (override) {
-      logError("Activando override manual de detección de dedo", ErrorLevel.INFO, "FingerDetectionSystem");
-    } else {
-      logError("Desactivando override manual de detección de dedo", ErrorLevel.INFO, "FingerDetectionSystem");
+  const exportDiagnostics = useCallback((): string => {
+    return fingerDiagnostics.exportSessionData();
+  }, []);
+  
+  /**
+   * Reinicia todo el sistema de detección
+   */
+  const resetSystem = useCallback((): void => {
+    // Reiniciar detector
+    resetFingerDetector();
+    
+    // Si hay diagnóstico activo, finalizar y comenzar nueva sesión
+    if (enableDiagnostics) {
+      endDiagnosticsSession();
+      const newSessionId = startDiagnosticsSession();
+      sessionRef.current = newSessionId;
+      
+      setDiagnosticsState({
+        isRecording: true,
+        currentSessionId: newSessionId,
+        totalEvents: 0
+      });
     }
     
-    setDetectionState(prevState => ({
-      ...prevState,
-      isFingerDetected: override ? true : prevState.isFingerDetected,
-      confidence: override ? 1.0 : prevState.confidence
-    }));
-  }, []);
-  
-  /**
-   * Actualiza los factores ambientales
-   */
-  const updateEnvironment = useCallback((brightness: number, movement: number) => {
-    const normalizedBrightness = Math.max(0, Math.min(1, brightness / 255));
-    const normalizedMovement = Math.max(0, Math.min(1, movement));
+    // Reiniciar calibración
+    if (enableAdaptiveCalibration) {
+      adaptiveCalibration.reset();
+      adaptiveCalibration.start();
+      setCalibrationParams(getCalibrationParameters());
+    }
     
-    // Ajustar factores ambientales
-    setDetectionState(prevState => ({
-      ...prevState,
-      calibrationParams: {
-        ...prevState.calibrationParams,
-        environmentFactor: 
-          prevState.calibrationParams.environmentFactor * 0.8 + 
-          (normalizedBrightness > 0.1 ? 1.0 : 0.7) * 0.2,
-        sensitivityLevel: 
-          prevState.calibrationParams.sensitivityLevel * 0.9 + 
-          (normalizedMovement < 0.3 ? 0.6 : 0.4) * 0.1
-      }
-    }));
-  }, []);
-  
-  /**
-   * Resetea completamente el sistema
-   */
-  const resetSystem = useCallback(() => {
-    logError("Reseteando sistema de detección de dedo", ErrorLevel.INFO, "FingerDetectionSystem");
-    reset();
-  }, [reset]);
-  
-  /**
-   * Exporta datos de diagnóstico
-   */
-  const exportDiagnostics = useCallback(() => {
-    return {
-      timestamp: Date.now(),
-      state: stateRef.current,
-      performance: {
-        detectionRate: stateRef.current.diagnostics.detectionEvents > 0 
-          ? stateRef.current.diagnostics.lossEvents / stateRef.current.diagnostics.detectionEvents 
-          : 0,
-        averageConfidence: stateRef.current.diagnostics.averageDetectionConfidence
-      }
-    };
-  }, []);
-  
-  // Actualizar la edad de las fuentes periódicamente
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setDetectionState(prevState => {
-        const updatedSources = { ...prevState.sources };
-        
-        // Incrementar edad de cada fuente
-        Object.keys(updatedSources).forEach(key => {
-          updatedSources[key] = {
-            ...updatedSources[key],
-            age: updatedSources[key].age + 1
-          };
-        });
-        
-        return {
-          ...prevState,
-          sources: updatedSources
-        };
+    // Reiniciar estado de React
+    setDetectionState({
+      isFingerDetected: false,
+      confidence: 0,
+      consensusLevel: 0
+    });
+    
+    lastDetectionState.current = false;
+    
+    if (enableDebugLogs) {
+      toast({
+        title: "Sistema reiniciado",
+        description: "Todos los componentes de detección han sido reiniciados",
+        duration: 3000
       });
-    }, 1000);
-    
-    return () => clearInterval(interval);
-  }, []);
+    }
+  }, [enableDiagnostics, enableAdaptiveCalibration, enableDebugLogs, toast]);
   
+  // Retornar API pública del hook
   return {
-    detectionState,
-    updateSource,
-    reset,
-    getDetailedStats,
-    adaptWeights,
-    updateCalibration,
-    setManualOverride,
-    updateEnvironment,
-    resetSystem,
-    exportDiagnostics,
+    // Estado actual
     isFingerDetected: detectionState.isFingerDetected,
     confidence: detectionState.confidence,
     consensusLevel: detectionState.consensusLevel,
-    calibrationParams: detectionState.calibrationParams,
-    diagnostics: detectionState.diagnostics
+    
+    // Estado de diagnósticos
+    diagnostics: diagnosticsState,
+    
+    // Parámetros de calibración
+    calibrationParams,
+    
+    // Métodos
+    getDetailedStats,
+    updateEnvironment,
+    setManualOverride,
+    updateCalibration,
+    getDiagnosticSession,
+    exportDiagnostics,
+    resetSystem
   };
 }
