@@ -45,7 +45,23 @@ export const useVitalSignsProcessor = () => {
       lastPeakTime: number | null 
     }
   ): VitalSignsResult => {
+    // Extra debugging
+    if (processedValues % 100 === 0) {
+      console.log("useVitalSignsProcessor: Processing signal batch", {
+        processedValues,
+        isProcessing,
+        hasProcessor: !!processorRef.current,
+        value,
+        hasRRData: !!rrData,
+        rrIntervals: rrData?.intervals?.length || 0
+      });
+    }
+    
     if (!processorRef.current || !isProcessing) {
+      console.log("useVitalSignsProcessor: Not processing - processor not ready or not active", {
+        hasProcessor: !!processorRef.current,
+        isProcessing
+      });
       return getEmptyResult();
     }
     
@@ -60,7 +76,13 @@ export const useVitalSignsProcessor = () => {
       // Log every 30 values
       if (processedValues % 30 === 0) {
         console.log("Vital signs processed:", processedValues, "values");
-        console.log("Latest hydration:", result.lipids.hydrationPercentage);
+        console.log("Latest vital signs:", {
+          spo2: result.spo2,
+          pressure: result.pressure,
+          glucose: result.glucose,
+          hydration: result.lipids.hydrationPercentage,
+          cholesterol: result.lipids.totalCholesterol
+        });
       }
       
       return result;
@@ -142,6 +164,9 @@ export const useVitalSignsProcessor = () => {
   
   const initializeProcessor = (): void => {
     console.log("Initializing vital signs processor");
+    if (!processorRef.current) {
+      processorRef.current = new VitalSignsProcessor();
+    }
     setIsProcessing(true);
     setProcessedValues(0);
   };

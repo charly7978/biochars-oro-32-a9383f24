@@ -1,3 +1,4 @@
+
 /**
  * Signal processing types
  * Optimized and consolidated type definitions
@@ -38,7 +39,6 @@ export interface ProcessedHeartbeatSignal {
   bpm: number;
   confidence: number;
   isPeak: boolean;
-  rrInterval?: number | null;
   // Additional properties
   peakConfidence?: number;
   instantaneousBPM?: number | null;

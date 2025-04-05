@@ -17,8 +17,8 @@ export interface VitalSignsResult {
   };
   lastArrhythmiaData?: {
     timestamp: number;
-    rmssd: number;
-    rrVariation: number;
+    rmssd?: number;
+    rrVariation?: number;
   } | null;
 }
 
@@ -40,4 +40,6 @@ export interface ProcessorFeedback {
   quality: number;
   calibrationStatus: string;
   lastUpdated: number;
+  diagnosticInfo?: Record<string, any>;
 }
+
