@@ -135,17 +135,9 @@ export const useHeartBeatProcessor = (): UseHeartBeatReturn => {
       { current: currentBeatIsArrhythmia }
     );
 
-    // Only update BPM if confidence is high enough and value is in physiological range
-    if (result.bpm > 0 && result.bpm >= 40 && result.bpm <= 200 && result.confidence > 0.4) {
-      // Add weighted update to reduce jumpiness - more weight to previous value for stability
-      const newBPM = currentBPM === 0 ? result.bpm : (0.7 * currentBPM + 0.3 * result.bpm);
-      setCurrentBPM(Math.round(newBPM));
+    if (result.bpm > 0 && result.confidence > 0.4) {
+      setCurrentBPM(result.bpm);
       setConfidence(result.confidence);
-      
-      // Save valid BPM to help with future calculations
-      if (lastValidBpmRef && typeof lastValidBpmRef.current !== 'undefined') {
-        lastValidBpmRef.current = Math.round(newBPM);
-      }
     }
 
     // Process arrhythmia detection if we have enough RR intervals
@@ -162,8 +154,7 @@ export const useHeartBeatProcessor = (): UseHeartBeatReturn => {
     requestBeep, 
     processRRIntervals,
     lastRRIntervalsRef,
-    currentBeatIsArrhythmiaRef,
-    lastValidBpmRef
+    currentBeatIsArrhythmiaRef
   ]);
 
   const reset = useCallback(() => {
@@ -199,16 +190,15 @@ export const useHeartBeatProcessor = (): UseHeartBeatReturn => {
       processorRef.current.setMonitoring(true);
       console.log('HeartBeatProcessor: Monitoring state set to true');
       
-      // Reset peak detection state
-      if (lastPeakTimeRef) lastPeakTimeRef.current = null;
-      if (lastBeepTimeRef) lastBeepTimeRef.current = 0;
+      lastPeakTimeRef.current = null;
+      lastBeepTimeRef.current = 0;
       lastProcessedPeakTimeRef.current = 0;
-      if (pendingBeepsQueue) pendingBeepsQueue.current = [];
-      if (consecutiveWeakSignalsRef) consecutiveWeakSignalsRef.current = 0;
+      pendingBeepsQueue.current = [];
+      consecutiveWeakSignalsRef.current = 0;
       
       // No iniciamos audio ni test beep aquí, está centralizado en PPGSignalMeter
       
-      if (beepProcessorTimeoutRef && beepProcessorTimeoutRef.current) {
+      if (beepProcessorTimeoutRef.current) {
         clearTimeout(beepProcessorTimeoutRef.current);
         beepProcessorTimeoutRef.current = null;
       }

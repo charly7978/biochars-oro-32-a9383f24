@@ -52,11 +52,3 @@ export interface ArrhythmiaState {
   recoveryTime: number;
   windows: Array<{start: number, end: number}>;
 }
-
-// Adding missing RRAnalysisResult interface
-export interface RRAnalysisResult {
-  rmssd: number;
-  rrVariation: number;
-  timestamp: number;
-  isArrhythmia: boolean;
-}
