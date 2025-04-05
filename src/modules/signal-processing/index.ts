@@ -24,7 +24,6 @@ export {
   getDetectionConfidence
 } from './finger-detection/unified-finger-detector';
 
-// Usar 'export type' para tipos en lugar de 'export' directo
 export type {
   DetectionSource,
   DetectionState,
@@ -73,7 +72,8 @@ export {
   createDefaultPPGOptimizer,
   createHeartbeatOptimizer,
   DEFAULT_PPG_PARAMETERS,
-  DEFAULT_HEARTBEAT_PARAMETERS
+  DEFAULT_HEARTBEAT_PARAMETERS,
+  OptimizationParameter
 } from './utils/bayesian-optimization';
 
 // Use 'export type' for types when isolatedModules is enabled
@@ -82,8 +82,7 @@ export type {
   BayesianDataPoint,
   BayesianOptimizerConfig,
   GaussianProcess,
-  ParameterOptions,
-  OptimizationParameter
+  ParameterOptions
 } from './utils/bayesian-optimization';
 
 // Exportar sistema adaptativo
@@ -98,11 +97,8 @@ export { createHeartbeatProcessor } from './heartbeat-processor';
 export {
   SignalParameterOptimizer,
   createSignalParameterOptimizer,
-  OptimizationState,
+  OptimizationState
 } from './utils/parameter-optimization';
-
-// Exportar tipo de métricas de optimización
-export type { OptimizationMetrics } from './utils/parameter-optimization';
 
 // Exportar utilidades de buffer circular optimizado
 export { CircularBuffer } from './utils/circular-buffer';

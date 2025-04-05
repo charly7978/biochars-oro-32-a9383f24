@@ -1,389 +1,479 @@
-
 /**
  * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
  * 
- * Sistema de calibración adaptativa para detección de dedos
+ * Calibración adaptativa para detección de dedos
+ * Ajusta sensibilidad y umbrales según condiciones ambientales
  */
-import { logError, ErrorLevel } from '@/utils/debugUtils';
-import { 
-  type EnvironmentalState,
-  type AdaptiveCalibrationParams
-} from '../finger-detection/finger-detection-types';
-import { reportDiagnosticEvent, DiagnosticEventType } from '../finger-detection/finger-diagnostics';
 
-// Interfaz extendida con propiedades adicionales del sistema de calibración
-interface CalibrationState extends EnvironmentalState {
-  lightLevel: number;
-  motionLevel: number;
-  lastUpdateTime: number;
-  calibrationVersion: number;
-  adaptiveSensitivity: number;
-  hasCalibrated: boolean;
+import { logError, ErrorLevel } from '@/utils/debugUtils';
+import { unifiedFingerDetector } from './unified-finger-detector';
+import { fingerDiagnostics } from './finger-diagnostics';
+
+// Interfaz para parámetros de calibración
+export interface CalibrationParameters {
+  sensitivityLevel: number;         // 0-1, sensibilidad general
+  rhythmDetectionThreshold: number; // Umbral para detección por ritmo
+  amplitudeThreshold: number;       // Umbral para detección por amplitud
+  stabilityWindow: number;          // Ventana para análisis de estabilidad
+  falsePositiveReduction: number;   // Factor de reducción de falsos positivos (0-1)
+  falseNegativeReduction: number;   // Factor de reducción de falsos negativos (0-1)
+  adaptationRate: number;           // Velocidad de adaptación (0-1)
 }
 
-// Implementación del sistema de calibración adaptativa
+// Estado ambiental para la calibración
+export interface EnvironmentalState {
+  lightLevel: number;            // 0-1, nivel de luz
+  motionLevel: number;           // 0-1, nivel de movimiento
+  signalToNoiseRatio: number;    // Relación señal/ruido estimada
+  devicePerformance: number;     // 0-1, estimación de rendimiento del dispositivo
+}
+
+/**
+ * Sistema de calibración adaptativa que ajusta parámetros
+ * en tiempo real para mejorar la detección de dedo
+ */
 class AdaptiveCalibration {
-  private state: CalibrationState = {
-    noise: 0,
-    lighting: 0,
-    motion: 0,
-    device: {
-      camera: {
-        quality: 0,
-        frameRate: 0
-      }
-    },
-    lightLevel: 0.5, // Default middle value
-    motionLevel: 0.5, // Default middle value
-    lastUpdateTime: Date.now(),
-    calibrationVersion: 1,
-    adaptiveSensitivity: 1.0,
-    hasCalibrated: false
+  // Parámetros actuales
+  private calibration: CalibrationParameters = {
+    sensitivityLevel: 0.6,           // Valor predeterminado moderado
+    rhythmDetectionThreshold: 0.2,   // Umbral para detección por ritmo
+    amplitudeThreshold: 0.3,         // Umbral para detección por amplitud
+    stabilityWindow: 5,              // Ventana para análisis de estabilidad
+    falsePositiveReduction: 0.3,     // Moderado
+    falseNegativeReduction: 0.3,     // Moderado
+    adaptationRate: 0.1              // Adaptación gradual
   };
-
-  // Parámetros de calibración
-  private params: AdaptiveCalibrationParams = {
-    baseThreshold: 0.15,
-    noiseMultiplier: 1.2,
-    lightingCompensation: 1.0,
-    motionCompensation: 1.0,
-    adaptationRate: 0.05,
-    stabilityFactor: 0.8
+  
+  // Estado ambiental
+  private environment: EnvironmentalState = {
+    lightLevel: 0.5,
+    motionLevel: 0,
+    signalToNoiseRatio: 0.5,
+    devicePerformance: 0.5
   };
-
-  // Límites de los parámetros
-  private readonly paramLimits = {
-    baseThreshold: { min: 0.05, max: 0.4 },
-    noiseMultiplier: { min: 0.8, max: 2.0 },
-    lightingCompensation: { min: 0.6, max: 1.5 },
-    motionCompensation: { min: 0.6, max: 1.5 },
-    adaptationRate: { min: 0.01, max: 0.2 },
-    stabilityFactor: { min: 0.5, max: 0.95 }
-  };
-
-  // Historial de calibraciones
+  
+  // Historial de calibraciones para análisis
   private calibrationHistory: Array<{
-    timestamp: number;
-    environmental: EnvironmentalState;
-    params: AdaptiveCalibrationParams;
+    timestamp: number,
+    params: CalibrationParameters,
+    environment: EnvironmentalState,
+    performance: {
+      detectionRate: number,
+      falsePositiveRate: number,
+      falseNegativeRate: number
+    }
   }> = [];
-
-  /**
-   * Inicializa el sistema de calibración
-   */
+  
+  // Perfil aprendido del usuario
+  private userProfile: {
+    averageAmplitude: number,
+    rhythmPattern: number[],
+    signalCharacteristics: {
+      peak: number,
+      valley: number,
+      frequency: number
+    }
+  } = {
+    averageAmplitude: 0,
+    rhythmPattern: [],
+    signalCharacteristics: {
+      peak: 0,
+      valley: 0,
+      frequency: 0
+    }
+  };
+  
+  // Configuración
+  private isAutoCalibrationEnabled: boolean = true;
+  private maxCalibrationHistorySize: number = 10;
+  private autoCalibrationInterval: number | null = null;
+  private isPerformingCalibration: boolean = false;
+  
   constructor() {
-    this.resetCalibration();
+    console.log('AdaptiveCalibration: Sistema de calibración adaptativa inicializado');
   }
-
+  
   /**
-   * Actualiza el estado ambiental para recalibración
+   * Inicia el sistema de calibración adaptativa
    */
-  public updateEnvironmentalState(newState: Partial<EnvironmentalState>): void {
-    // Actualizar valores básicos del estado ambiental
-    if (newState.noise !== undefined) {
-      this.state.noise = newState.noise;
+  public start(): void {
+    if (this.autoCalibrationInterval !== null) {
+      this.stop();
     }
     
-    if (newState.lighting !== undefined) {
-      this.state.lighting = newState.lighting;
+    // Crear intervalo para calibración automática
+    if (this.isAutoCalibrationEnabled) {
+      this.autoCalibrationInterval = window.setInterval(() => {
+        this.performAutomaticCalibration();
+      }, 10000); // Cada 10 segundos
       
-      // Derivar nivel de luz de 0-1 a partir de lighting
-      this.state.lightLevel = Math.min(1, Math.max(0, newState.lighting / 100));
+      console.log('AdaptiveCalibration: Calibración automática iniciada');
     }
-    
-    if (newState.motion !== undefined) {
-      this.state.motion = newState.motion;
-      
-      // Derivar nivel de movimiento de 0-1 a partir de motion
-      this.state.motionLevel = Math.min(1, Math.max(0, newState.motion / 100));
+  }
+  
+  /**
+   * Detiene el sistema de calibración
+   */
+  public stop(): void {
+    if (this.autoCalibrationInterval !== null) {
+      clearInterval(this.autoCalibrationInterval);
+      this.autoCalibrationInterval = null;
+      console.log('AdaptiveCalibration: Calibración automática detenida');
     }
+  }
+  
+  /**
+   * Realiza una calibración automática basada en condiciones actuales
+   */
+  private performAutomaticCalibration(): void {
+    if (this.isPerformingCalibration) return;
     
-    if (newState.device?.camera) {
-      this.state.device.camera = {
-        ...this.state.device.camera,
-        ...newState.device.camera
+    this.isPerformingCalibration = true;
+    
+    try {
+      // Obtener estado del detector
+      const detectorStats = {
+        confidence: unifiedFingerDetector.getDetectionState().confidence,
+        isFingerDetected: unifiedFingerDetector.getDetectionState().isFingerDetected,
+        // Add any other properties you need from the detection state
       };
+      
+      // Obtener estado de diagnóstico actual
+      const diagnosticsState = fingerDiagnostics.getDiagnosticsState();
+      const diagnosticSession = fingerDiagnostics.getSession();
+      
+      // Si no hay suficientes datos, usar calibración por defecto
+      if (!diagnosticSession || diagnosticSession.events.length < 10) {
+        return;
+      }
+      
+      // Analizar eventos recientes para ajustar parámetros
+      const recentEvents = diagnosticSession.events.slice(-30);
+      
+      // Extraer métricas para calibración
+      let detectedCount = 0;
+      let totalEvents = recentEvents.length;
+      let amplitudeSum = 0;
+      let amplitudeCount = 0;
+      
+      recentEvents.forEach(event => {
+        if (event.isFingerDetected) {
+          detectedCount++;
+        }
+        
+        if (event.signalValue !== undefined) {
+          amplitudeSum += Math.abs(event.signalValue);
+          amplitudeCount++;
+        }
+      });
+      
+      // Calcular métricas
+      const detectionRate = totalEvents > 0 ? detectedCount / totalEvents : 0;
+      const avgAmplitude = amplitudeCount > 0 ? amplitudeSum / amplitudeCount : 0;
+      
+      // Actualizar perfil de usuario
+      this.updateUserProfile(recentEvents, avgAmplitude);
+      
+      // Ajustar parámetros según condiciones
+      this.adjustCalibrationParameters(detectionRate, diagnosticSession.summary);
+      
+      // Registrar calibración en historial
+      this.recordCalibration({
+        detectionRate,
+        falsePositiveRate: diagnosticSession.summary.falsePositives / Math.max(1, totalEvents),
+        falseNegativeRate: diagnosticSession.summary.falseNegatives / Math.max(1, totalEvents)
+      });
+      
+      console.log('AdaptiveCalibration: Calibración automática realizada', {
+        detectionRate,
+        falsePositiveRate: diagnosticSession.summary.falsePositives / Math.max(1, totalEvents),
+        falseNegativeRate: diagnosticSession.summary.falseNegatives / Math.max(1, totalEvents),
+        newParams: { ...this.calibration }
+      });
+      
+    } catch (error) {
+      logError('AdaptiveCalibration: Error en calibración automática', error, ErrorLevel.ERROR);
+    } finally {
+      this.isPerformingCalibration = false;
+    }
+  }
+  
+  /**
+   * Actualiza el perfil de usuario basado en datos recientes
+   */
+  private updateUserProfile(
+    events: Array<any>,
+    avgAmplitude: number
+  ): void {
+    // Actualizar amplitud promedio con decaimiento exponencial
+    this.userProfile.averageAmplitude = 
+      this.userProfile.averageAmplitude === 0 
+        ? avgAmplitude 
+        : this.userProfile.averageAmplitude * 0.7 + avgAmplitude * 0.3;
+    
+    // Si algún evento contiene información de ritmo, actualizar patrón
+    const rhythmEvents = events.filter(e => 
+      e.details && e.details.intervals && e.details.intervals.length > 0
+    );
+    
+    if (rhythmEvents.length > 0) {
+      // Tomar el evento más reciente con datos de ritmo
+      const lastRhythmEvent = rhythmEvents[rhythmEvents.length - 1];
+      
+      // Extraer intervalos
+      const intervals = lastRhythmEvent.details.intervals;
+      
+      // Si hay suficientes intervalos, actualizar patrón de ritmo
+      if (intervals.length >= 3) {
+        this.userProfile.rhythmPattern = [...intervals];
+        
+        // Calcular frecuencia cardíaca estimada (60000 / intervalo promedio)
+        const avgInterval = intervals.reduce((sum: number, val: number) => sum + val, 0) / intervals.length;
+        this.userProfile.signalCharacteristics.frequency = avgInterval > 0 ? 60000 / avgInterval : 0;
+      }
     }
     
-    // Registrar actualización
-    this.state.lastUpdateTime = Date.now();
+    // Buscar valores máximos y mínimos para actualizar características
+    const signalValues = events
+      .filter(e => e.signalValue !== undefined)
+      .map(e => e.signalValue);
     
-    // Adaptar parámetros según los nuevos valores ambientales
-    this.adaptParameters();
+    if (signalValues.length > 0) {
+      const peakValue = Math.max(...signalValues);
+      const valleyValue = Math.min(...signalValues);
+      
+      // Actualizar con decaimiento exponencial
+      this.userProfile.signalCharacteristics.peak = 
+        this.userProfile.signalCharacteristics.peak === 0 
+          ? peakValue 
+          : this.userProfile.signalCharacteristics.peak * 0.7 + peakValue * 0.3;
+          
+      this.userProfile.signalCharacteristics.valley = 
+        this.userProfile.signalCharacteristics.valley === 0 
+          ? valleyValue 
+          : this.userProfile.signalCharacteristics.valley * 0.7 + valleyValue * 0.3;
+    }
+  }
+  
+  /**
+   * Ajusta los parámetros de calibración basados en la tasa de detección
+   * y datos de diagnóstico
+   */
+  private adjustCalibrationParameters(
+    detectionRate: number,
+    summary: any
+  ): void {
+    // Obtener copia de los parámetros actuales
+    const newParams = { ...this.calibration };
     
-    // Registrar evento diagnóstico
-    reportDiagnosticEvent({
-      type: DiagnosticEventType.ENVIRONMENT_CHANGE,
-      message: `Environment updated: noise=${this.state.noise}, lighting=${this.state.lighting}, motion=${this.state.motion}`,
-      data: { state: { ...this.state } }
+    // Ajustar según tasa de detección
+    if (detectionRate < 0.3) {
+      // Detección baja - aumentar sensibilidad
+      newParams.sensitivityLevel = Math.min(1, newParams.sensitivityLevel + 0.05 * this.calibration.adaptationRate);
+      newParams.falseNegativeReduction = Math.min(0.8, newParams.falseNegativeReduction + 0.05 * this.calibration.adaptationRate);
+      newParams.amplitudeThreshold = Math.max(0.1, newParams.amplitudeThreshold - 0.02 * this.calibration.adaptationRate);
+    } else if (detectionRate > 0.7) {
+      // Detección alta - mejorar precisión
+      newParams.falsePositiveReduction = Math.min(0.8, newParams.falsePositiveReduction + 0.05 * this.calibration.adaptationRate);
+    }
+    
+    // Ajustar según falsos positivos/negativos
+    if (summary.falsePositives > summary.falseNegatives * 2) {
+      // Muchos falsos positivos - ser más restrictivo
+      newParams.sensitivityLevel = Math.max(0.3, newParams.sensitivityLevel - 0.05 * this.calibration.adaptationRate);
+      newParams.rhythmDetectionThreshold = Math.min(0.35, newParams.rhythmDetectionThreshold + 0.02 * this.calibration.adaptationRate);
+    } else if (summary.falseNegatives > summary.falsePositives * 2) {
+      // Muchos falsos negativos - ser más permisivo
+      newParams.sensitivityLevel = Math.min(0.9, newParams.sensitivityLevel + 0.05 * this.calibration.adaptationRate);
+      newParams.rhythmDetectionThreshold = Math.max(0.15, newParams.rhythmDetectionThreshold - 0.02 * this.calibration.adaptationRate);
+    }
+    
+    // Ajustar ventana de estabilidad según las condiciones de señal
+    if (this.environment.motionLevel > 0.6) {
+      // Movimiento alto - aumentar ventana para estabilidad
+      newParams.stabilityWindow = Math.min(8, newParams.stabilityWindow + 1);
+    } else if (this.environment.motionLevel < 0.3) {
+      // Movimiento bajo - reducir ventana para respuesta rápida
+      newParams.stabilityWindow = Math.max(3, newParams.stabilityWindow - 1);
+    }
+    
+    // Aplicar cambios con la tasa de adaptación configurada
+    for (const key in newParams) {
+      if (Object.prototype.hasOwnProperty.call(newParams, key) && 
+          Object.prototype.hasOwnProperty.call(this.calibration, key)) {
+        const paramKey = key as keyof CalibrationParameters;
+        if (paramKey !== 'adaptationRate') { // No adaptar la propia tasa
+          this.calibration[paramKey] = (this.calibration[paramKey] * (1 - this.calibration.adaptationRate) + 
+                                       newParams[paramKey] * this.calibration.adaptationRate);
+        }
+      }
+    }
+  }
+  
+  /**
+   * Registra una calibración en el historial para análisis
+   */
+  private recordCalibration(performance: {
+    detectionRate: number,
+    falsePositiveRate: number,
+    falseNegativeRate: number
+  }): void {
+    this.calibrationHistory.push({
+      timestamp: Date.now(),
+      params: { ...this.calibration },
+      environment: { ...this.environment },
+      performance
     });
     
-    // Registrar en el historial de calibraciones cada 5 segundos para no sobrecargarlo
-    const lastCalibration = this.calibrationHistory[this.calibrationHistory.length - 1];
-    if (!lastCalibration || Date.now() - lastCalibration.timestamp > 5000) {
-      this.calibrationHistory.push({
-        timestamp: Date.now(),
-        environmental: { ...this.state },
-        params: { ...this.params }
-      });
+    // Mantener historial limitado
+    if (this.calibrationHistory.length > this.maxCalibrationHistorySize) {
+      this.calibrationHistory.shift();
+    }
+  }
+  
+  /**
+   * Actualiza el estado ambiental para calibración
+   */
+  public updateEnvironmentalState(state: Partial<EnvironmentalState>): void {
+    this.environment = {
+      ...this.environment,
+      ...state
+    };
+    
+    // Si hay cambios significativos, realizar calibración
+    const significantChange = 
+      (state.lightLevel !== undefined && Math.abs(state.lightLevel - this.environment.lightLevel) > 0.2) ||
+      (state.motionLevel !== undefined && Math.abs(state.motionLevel - this.environment.motionLevel) > 0.2);
       
-      // Limitar tamaño del historial
-      if (this.calibrationHistory.length > 20) {
-        this.calibrationHistory.shift();
-      }
+    if (significantChange && this.isAutoCalibrationEnabled) {
+      this.performAutomaticCalibration();
     }
   }
-
+  
   /**
-   * Adapta los parámetros según el estado ambiental actual
+   * Aplica los parámetros de calibración actuales al detector
    */
-  private adaptParameters(): void {
-    const { noise, lighting, motion } = this.state;
+  public applyCalibrationToDetector(): void {
+    // Aquí se aplicarían los parámetros al detector unificado
+    // y a otros componentes del sistema de detección
     
-    // Calcular ajustes de parámetros
-    const noiseAdjustment = this.calculateNoiseAdjustment(noise);
-    const lightingAdjustment = this.calculateLightingAdjustment(lighting);
-    const motionAdjustment = this.calculateMotionAdjustment(motion);
+    // Por ejemplo, ajustar el umbral de consenso basado en la sensibilidad
     
-    // Actualizar parámetros con los ajustes calculados
-    this.params.baseThreshold = this.clampParameter(
-      'baseThreshold',
-      0.15 + (noiseAdjustment * 0.1)
-    );
-    
-    this.params.noiseMultiplier = this.clampParameter(
-      'noiseMultiplier',
-      1.2 + (noiseAdjustment * 0.2)
-    );
-    
-    this.params.lightingCompensation = this.clampParameter(
-      'lightingCompensation',
-      1.0 + (lightingAdjustment * 0.2)
-    );
-    
-    this.params.motionCompensation = this.clampParameter(
-      'motionCompensation',
-      1.0 + (motionAdjustment * 0.2)
-    );
-    
-    // Ajustar tasa de adaptación según estabilidad
-    const stabilityMetric = this.calculateStabilityMetric();
-    this.params.adaptationRate = this.clampParameter(
-      'adaptationRate',
-      0.05 * (1 + (1 - stabilityMetric) * 0.5)
-    );
-    
-    // Ajustar factor de estabilidad
-    this.params.stabilityFactor = this.clampParameter(
-      'stabilityFactor',
-      0.8 * (1 + stabilityMetric * 0.2)
-    );
-    
-    // Marcar como calibrado
-    if (!this.state.hasCalibrated) {
-      this.state.hasCalibrated = true;
-      
-      // Registrar evento diagnóstico
-      reportDiagnosticEvent({
-        type: DiagnosticEventType.CALIBRATION_COMPLETE,
-        message: 'Initial calibration complete',
-        data: { params: { ...this.params } }
-      });
-    }
-    
-    // Log para depuración
-    logError(
-      `Adaptive calibration parameters updated: baseThreshold=${this.params.baseThreshold.toFixed(3)}, noiseMultiplier=${this.params.noiseMultiplier.toFixed(3)}`,
-      ErrorLevel.DEBUG,
-      'AdaptiveCalibration'
-    );
+    console.log('AdaptiveCalibration: Aplicando parámetros:', this.calibration);
   }
-
-  /**
-   * Calcula ajuste basado en el nivel de ruido
-   */
-  private calculateNoiseAdjustment(noise: number): number {
-    // Normalizar ruido a un rango de 0-1
-    const normalizedNoise = Math.min(1, Math.max(0, noise / 100));
-    
-    // Calcular ajuste no lineal
-    return Math.pow(normalizedNoise, 1.5);
-  }
-
-  /**
-   * Calcula ajuste basado en la iluminación
-   */
-  private calculateLightingAdjustment(lighting: number): number {
-    // Normalizar iluminación a un rango de 0-1
-    const normalizedLighting = Math.min(1, Math.max(0, lighting / 100));
-    
-    // Calcular distancia desde el punto óptimo (0.5)
-    const distanceFromOptimal = Math.abs(normalizedLighting - 0.5) * 2;
-    
-    // Ajuste cuadrático
-    return Math.pow(distanceFromOptimal, 2);
-  }
-
-  /**
-   * Calcula ajuste basado en el movimiento
-   */
-  private calculateMotionAdjustment(motion: number): number {
-    // Normalizar movimiento a un rango de 0-1
-    const normalizedMotion = Math.min(1, Math.max(0, motion / 100));
-    
-    // Aplicar función exponencial para enfatizar movimientos altos
-    return Math.pow(normalizedMotion, 2);
-  }
-
-  /**
-   * Calcula métrica de estabilidad basada en cambios recientes
-   */
-  private calculateStabilityMetric(): number {
-    if (this.calibrationHistory.length < 2) {
-      return 1.0; // Asumir estabilidad máxima si no hay suficiente historial
-    }
-    
-    // Obtener las últimas calibraciones
-    const recent = this.calibrationHistory.slice(-5);
-    
-    // Calcular varianza en parámetros clave
-    let totalVariance = 0;
-    
-    // Varianza en ruido
-    const noiseValues = recent.map(c => c.environmental.noise);
-    totalVariance += this.calculateVariance(noiseValues);
-    
-    // Varianza en iluminación
-    const lightingValues = recent.map(c => c.environmental.lighting);
-    totalVariance += this.calculateVariance(lightingValues);
-    
-    // Varianza en movimiento
-    const motionValues = recent.map(c => c.environmental.motion);
-    totalVariance += this.calculateVariance(motionValues);
-    
-    // Normalizar y convertir a estabilidad (1 - varianza normalizada)
-    const normalizedVariance = Math.min(1, totalVariance / 5000);
-    return 1 - normalizedVariance;
-  }
-
-  /**
-   * Calcula varianza de un conjunto de valores
-   */
-  private calculateVariance(values: number[]): number {
-    if (values.length === 0) return 0;
-    
-    // Calcular media
-    const mean = values.reduce((sum, val) => sum + val, 0) / values.length;
-    
-    // Calcular suma de cuadrados de diferencias
-    const squaredDiffs = values.map(val => Math.pow(val - mean, 2));
-    
-    // Calcular varianza
-    return squaredDiffs.reduce((sum, val) => sum + val, 0) / values.length;
-  }
-
-  /**
-   * Limita un parámetro a sus valores mínimo y máximo definidos
-   */
-  private clampParameter(name: keyof AdaptiveCalibrationParams, value: number): number {
-    const limits = this.paramLimits[name];
-    return Math.min(limits.max, Math.max(limits.min, value));
-  }
-
+  
   /**
    * Obtiene los parámetros de calibración actuales
    */
-  public getCalibrationParameters(): AdaptiveCalibrationParams {
-    return { ...this.params };
+  public getCalibrationParameters(): CalibrationParameters {
+    return { ...this.calibration };
   }
-
+  
   /**
-   * Restaura la calibración a sus valores iniciales
+   * Establece manualmente los parámetros de calibración
    */
-  public resetCalibration(): void {
-    // Restaurar estado a valores predeterminados
-    this.state = {
-      noise: 0,
-      lighting: 50, // Valor medio como predeterminado
-      motion: 0,
-      device: {
-        camera: {
-          quality: 0,
-          frameRate: 0
-        }
-      },
-      lightLevel: 0.5,
-      motionLevel: 0,
-      lastUpdateTime: Date.now(),
-      calibrationVersion: this.state ? this.state.calibrationVersion + 1 : 1,
-      adaptiveSensitivity: 1.0,
-      hasCalibrated: false
+  public setCalibrationParameters(params: Partial<CalibrationParameters>): void {
+    this.calibration = {
+      ...this.calibration,
+      ...params
     };
     
-    // Restaurar parámetros a valores predeterminados
-    this.params = {
-      baseThreshold: 0.15,
-      noiseMultiplier: 1.2,
-      lightingCompensation: 1.0,
-      motionCompensation: 1.0,
-      adaptationRate: 0.05,
-      stabilityFactor: 0.8
+    this.applyCalibrationToDetector();
+    console.log('AdaptiveCalibration: Parámetros actualizados manualmente', params);
+  }
+  
+  /**
+   * Habilita o deshabilita la calibración automática
+   */
+  public setAutoCalibration(enabled: boolean): void {
+    this.isAutoCalibrationEnabled = enabled;
+    
+    if (enabled && this.autoCalibrationInterval === null) {
+      this.start();
+    } else if (!enabled && this.autoCalibrationInterval !== null) {
+      this.stop();
+    }
+    
+    console.log(`AdaptiveCalibration: Calibración automática ${enabled ? 'habilitada' : 'deshabilitada'}`);
+  }
+  
+  /**
+   * Obtiene el perfil de usuario actual
+   */
+  public getUserProfile(): typeof this.userProfile {
+    return { ...this.userProfile };
+  }
+  
+  /**
+   * Obtiene el historial de calibraciones
+   */
+  public getCalibrationHistory(): typeof this.calibrationHistory {
+    return [...this.calibrationHistory];
+  }
+  
+  /**
+   * Reinicia el sistema a su estado inicial
+   */
+  public reset(): void {
+    this.stop();
+    
+    // Reiniciar parámetros a valores predeterminados
+    this.calibration = {
+      sensitivityLevel: 0.6,
+      rhythmDetectionThreshold: 0.2,
+      amplitudeThreshold: 0.3,
+      stabilityWindow: 5,
+      falsePositiveReduction: 0.3,
+      falseNegativeReduction: 0.3,
+      adaptationRate: 0.1
+    };
+    
+    // Reiniciar estado ambiental
+    this.environment = {
+      lightLevel: 0.5,
+      motionLevel: 0,
+      signalToNoiseRatio: 0.5,
+      devicePerformance: 0.5
     };
     
     // Limpiar historial
     this.calibrationHistory = [];
     
-    // Registrar evento diagnóstico
-    reportDiagnosticEvent({
-      type: DiagnosticEventType.CALIBRATION_RESET,
-      message: 'Calibration reset to default values',
-      data: { state: { ...this.state }, params: { ...this.params } }
-    });
-    
-    logError(
-      'Adaptive calibration reset to default values',
-      ErrorLevel.INFO,
-      'AdaptiveCalibration'
-    );
-  }
-
-  /**
-   * Obtiene estado ambiental actual
-   */
-  public getEnvironmentalState(): EnvironmentalState {
-    return {
-      noise: this.state.noise,
-      lighting: this.state.lighting,
-      motion: this.state.motion,
-      device: { ...this.state.device }
+    // Reiniciar perfil de usuario
+    this.userProfile = {
+      averageAmplitude: 0,
+      rhythmPattern: [],
+      signalCharacteristics: {
+        peak: 0,
+        valley: 0,
+        frequency: 0
+      }
     };
+    
+    this.isPerformingCalibration = false;
+    
+    console.log('AdaptiveCalibration: Sistema reiniciado');
   }
 }
 
-// Instancia singleton
-const adaptiveCalibration = new AdaptiveCalibration();
+// Instancia única para toda la aplicación
+export const adaptiveCalibration = new AdaptiveCalibration();
 
-// Exportar funcionalidades
-export { adaptiveCalibration };
-export { getCalibrationParameters, updateEnvironmentalState, resetCalibration };
+// Funciones de ayuda para simplificar el uso
+export const startAdaptiveCalibration = () => 
+  adaptiveCalibration.start();
 
-/**
- * Obtiene los parámetros de calibración actuales
- */
-function getCalibrationParameters(): AdaptiveCalibrationParams {
-  return adaptiveCalibration.getCalibrationParameters();
-}
+export const stopAdaptiveCalibration = () => 
+  adaptiveCalibration.stop();
 
-/**
- * Actualiza el estado ambiental para recalibración
- */
-function updateEnvironmentalState(newState: Partial<EnvironmentalState>): void {
-  adaptiveCalibration.updateEnvironmentalState(newState);
-}
+export const updateEnvironmentalState = (state: Partial<EnvironmentalState>) => 
+  adaptiveCalibration.updateEnvironmentalState(state);
 
-/**
- * Restaura la calibración a sus valores iniciales
- */
-function resetCalibration(): void {
-  adaptiveCalibration.resetCalibration();
-}
+export const getCalibrationParameters = () => 
+  adaptiveCalibration.getCalibrationParameters();
+
+export const setCalibrationParameters = (params: Partial<CalibrationParameters>) => 
+  adaptiveCalibration.setCalibrationParameters(params);
+
+export const resetAdaptiveCalibration = () => 
+  adaptiveCalibration.reset();

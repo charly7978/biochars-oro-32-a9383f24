@@ -13,8 +13,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { logError, ErrorLevel } from '@/utils/debugUtils';
 import { 
   DetectionState,
-  DetectionSource,
-  EnvironmentalState
+  DetectionSource
 } from '@/modules/signal-processing/finger-detection/finger-detection-types';
 import {
   unifiedFingerDetector,
@@ -22,9 +21,9 @@ import {
   updateDetectionSource,
   resetFingerDetector,
   adaptDetectionThresholds
-} from '@/modules/signal-processing';
-import { getDiagnosticStats } from '@/modules/signal-processing';
-import { updateEnvironmentalState } from '@/modules/signal-processing';
+} from '@/modules/signal-processing/finger-detection/unified-finger-detector';
+import { getDiagnosticStats } from '@/modules/signal-processing/finger-detection/finger-diagnostics';
+import { updateEnvironmentalState } from '@/modules/signal-processing/finger-detection/adaptive-calibration';
 
 /**
  * Resultado del hook de detección de dedos
@@ -87,7 +86,7 @@ export function useFingerDetection(): FingerDetectionResult {
     quality: number,
     brightness?: number
   ): void => {
-    adaptDetectionThresholds(quality);
+    adaptDetectionThresholds(quality, brightness);
     updateLocalState();
   }, [updateLocalState]);
   
@@ -100,7 +99,7 @@ export function useFingerDetection(): FingerDetectionResult {
     // Actualizar brillo si se proporciona
     if (data.brightness !== undefined) {
       updateEnvironmentalState({
-        lighting: data.brightness
+        brightness: data.brightness
       });
       
       // Actualizar fuente de detección basada en brillo
@@ -115,7 +114,7 @@ export function useFingerDetection(): FingerDetectionResult {
     // Actualizar movimiento si se proporciona
     if (data.movement !== undefined) {
       updateEnvironmentalState({
-        motion: data.movement
+        movement: data.movement
       });
     }
     
@@ -139,16 +138,14 @@ export function useFingerDetection(): FingerDetectionResult {
   // Calcular métricas adicionales
   const qualityScore = useCallback((): number => {
     // Obtener fuentes activas
-    const sources = detectionState.sources || {};
+    const { sources } = detectionState;
     let activeCount = 0;
     let totalConfidence = 0;
     
     Object.entries(sources).forEach(([_, data]) => {
-      if (data && typeof data === 'object' && 'detected' in data && data.detected) {
+      if (data.detected) {
         activeCount++;
-        if ('confidence' in data) {
-          totalConfidence += data.confidence as number;
-        }
+        totalConfidence += data.confidence;
       }
     });
     
@@ -163,10 +160,8 @@ export function useFingerDetection(): FingerDetectionResult {
   
   // Contar fuentes activas
   const countActiveSources = useCallback((): number => {
-    const sources = detectionState.sources || {};
-    return Object.values(sources).filter(data => 
-      data && typeof data === 'object' && 'detected' in data && data.detected
-    ).length;
+    const { sources } = detectionState;
+    return Object.values(sources).filter(data => data.detected).length;
   }, [detectionState]);
   
   // Configurar actualización periódica del estado
@@ -189,11 +184,11 @@ export function useFingerDetection(): FingerDetectionResult {
   
   // Construir resultado
   return {
-    isFingerDetected: !!detectionState.isFingerDetected,
+    isFingerDetected: detectionState.isFingerDetected,
     confidence: detectionState.confidence,
     qualityScore: qualityScore(),
     sourcesActive: countActiveSources(),
-    totalSources: Object.keys(detectionState.sources || {}).length,
+    totalSources: Object.keys(detectionState.sources).length,
     lastDetectionTime: lastUpdateTime.current,
     diagnostics: getDiagnosticStats(),
     updateSource,

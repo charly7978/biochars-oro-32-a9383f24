@@ -2,261 +2,301 @@
 /**
  * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
  * 
- * Detector de presencia de dedos basado en patrones rítmicos
+ * Detector de patrones rítmicos
+ * 
+ * IMPORTANTE: Este módulo analiza patrones rítmicos (como los latidos cardíacos)
+ * para determinar si hay un dedo presente. Se integra con el detector unificado.
  */
 
-import { logError, ErrorLevel } from '@/utils/debugUtils';
-import { DiagnosticEventType } from './finger-detection-types';
-import { reportDiagnosticEvent, reportFingerDetection } from './finger-diagnostics';
+import { reportDiagnosticEvent } from './finger-diagnostics';
 import { getCalibrationParameters } from './adaptive-calibration';
 import { updateDetectionSource } from './unified-finger-detector';
 
-// Estado del detector de ritmo
-interface RhythmDetectorState {
-  isPatternDetected: boolean;
-  lastPatternTime: number;
-  patternConfidence: number;
-  valueBuffer: number[];
-  lastCrossingPoints: number[];
-  crossingIntervals: number[];
-  consistentPatterns: number;
-  maxConsistentPatterns: number;
-  threshold: number;
-}
+// Historial para detección de patrones
+let rhythmDetectionHistory: Array<{time: number, value: number}> = [];
+let lastPeakTimes: number[] = [];
+let consistentPatternsCount: number = 0;
+let confirmedFingerPresence: boolean = false;
 
-// Estado global
-const state: RhythmDetectorState = {
-  isPatternDetected: false,
-  lastPatternTime: 0,
-  patternConfidence: 0,
-  valueBuffer: [],
-  lastCrossingPoints: [],
-  crossingIntervals: [],
-  consistentPatterns: 0,
-  maxConsistentPatterns: 0,
-  threshold: 0.6
-};
-
-// Configuración
-const CONFIG = {
-  BUFFER_SIZE: 100,
-  MIN_CONSISTENT_PATTERNS: 2,
-  MAX_PATTERN_AGE_MS: 3000,
-  ZERO_CROSSING_FILTER: 0.5
-};
+// Constantes para detección de patrones
+const PATTERN_WINDOW_MS = 3000; // Ventana de 3 segundos
+const MIN_PEAKS_FOR_PATTERN = 3; // Mínimo 3 picos para confirmar patrón
+const MAX_CONSISTENT_PATTERNS = 10; // Máximo para evitar overflow
 
 /**
- * Analiza la señal para detectar patrones rítmicos
- * Esta implementación busca patrones consistentes en los cruces por cero
+ * Analiza el buffer de señal para detectar patrones rítmicos
  */
-export function analyzeSignalForRhythmicPattern(value: number, timestamp?: number): boolean {
-  const now = timestamp || Date.now();
+export function analyzeSignalForRhythmicPattern(
+  signalValue: number,
+  sensitivity: number = 0.6
+): boolean {
+  const now = Date.now();
   
-  // Actualizar buffer de valores
-  state.valueBuffer.push(value);
-  if (state.valueBuffer.length > CONFIG.BUFFER_SIZE) {
-    state.valueBuffer.shift();
-  }
+  // Obtener parámetros adaptativos
+  const calibrationParams = getCalibrationParameters();
+  const thresholdValue = calibrationParams.rhythmDetectionThreshold;
+  const requiredPatterns = Math.round(3 + (1 - calibrationParams.sensitivityLevel) * 2);
   
-  // No podemos detectar patrones con pocos datos
-  if (state.valueBuffer.length < 30) {
-    return false;
-  }
+  // Ajustar sensibilidad
+  const adjustedSensitivity = (sensitivity + calibrationParams.sensitivityLevel) / 2;
   
-  // Detectar cruces por cero (con filtro para evitar ruido)
-  detectCrossings();
-  
-  // Analizar intervalos entre cruces
-  const hasConsistentPattern = analyzePatternConsistency();
-  
-  // Obtener umbral de los parámetros de calibración
-  const calibParams = getCalibrationParameters();
-  const patternThreshold = calibParams.rhythmDetectionThreshold || 0.6;
-  state.threshold = patternThreshold;
-  
-  // Determinar si hay detección de dedo por patrón
-  let newPatternState = state.isPatternDetected;
-  
-  // Verificar si el patrón es consistente y si no ha expirado
-  const patternAge = now - state.lastPatternTime;
-  const isPatternExpired = patternAge > CONFIG.MAX_PATTERN_AGE_MS;
-  
-  if (hasConsistentPattern && state.patternConfidence >= patternThreshold) {
-    // Patrón detectado
-    if (!state.isPatternDetected) {
-      newPatternState = true;
-      state.lastPatternTime = now;
+  // Si ya confirmamos presencia, verificar si sigue siendo válida
+  if (confirmedFingerPresence) {
+    const stillValid = validateOngoingPattern();
+    
+    if (!stillValid) {
+      // Reducir contador de consistencia
+      consistentPatternsCount = Math.max(0, consistentPatternsCount - 1);
       
+      // Si perdimos demasiados patrones, quitar la confirmación
+      if (consistentPatternsCount < 1) {
+        confirmedFingerPresence = false;
+        
+        // Reportar evento
+        reportDiagnosticEvent(
+          'PATTERN_LOST',
+          'rhythm-pattern',
+          false,
+          0.3,
+          { consistentPatternsCount }
+        );
+        
+        // Actualizar detector unificado
+        updateDetectionSource('rhythm-pattern', false, 0.3);
+      }
+    }
+  }
+  
+  // Agregar nuevo valor al historial
+  rhythmDetectionHistory.push({
+    time: now,
+    value: signalValue
+  });
+  
+  // Mantener solo valores recientes
+  rhythmDetectionHistory = rhythmDetectionHistory
+    .filter(point => now - point.time < PATTERN_WINDOW_MS * 2);
+  
+  // Detectar patrones rítmicos
+  const { hasPattern, confidence } = detectRhythmicPattern(adjustedSensitivity, thresholdValue);
+  
+  // Si detectamos patrón, incrementar contador
+  if (hasPattern) {
+    consistentPatternsCount = Math.min(
+      MAX_CONSISTENT_PATTERNS, 
+      consistentPatternsCount + 1
+    );
+    
+    // Reportar evento cada 2 detecciones
+    if (consistentPatternsCount % 2 === 0) {
       reportDiagnosticEvent(
-        DiagnosticEventType.PATTERN_DETECTED,
+        'PATTERN_DETECTED',
         'rhythm-pattern',
         true,
-        state.patternConfidence,
-        {
-          consistentPatterns: state.consistentPatterns,
-          intervals: state.crossingIntervals.slice(-5)
-        }
+        confidence,
+        { patternCount: consistentPatternsCount }
       );
     }
-  } else if (isPatternExpired) {
-    // Patrón perdido por expiración
-    if (state.isPatternDetected) {
-      newPatternState = false;
+    
+    // Si tenemos suficientes patrones consecutivos, confirmar presencia
+    if (!confirmedFingerPresence && consistentPatternsCount >= requiredPatterns) {
+      confirmedFingerPresence = true;
       
+      // Reportar transición
       reportDiagnosticEvent(
-        DiagnosticEventType.PATTERN_TIMEOUT,
+        'FINGER_DETECTED',
         'rhythm-pattern',
-        false,
-        0,
-        {
-          patternAge,
-          timeout: CONFIG.MAX_PATTERN_AGE_MS
+        true,
+        0.8,
+        { 
+          consistentPatterns: consistentPatternsCount,
+          requiredPatterns
         }
       );
     }
+  } else {
+    // Reducir contador si no hay patrón
+    consistentPatternsCount = Math.max(0, consistentPatternsCount - 0.5);
   }
   
-  // Si cambió el estado, actualizar
-  if (newPatternState !== state.isPatternDetected) {
-    state.isPatternDetected = newPatternState;
-    
-    // Reportar al detector unificado
-    updateDetectionSource('rhythm', state.isPatternDetected, state.patternConfidence);
-    
-    // Reportar la detección
-    reportFingerDetection(
-      state.isPatternDetected,
-      state.patternConfidence,
-      'rhythm',
-      {
-        consistentPatterns: state.consistentPatterns,
-        threshold: patternThreshold
-      }
-    );
-  }
+  // Actualizar detector unificado
+  const finalConfidence = Math.min(1.0, consistentPatternsCount / requiredPatterns);
+  updateDetectionSource('rhythm-pattern', confirmedFingerPresence, finalConfidence);
   
-  return state.isPatternDetected;
+  return confirmedFingerPresence;
 }
 
 /**
- * Detecta cruces por cero en la señal
+ * Detecta patrones rítmicos en la señal
  */
-function detectCrossings(): void {
-  const buffer = state.valueBuffer;
-  const threshold = CONFIG.ZERO_CROSSING_FILTER;
+function detectRhythmicPattern(
+  sensitivity: number,
+  thresholdValue: number
+): { hasPattern: boolean; confidence: number; peakCount?: number } {
+  const now = Date.now();
   
-  // Buscar cruces por cero en el búfer, ignorando cruces menores que el filtro
-  for (let i = 1; i < buffer.length; i++) {
-    const prev = buffer[i - 1];
-    const curr = buffer[i];
+  if (rhythmDetectionHistory.length < 15) {
+    return { hasPattern: false, confidence: 0 };
+  }
+  
+  // Ajustar umbral según sensibilidad
+  const adjustedThreshold = thresholdValue * (1.2 - sensitivity);
+  
+  // Buscar picos en la señal reciente
+  const recentSignals = rhythmDetectionHistory
+    .filter(point => now - point.time < PATTERN_WINDOW_MS);
+  
+  if (recentSignals.length < 10) {
+    return { hasPattern: false, confidence: 0 };
+  }
+  
+  // Detectar picos
+  const peaks: number[] = [];
+  
+  for (let i = 2; i < recentSignals.length - 2; i++) {
+    const current = recentSignals[i];
+    const prev1 = recentSignals[i - 1];
+    const prev2 = recentSignals[i - 2];
+    const next1 = recentSignals[i + 1];
+    const next2 = recentSignals[i + 2];
     
-    // Detectar cruce positivo
-    if (prev <= 0 && curr > 0 && Math.abs(curr) > threshold) {
-      // Registrar tiempo en índice dentro del buffer (más simple)
-      state.lastCrossingPoints.push(i);
-      
-      // Si tenemos suficientes cruces, calcular intervalo
-      if (state.lastCrossingPoints.length >= 2) {
-        const prevCross = state.lastCrossingPoints[state.lastCrossingPoints.length - 2];
-        const currCross = state.lastCrossingPoints[state.lastCrossingPoints.length - 1];
-        const interval = currCross - prevCross;
-        
-        if (interval > 0) {
-          state.crossingIntervals.push(interval);
-        }
-      }
-      
-      // Limitar tamaño
-      if (state.lastCrossingPoints.length > 10) {
-        state.lastCrossingPoints.shift();
-      }
-      if (state.crossingIntervals.length > 15) {
-        state.crossingIntervals.shift();
-      }
+    // Verificar si este punto es un pico
+    if (current.value > prev1.value && 
+        current.value > prev2.value &&
+        current.value > next1.value && 
+        current.value > next2.value &&
+        current.value > adjustedThreshold) {
+      peaks.push(current.time);
     }
   }
+  
+  // Verificar si tenemos suficientes picos
+  if (peaks.length < MIN_PEAKS_FOR_PATTERN) {
+    return { 
+      hasPattern: false, 
+      confidence: peaks.length > 0 ? 0.1 * peaks.length : 0,
+      peakCount: peaks.length
+    };
+  }
+  
+  // Calcular intervalos entre picos
+  const intervals: number[] = [];
+  for (let i = 1; i < peaks.length; i++) {
+    intervals.push(peaks[i] - peaks[i - 1]);
+  }
+  
+  // Filtrar intervalos fisiológicamente plausibles (40-180 BPM)
+  const validIntervals = intervals.filter(interval => 
+    interval >= 333 && interval <= 1500
+  );
+  
+  if (validIntervals.length < Math.floor(intervals.length * 0.7)) {
+    // Menos del 70% de intervalos son plausibles
+    return {
+      hasPattern: false,
+      confidence: 0.2,
+      peakCount: peaks.length
+    };
+  }
+  
+  // Verificar consistencia en intervalos
+  let consistentIntervals = 0;
+  const maxDeviation = 200; // ms
+  
+  for (let i = 1; i < validIntervals.length; i++) {
+    if (Math.abs(validIntervals[i] - validIntervals[i - 1]) < maxDeviation) {
+      consistentIntervals++;
+    }
+  }
+  
+  // Si tenemos intervalos consistentes, confirmar patrón
+  const hasPattern = consistentIntervals >= MIN_PEAKS_FOR_PATTERN - 1;
+  
+  if (hasPattern) {
+    lastPeakTimes = peaks;
+  }
+  
+  // Calcular confianza basada en consistencia
+  const confidence = hasPattern ? 
+    Math.min(0.9, 0.5 + (consistentIntervals / validIntervals.length) * 0.4) : 
+    0.3;
+  
+  return {
+    hasPattern,
+    confidence,
+    peakCount: peaks.length
+  };
 }
 
 /**
- * Analiza la consistencia de los patrones de intervalo
+ * Valida si el patrón rítmico continúa presente
  */
-function analyzePatternConsistency(): boolean {
-  const intervals = state.crossingIntervals;
+function validateOngoingPattern(): boolean {
+  const now = Date.now();
   
-  // No podemos analizar con menos de 3 intervalos
-  if (intervals.length < 3) {
-    state.consistentPatterns = 0;
-    state.patternConfidence = 0;
+  // Verificar que hayamos detectado picos recientemente
+  if (lastPeakTimes.length === 0) {
     return false;
   }
   
-  // Calcular desviación estándar de intervalos
-  const avg = intervals.reduce((sum, val) => sum + val, 0) / intervals.length;
-  const variance = intervals.reduce((sum, val) => sum + Math.pow(val - avg, 2), 0) / intervals.length;
-  const stdDev = Math.sqrt(variance);
+  // Obtener calibración actual
+  const calibrationParams = getCalibrationParameters();
   
-  // Calcular coeficiente de variación (menor = más consistente)
-  const cv = stdDev / avg;
+  // Verificar tiempo desde último pico detectado
+  const lastPatternTime = lastPeakTimes[lastPeakTimes.length - 1];
+  const patternTimeoutMs = 5000 + calibrationParams.falseNegativeReduction * 2000;
   
-  // Un CV bajo indica consistencia rítmica (característica de PPG)
-  const isConsistent = cv < 0.3; // 30% de variación como máximo
-  
-  // Actualizar contadores de consistencia
-  if (isConsistent) {
-    state.consistentPatterns = Math.min(10, state.consistentPatterns + 1);
-    state.lastPatternTime = Date.now();
-  } else {
-    state.consistentPatterns = Math.max(0, state.consistentPatterns - 1);
+  // Si ha pasado mucho tiempo desde el último patrón detectado
+  if (now - lastPatternTime > patternTimeoutMs) {
+    reportDiagnosticEvent(
+      'PATTERN_TIMEOUT',
+      'rhythm-pattern',
+      false,
+      0.7,
+      {
+        timeSinceLastPattern: now - lastPatternTime,
+        timeoutThreshold: patternTimeoutMs
+      }
+    );
+    
+    return false;
   }
   
-  // Actualizar máximo para estadísticas
-  if (state.consistentPatterns > state.maxConsistentPatterns) {
-    state.maxConsistentPatterns = state.consistentPatterns;
-  }
-  
-  // Calcular confianza en función de la consistencia y baja variación
-  state.patternConfidence = Math.min(1, 
-    (state.consistentPatterns / CONFIG.MIN_CONSISTENT_PATTERNS) * 
-    (1 - Math.min(1, cv))
-  );
-  
-  return state.consistentPatterns >= CONFIG.MIN_CONSISTENT_PATTERNS;
+  return true;
 }
 
 /**
  * Reinicia el detector de patrones rítmicos
  */
 export function resetRhythmDetector(): void {
-  // Reiniciar estado
-  state.isPatternDetected = false;
-  state.lastPatternTime = 0;
-  state.patternConfidence = 0;
-  state.valueBuffer = [];
-  state.lastCrossingPoints = [];
-  state.crossingIntervals = [];
-  state.consistentPatterns = 0;
-  state.maxConsistentPatterns = 0;
+  rhythmDetectionHistory = [];
+  lastPeakTimes = [];
+  consistentPatternsCount = 0;
+  confirmedFingerPresence = false;
   
   // Actualizar detector unificado
-  updateDetectionSource('rhythm', false, 0);
+  updateDetectionSource('rhythm-pattern', false, 0);
   
-  logError(
-    "RhythmDetector: Detector de ritmo reiniciado",
-    ErrorLevel.INFO,
-    "RhythmDetector"
+  // Reportar evento
+  reportDiagnosticEvent(
+    'DETECTOR_RESET',
+    'rhythm-pattern',
+    false,
+    1.0,
+    { source: 'rhythm-pattern-reset' }
   );
 }
 
 /**
- * Comprueba si un dedo está actualmente detectado por su patrón rítmico
+ * Verifica si hay un dedo detectado por patrones rítmicos
  */
 export function isFingerDetectedByRhythm(): boolean {
-  return state.isPatternDetected;
+  return confirmedFingerPresence;
 }
 
 /**
- * Obtiene el conteo de patrones consistentes
+ * Obtiene el contador de patrones consistentes
  */
 export function getConsistentPatternsCount(): number {
-  return state.consistentPatterns;
+  return consistentPatternsCount;
 }
