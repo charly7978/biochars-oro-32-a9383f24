@@ -1,391 +1,163 @@
-/**
- * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
- * 
- * OptimizedSignalDistributor
- * Splits the processed PPG signal into specialized channels for each vital sign algorithm
- * Each channel is individually optimized for specific features needed by the corresponding algorithm
- * Implements bidirectional feedback to continuously improve signal quality
- */
 
-import { 
-  ProcessedSignal, 
-  OptimizedSignalChannel, 
-  VitalSignType,
-  ChannelFeedback,
-  SignalDistributorConfig
-} from '../../types/signal';
-import { SpecializedChannel, ChannelConfig } from './channels/SpecializedChannel';
+import { OptimizedChannel, SignalProcessingOptions, ChannelConfig } from './types';
+import { VitalSignType, ChannelFeedback } from '../../types/signal';
+import { CardiacChannel } from './channels/CardiacChannel';
 import { SpO2Channel } from './channels/SpO2Channel';
+import { BloodPressureChannel } from './channels/BloodPressureChannel';
+import { GlucoseChannel } from './channels/GlucoseChannel';
+import { LipidsChannel } from './channels/LipidsChannel';
+import { OptimizedSignalChannel } from './channels/SpecializedChannel';
 
-/**
- * Default configuration for the signal distributor
- */
-const DEFAULT_CONFIG: SignalDistributorConfig = {
-  enableFeedback: true,
-  adaptChannels: true,
-  optimizationInterval: 5000, // 5 seconds
-  channels: {
-    // Configure each channel with optimal settings for each vital sign
-    [VitalSignType.SPO2]: {
-      initialAmplification: 1.15,
-      initialFilterStrength: 0.75,
-      frequencyBandMin: 0.8,
-      frequencyBandMax: 5.0
-    }
-  }
-};
-
-/**
- * OptimizedSignalDistributor
- * Core class that manages specialized signal channels for each vital sign
- * Simplified version focusing on SpO2 only
- */
 export class OptimizedSignalDistributor {
-  private channels: Map<VitalSignType, SpecializedChannel> = new Map();
-  private feedbackQueue: ChannelFeedback[] = [];
+  private channels: Map<string, OptimizedChannel>;
   private isProcessing: boolean = false;
-  private config: SignalDistributorConfig;
-  private optimizationTimer: ReturnType<typeof setInterval> | null = null;
-  private lastProcessedSignal: ProcessedSignal | null = null;
-  private processingMetrics: {
-    channelProcessingTimes: Map<VitalSignType, number[]>;
-    feedbackCount: Map<VitalSignType, number>;
-    successRate: Map<VitalSignType, number[]>;
-  };
-
-  /**
-   * Constructor
-   * @param config Configuration for the signal distributor
-   */
-  constructor(config?: Partial<SignalDistributorConfig>) {
-    this.config = {...DEFAULT_CONFIG, ...config};
-    
-    // Initialize processing metrics
-    this.processingMetrics = {
-      channelProcessingTimes: new Map(),
-      feedbackCount: new Map(),
-      successRate: new Map()
+  private lastProcessedValue: number = 0;
+  private processingOptions: SignalProcessingOptions;
+  
+  constructor() {
+    this.channels = new Map();
+    this.processingOptions = {
+      amplificationFactor: 1.5,
+      filterStrength: 0.7,
+      qualityThreshold: 0.6,
+      fingerDetectionSensitivity: 0.5,
+      useAdaptiveControl: true,
+      qualityEnhancedByPrediction: true
     };
     
-    // Initialize channels
-    this.initializeChannels();
-    
-    // Start optimization loop if enabled
-    if (this.config.adaptChannels) {
-      this.startOptimizationLoop();
-    }
-    
-    console.log("OptimizedSignalDistributor: Initialized with SpO2 channel and bidirectional feedback");
+    this.initializeDefaultChannels();
   }
-
-  /**
-   * Initialize all specialized channels
-   */
-  private initializeChannels(): void {
-    // Create specialized channel for SpO2 measurement
-    this.channels.set(
-      VitalSignType.SPO2, 
-      new SpO2Channel(
-        this.config.channels[VitalSignType.SPO2] || DEFAULT_CONFIG.channels[VitalSignType.SPO2]
-      )
-    );
+  
+  private initializeDefaultChannels(): void {
+    // Create a default config
+    const defaultConfig: ChannelConfig = {
+      amplificationFactor: this.processingOptions.amplificationFactor || 1.5,
+      filterStrength: this.processingOptions.filterStrength || 0.7,
+      qualityThreshold: this.processingOptions.qualityThreshold || 0.6
+    };
     
-    // Initialize metrics for each channel
-    for (const type of Object.values(VitalSignType)) {
-      if (this.channels.has(type)) {
-        this.processingMetrics.channelProcessingTimes.set(type, []);
-        this.processingMetrics.feedbackCount.set(type, 0);
-        this.processingMetrics.successRate.set(type, []);
-      }
-    }
-    
-    console.log("OptimizedSignalDistributor: SpO2 channel initialized");
+    // Initialize standard channels
+    this.addChannel(VitalSignType.CARDIAC, new CardiacChannel(defaultConfig));
+    this.addChannel(VitalSignType.SPO2, new SpO2Channel(defaultConfig));
+    this.addChannel(VitalSignType.BLOOD_PRESSURE, new BloodPressureChannel(defaultConfig));
+    this.addChannel(VitalSignType.GLUCOSE, new GlucoseChannel(defaultConfig));
+    this.addChannel(VitalSignType.LIPIDS, new LipidsChannel(defaultConfig));
   }
-
-  /**
-   * Process a signal and distribute it to all channels
-   * @param signal Processed PPG signal
-   * @returns Object with processed values for each channel
-   */
-  public processSignal(signal: ProcessedSignal): Record<VitalSignType, number> {
-    if (!this.isProcessing) {
-      console.log("OptimizedSignalDistributor: Not currently processing signals");
-      return this.getEmptyResults();
-    }
-    
-    // Store the signal for optimization purposes
-    this.lastProcessedSignal = signal;
-    
-    const startTime = performance.now();
-    const results: Record<VitalSignType, number> = {} as Record<VitalSignType, number>;
-    
-    // Skip processing if finger is not detected or signal quality is too low
-    if (!signal.fingerDetected || signal.quality < 20) {
-      console.log("OptimizedSignalDistributor: Skipping - no finger detected or low quality", {
-        fingerDetected: signal.fingerDetected,
-        quality: signal.quality
-      });
-      return this.getEmptyResults();
-    }
-    
-    // Process signal through each specialized channel
-    for (const [type, channel] of this.channels.entries()) {
-      const channelStartTime = performance.now();
-      
-      // Process the value through the specialized channel
-      const processedValue = channel.processValue(signal.filteredValue);
-      results[type] = processedValue;
-      
-      // Record processing time for this channel
-      const channelProcessingTime = performance.now() - channelStartTime;
-      const times = this.processingMetrics.channelProcessingTimes.get(type) || [];
-      times.push(channelProcessingTime);
-      
-      // Keep only the last 50 measurements for metrics
-      if (times.length > 50) {
-        times.shift();
-      }
-      this.processingMetrics.channelProcessingTimes.set(type, times);
-    }
-    
-    const totalProcessingTime = performance.now() - startTime;
-    
-    if (totalProcessingTime > 10) { // Log only if processing time is significant
-      console.log("OptimizedSignalDistributor: Signal processing complete", {
-        totalProcessingTime,
-        channelCount: this.channels.size,
-        signalQuality: signal.quality,
-        timestamp: signal.timestamp
-      });
-    }
-    
-    return results;
+  
+  addChannel(type: string, channel: OptimizedChannel): void {
+    this.channels.set(type, channel);
   }
-
-  /**
-   * Start the signal distributor
-   */
-  public start(): void {
-    this.isProcessing = true;
-    
-    // Start optimization loop if enabled
-    if (this.config.adaptChannels && !this.optimizationTimer) {
-      this.startOptimizationLoop();
-    }
-    
-    console.log("OptimizedSignalDistributor: Started processing");
+  
+  removeChannel(type: string): boolean {
+    return this.channels.delete(type);
   }
-
-  /**
-   * Stop the signal distributor
-   */
-  public stop(): void {
-    this.isProcessing = false;
-    
-    // Stop optimization loop
-    if (this.optimizationTimer) {
-      clearInterval(this.optimizationTimer);
-      this.optimizationTimer = null;
-    }
-    
-    console.log("OptimizedSignalDistributor: Stopped processing");
-  }
-
-  /**
-   * Reset all channels and metrics
-   */
-  public reset(): void {
-    // Reset all channels
-    for (const channel of this.channels.values()) {
-      channel.reset();
-    }
-    
-    // Clear feedback queue
-    this.feedbackQueue = [];
-    
-    // Reset processing metrics
-    for (const type of Object.values(VitalSignType)) {
-      if (this.channels.has(type)) {
-        this.processingMetrics.channelProcessingTimes.set(type, []);
-        this.processingMetrics.feedbackCount.set(type, 0);
-        this.processingMetrics.successRate.set(type, []);
-      }
-    }
-    
-    this.lastProcessedSignal = null;
-    console.log("OptimizedSignalDistributor: Reset complete");
-  }
-
-  /**
-   * Apply feedback from an algorithm to improve channel processing
-   * @param feedback Feedback from algorithm
-   */
-  public applyFeedback(feedback: ChannelFeedback): void {
-    if (!this.config.enableFeedback) {
-      return;
-    }
-    
-    // Add to feedback queue
-    this.feedbackQueue.push(feedback);
-    
-    // Update feedback count metric
-    const type = this.getChannelTypeById(feedback.channelId);
-    if (type) {
-      const count = this.processingMetrics.feedbackCount.get(type) || 0;
-      this.processingMetrics.feedbackCount.set(type, count + 1);
-      
-      // Update success rate
-      const rates = this.processingMetrics.successRate.get(type) || [];
-      rates.push(feedback.success ? 1 : 0);
-      if (rates.length > 50) {
-        rates.shift();
-      }
-      this.processingMetrics.successRate.set(type, rates);
-    }
-    
-    // Process feedback immediately if not in batch mode
-    this.processFeedback(feedback);
-  }
-
-  /**
-   * Process an individual feedback item
-   * @param feedback Feedback to process
-   */
-  private processFeedback(feedback: ChannelFeedback): void {
-    // Find the channel
-    const type = this.getChannelTypeById(feedback.channelId);
-    if (!type) {
-      console.warn("OptimizedSignalDistributor: Feedback for unknown channel", feedback.channelId);
-      return;
-    }
-    
-    const channel = this.channels.get(type);
-    if (!channel) {
-      return;
-    }
-    
-    // Apply feedback to the channel
-    channel.applyFeedback(feedback);
-  }
-
-  /**
-   * Start the optimization loop for continuous channel improvement
-   */
-  private startOptimizationLoop(): void {
-    if (this.optimizationTimer) {
-      clearInterval(this.optimizationTimer);
-    }
-    
-    this.optimizationTimer = setInterval(() => {
-      this.runOptimization();
-    }, this.config.optimizationInterval);
-    
-    console.log("OptimizedSignalDistributor: Optimization loop started");
-  }
-
-  /**
-   * Run optimization step to improve channel processing
-   */
-  private runOptimization(): void {
-    if (!this.isProcessing || !this.lastProcessedSignal) {
-      return;
-    }
-    
-    console.log("OptimizedSignalDistributor: Running optimization step");
-    
-    // Calculate average processing times for each channel
-    const averageProcessingTimes: Record<VitalSignType, number> = {} as Record<VitalSignType, number>;
-    
-    for (const [type, times] of this.processingMetrics.channelProcessingTimes.entries()) {
-      if (times.length > 0) {
-        averageProcessingTimes[type] = times.reduce((a, b) => a + b, 0) / times.length;
-      }
-    }
-    
-    // Calculate success rate for each channel
-    const successRates: Record<VitalSignType, number> = {} as Record<VitalSignType, number>;
-    
-    for (const [type, rates] of this.processingMetrics.successRate.entries()) {
-      if (rates.length > 0) {
-        successRates[type] = rates.reduce((a, b) => a + b, 0) / rates.length;
-      }
-    }
-    
-    console.log("OptimizedSignalDistributor: Optimization metrics", {
-      averageProcessingTimes,
-      successRates,
-      feedbackCounts: Object.fromEntries(this.processingMetrics.feedbackCount.entries())
-    });
-  }
-
-  /**
-   * Get channel type by channel ID
-   * @param channelId Channel ID
-   * @returns VitalSignType or undefined if not found
-   */
-  private getChannelTypeById(channelId: string): VitalSignType | undefined {
-    for (const [type, channel] of this.channels.entries()) {
-      if (channel.getId() === channelId) {
-        return type;
-      }
-    }
-    return undefined;
-  }
-
-  /**
-   * Get a specific channel
-   * @param type Type of vital sign channel
-   * @returns Channel or undefined if not found
-   */
-  public getChannel(type: VitalSignType): SpecializedChannel | undefined {
+  
+  getChannel(type: string): OptimizedChannel | undefined {
     return this.channels.get(type);
   }
-
-  /**
-   * Get empty results object (all zeros)
-   * @returns Record with zero values for all channels
-   */
-  private getEmptyResults(): Record<VitalSignType, number> {
-    const results: Record<VitalSignType, number> = {} as Record<VitalSignType, number>;
-    
-    for (const type of Object.values(VitalSignType)) {
-      if (this.channels.has(type)) {
-        results[type] = 0;
-      }
+  
+  getAllChannels(): Map<string, OptimizedChannel> {
+    return this.channels;
+  }
+  
+  processValue(value: number): Map<string, number> {
+    if (!this.isProcessing) {
+      return new Map();
     }
+    
+    this.lastProcessedValue = value;
+    
+    const results = new Map<string, number>();
+    
+    this.channels.forEach((channel, type) => {
+      try {
+        // Use helper method for safety
+        const processedValue = this.safelyProcessValue(channel, value);
+        results.set(type, processedValue);
+      } catch (error) {
+        console.error(`Error processing value in channel ${type}:`, error);
+        results.set(type, 0);
+      }
+    });
     
     return results;
   }
-
-  /**
-   * Get diagnostics about the distributor and channels
-   */
-  public getDiagnostics(): any {
-    const channelQualities: Record<VitalSignType, number> = {} as Record<VitalSignType, number>;
-    
-    for (const [type, channel] of this.channels.entries()) {
-      channelQualities[type] = channel.getQuality();
+  
+  private safelyProcessValue(channel: OptimizedChannel, value: number): number {
+    if (typeof channel.processValue === 'function') {
+      return channel.processValue(value);
     }
-    
-    return {
-      isProcessing: this.isProcessing,
-      channelCount: this.channels.size,
-      feedbackQueueLength: this.feedbackQueue.length,
-      channelQualities,
-      averageProcessingTimes: Object.fromEntries(
-        Array.from(this.processingMetrics.channelProcessingTimes.entries())
-          .map(([key, times]) => [key, times.length > 0 ? times.reduce((a, b) => a + b, 0) / times.length : 0])
-      ),
-      successRates: Object.fromEntries(
-        Array.from(this.processingMetrics.successRate.entries())
-          .map(([key, rates]) => [key, rates.length > 0 ? rates.reduce((a, b) => a + b, 0) / rates.length : 0])
-      ),
-      feedbackCounts: Object.fromEntries(this.processingMetrics.feedbackCount.entries()),
-      configSummary: {
-        enableFeedback: this.config.enableFeedback,
-        adaptChannels: this.config.adaptChannels,
-        optimizationInterval: this.config.optimizationInterval
-      }
+    return value; // Fallback if method doesn't exist
+  }
+  
+  configure(options: SignalProcessingOptions): void {
+    this.processingOptions = {
+      ...this.processingOptions,
+      ...options
     };
+    
+    // Update all channels with new configuration
+    this.channels.forEach(channel => {
+      if (typeof channel.configure === 'function') {
+        channel.configure({
+          amplificationFactor: this.processingOptions.amplificationFactor,
+          filterStrength: this.processingOptions.filterStrength,
+          qualityThreshold: this.processingOptions.qualityThreshold
+        });
+      }
+    });
+  }
+  
+  reset(): void {
+    this.channels.forEach(channel => {
+      if (typeof channel.reset === 'function') {
+        channel.reset();
+      }
+    });
+    
+    this.lastProcessedValue = 0;
+  }
+  
+  // Add required methods
+  start(): void {
+    this.isProcessing = true;
+  }
+  
+  stop(): void {
+    this.isProcessing = false;
+  }
+  
+  applyFeedback(feedback: ChannelFeedback, channelType: string): void {
+    const channel = this.getChannel(channelType);
+    if (channel && typeof channel.configure === 'function') {
+      // Apply feedback to channel configuration
+      channel.configure({
+        amplificationFactor: this.processingOptions.amplificationFactor,
+        filterStrength: this.processingOptions.filterStrength,
+        qualityThreshold: this.processingOptions.qualityThreshold,
+        // Add feedback-specific adjustments if needed
+      });
+    }
+  }
+  
+  getDiagnostics(): any {
+    // Return diagnostic info from all channels
+    const diagnostics: any = {
+      distributorInfo: {
+        channelCount: this.channels.size,
+        isProcessing: this.isProcessing,
+        lastProcessedValue: this.lastProcessedValue
+      },
+      channelDiagnostics: {}
+    };
+    
+    this.channels.forEach((channel, type) => {
+      diagnostics.channelDiagnostics[type] = {
+        channelType: type,
+        // Add channel-specific diagnostics if available
+      };
+    });
+    
+    return diagnostics;
   }
 }

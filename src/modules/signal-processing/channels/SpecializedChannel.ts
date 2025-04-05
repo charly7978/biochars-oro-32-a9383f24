@@ -1,88 +1,104 @@
 
 /**
- * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
- * 
- * Canal especializado base para procesamiento de señales
- * Define la interfaz común para todos los canales de procesamiento
+ * Specialized signal processing channel implementations
  */
-
-import { VitalSignType, ChannelFeedback } from '../../../types/signal';
+import { OptimizedChannel, ChannelConfig } from '../types-unified';
 
 /**
- * Channel configuration interface
+ * Optimized signal channel with improved processing capabilities
  */
-export interface ChannelConfig {
-  initialAmplification?: number;
-  initialFilterStrength?: number;
-  frequencyBandMin?: number;
-  frequencyBandMax?: number;
-}
+export class OptimizedSignalChannel implements OptimizedChannel {
+  private config: ChannelConfig;
+  private lastValues: number[] = [];
+  private readonly MAX_BUFFER_SIZE = 50;
 
-/**
- * Clase base para canales de procesamiento especializados
- */
-export abstract class SpecializedChannel {
-  protected id: string;
-  protected type: VitalSignType;
-  protected quality: number = 0;
-  protected recentValues: number[] = [];
-  
-  constructor(type: VitalSignType, config?: ChannelConfig) {
-    this.type = type;
-    this.id = `channel-${type}-${Date.now()}`;
-  }
-  
-  /**
-   * Obtiene el ID único del canal
-   */
-  public getId(): string {
-    return this.id;
-  }
-  
-  /**
-   * Obtiene el tipo de canal
-   */
-  public getType(): VitalSignType {
-    return this.type;
-  }
-  
-  /**
-   * Obtiene la calidad de señal actual (0-1)
-   */
-  public getQuality(): number {
-    return this.quality;
+  constructor(config: Partial<ChannelConfig> = {}) {
+    // Default configuration with sensible defaults
+    this.config = {
+      amplificationFactor: config.amplificationFactor || 1.5,
+      filterStrength: config.filterStrength || 0.3,
+      qualityThreshold: config.qualityThreshold || 0.5,
+      enableFeedback: config.enableFeedback || false,
+      signalQuality: config.signalQuality || 1.0
+    };
   }
 
   /**
-   * Process a value through this channel
+   * Process a single value through the channel
    */
-  public processValue(value: number): number {
-    // Store recent values
-    this.recentValues.push(value);
-    if (this.recentValues.length > 50) {
-      this.recentValues.shift();
+  processValue(value: number): number {
+    // Apply filter based on filter strength
+    const filteredValue = this.applyFilter(value);
+    
+    // Apply amplification
+    const amplifiedValue = filteredValue * this.config.amplificationFactor;
+    
+    // Store in buffer
+    this.lastValues.push(amplifiedValue);
+    if (this.lastValues.length > this.MAX_BUFFER_SIZE) {
+      this.lastValues.shift();
     }
     
-    // Apply channel-specific optimization
-    return this.applyChannelSpecificOptimization(value);
+    return amplifiedValue;
   }
   
   /**
-   * Apply channel-specific optimization to the signal
-   * Must be implemented by each specialized channel
+   * Apply filtering to smooth the signal
    */
-  protected abstract applyChannelSpecificOptimization(value: number): number;
+  private applyFilter(value: number): number {
+    if (this.lastValues.length === 0) {
+      return value;
+    }
+    
+    // Simple exponential moving average filter
+    const lastValue = this.lastValues[this.lastValues.length - 1];
+    return value * this.config.filterStrength + lastValue * (1 - this.config.filterStrength);
+  }
   
   /**
-   * Aplica retroalimentación al canal
+   * Reset the channel
    */
-  public abstract applyFeedback(feedback: ChannelFeedback): void;
+  reset(): void {
+    this.lastValues = [];
+  }
   
   /**
-   * Reinicia el canal
+   * Configure the channel
    */
-  public reset(): void {
-    this.quality = 0;
-    this.recentValues = [];
+  configure(options: Partial<ChannelConfig>): void {
+    // Update only provided options
+    if (options.amplificationFactor !== undefined) {
+      this.config.amplificationFactor = options.amplificationFactor;
+    }
+    
+    if (options.filterStrength !== undefined) {
+      this.config.filterStrength = options.filterStrength;
+    }
+    
+    if (options.qualityThreshold !== undefined) {
+      this.config.qualityThreshold = options.qualityThreshold;
+    }
+    
+    if (options.enableFeedback !== undefined) {
+      this.config.enableFeedback = options.enableFeedback;
+    }
+    
+    if (options.signalQuality !== undefined) {
+      this.config.signalQuality = options.signalQuality;
+    }
+  }
+  
+  /**
+   * Get the current configuration
+   */
+  getConfig(): ChannelConfig {
+    return { ...this.config };
+  }
+  
+  /**
+   * Get last processed values
+   */
+  getLastValues(): number[] {
+    return [...this.lastValues];
   }
 }

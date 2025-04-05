@@ -1,361 +1,208 @@
-/**
- * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE
- * 
- * Mixed model combining deep learning and Bayesian approaches
- * for robust signal processing with explicit uncertainty handling
- */
-
-import * as tf from '@tensorflow/tfjs';
-import { SignalProcessingOptions } from '../types';
 
 /**
- * Configuration for the mixed model
+ * Mixed model utility for signal processing and prediction
  */
-export interface MixedModelConfig {
-  // Model architecture
-  inputSize: number;
-  hiddenLayers: number[];
-  
-  // Training configuration
-  learningRate: number;
-  batchSize: number;
-  
-  // Uncertainty modeling
-  dropoutRate: number;
-  uncertaintyThreshold: number;
-  
-  // Bayesian parameters
-  bayesianPriorScale: number;
-  modelCount: number;
-}
+
+// Configuration
+const modelConfig = {
+  historySize: 20,
+  predictionHorizon: 3,
+  adaptationRate: 0.1,
+  useAdaptiveFiltering: true
+};
+
+// State
+let signalHistory: number[] = [];
+const coefficients = {
+  ar: [0.8, -0.2, 0.1],  // AR(3) coefficients
+  ma: [0.6, 0.3, 0.1]    // MA(3) coefficients
+};
+let noiseVariance = 0.01;
+let predictionErrors: number[] = [];
+const maxErrorsTracked = 10;
 
 /**
- * Prediction result with uncertainty estimates
+ * Process signal and make prediction using mixed model
  */
-export interface MixedModelPrediction {
-  value: number;
-  uncertainty: number;
+export function processMixedModel(value: number): {
+  filtered: number;
+  predicted: number;
   confidence: number;
-  distributions: {
-    mean: number;
-    stdDev: number;
-    min: number;
-    max: number;
-  };
-}
-
-/**
- * Mixed model implementation for PPG signal processing
- * Combines simplified neural networks with Bayesian methods
- */
-export class MixedModel {
-  private models: tf.LayersModel[] = [];
-  private inputBuffer: number[][] = [];
-  private outputBuffer: number[] = [];
-  private readonly MAX_BUFFER_SIZE = 100;
-  private isTraining = false;
-  private trainCounter = 0;
-  private lastModelUpdate = 0;
-  private readonly UPDATE_INTERVAL = 1000; // Min 1 second between updates
+} {
+  // Add to history
+  signalHistory.push(value);
+  if (signalHistory.length > modelConfig.historySize) {
+    signalHistory.shift();
+  }
   
-  private config: MixedModelConfig = {
-    inputSize: 10,
-    hiddenLayers: [20, 10],
-    learningRate: 0.01,
-    batchSize: 16,
-    dropoutRate: 0.1,
-    uncertaintyThreshold: 0.2,
-    bayesianPriorScale: 0.1,
-    modelCount: 3
-  };
-
-  /**
-   * Create a new mixed model
-   */
-  constructor(config?: Partial<MixedModelConfig>) {
-    if (config) {
-      this.config = {...this.config, ...config};
-    }
-    
-    // Initialize models
-    this.initializeModels();
-    
-    console.log("MixedModel: Initialized with configuration", {
-      inputSize: this.config.inputSize,
-      hiddenLayers: this.config.hiddenLayers,
-      modelCount: this.config.modelCount
-    });
-  }
-
-  /**
-   * Initialize the ensemble of models
-   */
-  private async initializeModels() {
-    // Initialize each model with different random seeds
-    for (let i = 0; i < this.config.modelCount; i++) {
-      const model = this.createModel(i);
-      this.models.push(model);
-    }
-  }
-
-  /**
-   * Create a single model in the ensemble
-   */
-  private createModel(seed: number): tf.LayersModel {
-    // Set random seed for initialization
-    tf.setBackend('webgl');
-    tf.env().set('WEBGL_CPU_FORWARD', false);
-    
-    const model = tf.sequential();
-    
-    // Input layer
-    model.add(tf.layers.dense({
-      units: this.config.hiddenLayers[0],
-      inputShape: [this.config.inputSize],
-      activation: 'relu',
-      kernelInitializer: 'heNormal',
-      kernelRegularizer: tf.regularizers.l2({l2: this.config.bayesianPriorScale})
-    }));
-    
-    // Add dropout for Bayesian approximation
-    model.add(tf.layers.dropout({rate: this.config.dropoutRate}));
-    
-    // Hidden layers
-    for (let i = 1; i < this.config.hiddenLayers.length; i++) {
-      model.add(tf.layers.dense({
-        units: this.config.hiddenLayers[i],
-        activation: 'relu',
-        kernelInitializer: 'heNormal',
-        kernelRegularizer: tf.regularizers.l2({l2: this.config.bayesianPriorScale})
-      }));
-      model.add(tf.layers.dropout({rate: this.config.dropoutRate}));
-    }
-    
-    // Output layer
-    model.add(tf.layers.dense({
-      units: 1,
-      activation: 'linear'
-    }));
-    
-    // Compile with appropriate optimizer
-    model.compile({
-      optimizer: tf.train.adam(this.config.learningRate),
-      loss: 'meanSquaredError'
-    });
-    
-    return model;
-  }
-
-  /**
-   * Update the model with new signal data
-   */
-  public async update(inputs: number[], output: number): Promise<void> {
-    // Store in buffer
-    this.inputBuffer.push([...inputs]);
-    this.outputBuffer.push(output);
-    
-    // Keep buffer size limited
-    if (this.inputBuffer.length > this.MAX_BUFFER_SIZE) {
-      this.inputBuffer.shift();
-      this.outputBuffer.shift();
-    }
-    
-    // Periodically train the model
-    this.trainCounter++;
-    const now = Date.now();
-    
-    if (this.trainCounter >= 10 && !this.isTraining && 
-        this.inputBuffer.length >= this.config.batchSize &&
-        now - this.lastModelUpdate > this.UPDATE_INTERVAL) {
-      
-      this.trainCounter = 0;
-      this.lastModelUpdate = now;
-      this.isTraining = true;
-      
-      try {
-        await this.trainModels();
-      } catch (err) {
-        console.error("MixedModel: Error training models", err);
-      } finally {
-        this.isTraining = false;
-      }
-    }
-  }
-
-  /**
-   * Train all models in the ensemble
-   */
-  private async trainModels(): Promise<void> {
-    if (this.inputBuffer.length < this.config.batchSize) {
-      return;
-    }
-    
-    // Prepare training data
-    const batchSize = Math.min(this.config.batchSize, this.inputBuffer.length);
-    const indices = [];
-    
-    // Select random batch
-    for (let i = 0; i < batchSize; i++) {
-      indices.push(Math.floor(Math.random() * this.inputBuffer.length));
-    }
-    
-    const xs = tf.tensor2d(
-      indices.map(i => this.inputBuffer[i])
-    );
-    
-    const ys = tf.tensor2d(
-      indices.map(i => [this.outputBuffer[i]]),
-      [indices.length, 1]
-    );
-    
-    // Train each model
-    try {
-      console.log(`MixedModel: Training ${this.models.length} models with ${batchSize} samples`);
-      
-      for (let i = 0; i < this.models.length; i++) {
-        await this.models[i].fitDataset(
-          tf.data.zip({xs: tf.data.array(this.inputBuffer), ys: tf.data.array(this.outputBuffer.map(y => [y]))})
-            .batch(this.config.batchSize)
-            .shuffle(this.config.batchSize),
-          {
-            epochs: 1,
-            verbose: 0
-          }
-        );
-      }
-      
-      console.log("MixedModel: Training completed");
-    } catch (err) {
-      console.error("MixedModel: Error during training", err);
-    } finally {
-      // Clean up tensors
-      xs.dispose();
-      ys.dispose();
-    }
-  }
-
-  /**
-   * Predict with uncertainty using all models
-   */
-  public async predict(inputs: number[]): Promise<MixedModelPrediction> {
-    if (this.models.length === 0 || this.isTraining) {
-      return {
-        value: 0,
-        uncertainty: 1,
-        confidence: 0,
-        distributions: {mean: 0, stdDev: 0, min: 0, max: 0}
-      };
-    }
-    
-    const inputTensor = tf.tensor2d([inputs], [1, this.config.inputSize]);
-    const predictions: number[] = [];
-    
-    try {
-      // Multiple forward passes with dropout enabled (Monte Carlo Dropout)
-      for (let i = 0; i < this.models.length; i++) {
-        const model = this.models[i];
-        
-        // Use training mode to enable dropout
-        const pred = model.predict(inputTensor) as tf.Tensor;
-        const value = (await pred.data())[0];
-        predictions.push(value);
-        pred.dispose();
-      }
-    } catch (err) {
-      console.error("MixedModel: Error during prediction", err);
-      return {
-        value: 0,
-        uncertainty: 1,
-        confidence: 0,
-        distributions: {mean: 0, stdDev: 0, min: 0, max: 0}
-      };
-    } finally {
-      inputTensor.dispose();
-    }
-    
-    // Calculate statistics
-    const mean = predictions.reduce((sum, p) => sum + p, 0) / predictions.length;
-    const variance = predictions.reduce((sum, p) => sum + Math.pow(p - mean, 2), 0) / predictions.length;
-    const stdDev = Math.sqrt(variance);
-    const min = Math.min(...predictions);
-    const max = Math.max(...predictions);
-    
-    // Calculate uncertainty and confidence
-    const uncertaintyRatio = stdDev / (Math.abs(mean) + 0.01);
-    const uncertainty = Math.min(1, uncertaintyRatio * 10);
-    const confidence = 1 - uncertainty;
-    
+  // Not enough data
+  if (signalHistory.length < 5) {
     return {
-      value: mean,
-      uncertainty,
-      confidence,
-      distributions: {
-        mean,
-        stdDev,
-        min,
-        max
-      }
+      filtered: value,
+      predicted: value,
+      confidence: 0
     };
   }
-
-  /**
-   * Configure the model
-   */
-  public configure(options: SignalProcessingOptions): void {
-    if (options.adaptationRate !== undefined) {
-      this.config.learningRate = Math.max(0.001, Math.min(0.1, options.adaptationRate));
-    }
-    
-    console.log("MixedModel: Updated configuration", {
-      learningRate: this.config.learningRate
-    });
+  
+  // Apply filtering
+  const filtered = applyFilter(value);
+  
+  // Make prediction
+  const predicted = makePrediction();
+  
+  // Update model parameters adaptively
+  if (modelConfig.useAdaptiveFiltering) {
+    updateModel(value, predicted);
   }
-
-  /**
-   * Reset the model
-   */
-  public reset(): void {
-    this.inputBuffer = [];
-    this.outputBuffer = [];
-    this.isTraining = false;
-    this.trainCounter = 0;
-    
-    // Reinitialize models
-    for (const model of this.models) {
-      try {
-        model.dispose();
-      } catch (e) {
-        console.error("Error disposing model", e);
-      }
-    }
-    
-    this.models = [];
-    this.initializeModels();
-    
-    console.log("MixedModel: Reset");
-  }
+  
+  // Calculate prediction confidence
+  const confidence = calculateConfidence();
+  
+  return {
+    filtered,
+    predicted,
+    confidence
+  };
 }
 
 /**
- * Singleton instance
+ * Apply filtering to signal
  */
-let globalMixedModel: MixedModel | null = null;
-
-/**
- * Get the global mixed model instance
- */
-export function getMixedModel(): MixedModel {
-  if (!globalMixedModel) {
-    globalMixedModel = new MixedModel();
+function applyFilter(value: number): number {
+  if (signalHistory.length < 3) {
+    return value;
   }
-  return globalMixedModel;
+  
+  // AR component
+  let arComponent = 0;
+  for (let i = 0; i < Math.min(coefficients.ar.length, signalHistory.length - 1); i++) {
+    arComponent += coefficients.ar[i] * signalHistory[signalHistory.length - 2 - i];
+  }
+  
+  // MA component (simplified)
+  const error = value - arComponent;
+  let maComponent = 0;
+  for (let i = 0; i < Math.min(coefficients.ma.length, predictionErrors.length); i++) {
+    maComponent += coefficients.ma[i] * predictionErrors[i];
+  }
+  
+  // Update errors
+  predictionErrors.unshift(error);
+  if (predictionErrors.length > maxErrorsTracked) {
+    predictionErrors.pop();
+  }
+  
+  // Combine components
+  return arComponent + maComponent;
 }
 
 /**
- * Reset the global mixed model
+ * Make prediction for future values
+ */
+function makePrediction(): number {
+  if (signalHistory.length < 3) {
+    return signalHistory[signalHistory.length - 1];
+  }
+  
+  // AR component for prediction
+  let prediction = 0;
+  for (let i = 0; i < Math.min(coefficients.ar.length, signalHistory.length); i++) {
+    prediction += coefficients.ar[i] * signalHistory[signalHistory.length - 1 - i];
+  }
+  
+  // MA component for prediction
+  for (let i = 0; i < Math.min(coefficients.ma.length, predictionErrors.length); i++) {
+    prediction += coefficients.ma[i] * predictionErrors[i];
+  }
+  
+  return prediction;
+}
+
+/**
+ * Update model parameters based on prediction error
+ */
+function updateModel(actual: number, predicted: number): void {
+  const error = actual - predicted;
+  const adaptationRate = modelConfig.adaptationRate;
+  
+  // Update AR coefficients
+  for (let i = 0; i < coefficients.ar.length; i++) {
+    if (i < signalHistory.length - 1) {
+      const x = signalHistory[signalHistory.length - 2 - i];
+      coefficients.ar[i] += adaptationRate * error * x;
+    }
+  }
+  
+  // Update MA coefficients
+  for (let i = 0; i < coefficients.ma.length; i++) {
+    if (i < predictionErrors.length) {
+      coefficients.ma[i] += adaptationRate * error * predictionErrors[i] * 0.1;
+    }
+  }
+  
+  // Update noise variance estimate
+  noiseVariance = (1 - adaptationRate) * noiseVariance + adaptationRate * error * error;
+}
+
+/**
+ * Calculate prediction confidence
+ */
+function calculateConfidence(): number {
+  if (predictionErrors.length < 3) {
+    return 0;
+  }
+  
+  // Calculate normalized RMSE of recent predictions
+  const squaredErrors = predictionErrors.slice(0, 5).map(e => e * e);
+  const mse = squaredErrors.reduce((sum, val) => sum + val, 0) / squaredErrors.length;
+  const rmse = Math.sqrt(mse);
+  
+  // Calculate signal strength
+  const recent = signalHistory.slice(-5);
+  const range = Math.max(...recent) - Math.min(...recent);
+  
+  // Normalize RMSE by signal range
+  const normalizedRmse = range > 0.001 ? rmse / range : 100;
+  
+  // Convert to confidence score (0-1)
+  const confidence = Math.max(0, Math.min(1, 1 - normalizedRmse));
+  
+  return confidence;
+}
+
+/**
+ * Reset mixed model
  */
 export function resetMixedModel(): void {
-  if (globalMixedModel) {
-    globalMixedModel.reset();
-  }
+  signalHistory = [];
+  predictionErrors = [];
+  noiseVariance = 0.01;
+  
+  // Reset coefficients to defaults
+  coefficients.ar = [0.8, -0.2, 0.1];
+  coefficients.ma = [0.6, 0.3, 0.1];
+}
+
+/**
+ * Configure mixed model
+ */
+export function configureMixedModel(config: Partial<typeof modelConfig>): void {
+  Object.assign(modelConfig, config);
+}
+
+/**
+ * Get model state
+ */
+export function getMixedModelState(): {
+  coefficients: typeof coefficients;
+  noiseVariance: number;
+  historySize: number;
+  predictionErrorCount: number;
+} {
+  return {
+    coefficients: {...coefficients},
+    noiseVariance,
+    historySize: signalHistory.length,
+    predictionErrorCount: predictionErrors.length
+  };
 }
