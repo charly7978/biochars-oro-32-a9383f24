@@ -52,6 +52,7 @@ export function useSignalProcessing() {
   const [signalQuality, setSignalQuality] = useState<number>(0);
   const [fingerDetected, setFingerDetected] = useState<boolean>(false);
   const [lastResult, setLastResult] = useState<ProcessedSignalResult | null>(null);
+  const [filteredValue, setFilteredValue] = useState<number>(0);
   
   // Valores calculados
   const [heartRate, setHeartRate] = useState<number>(0);
@@ -101,6 +102,7 @@ export function useSignalProcessing() {
       // Actualizar estado de calidad y detección de dedo
       setSignalQuality(ppgResult.quality);
       setFingerDetected(ppgResult.fingerDetected);
+      setFilteredValue(ppgResult.filteredValue);
       
       // Calcular BPM promedio
       if (heartbeatResult.instantaneousBPM !== null && heartbeatResult.peakConfidence > 0.5) {
@@ -190,6 +192,7 @@ export function useSignalProcessing() {
     setSignalQuality(0);
     setFingerDetected(false);
     setHeartRate(0);
+    setFilteredValue(0);
     recentBpmValues.current = [];
     processedFramesRef.current = 0;
     
@@ -218,12 +221,41 @@ export function useSignalProcessing() {
     }
   }, []);
   
+  /**
+   * Reset all processors and state
+   */
+  const reset = useCallback(() => {
+    // Reset processors
+    if (ppgProcessorRef.current) {
+      ppgProcessorRef.current.reset();
+    }
+    
+    if (heartbeatProcessorRef.current) {
+      heartbeatProcessorRef.current.reset();
+    }
+    
+    resetFingerDetector();
+    
+    // Reset state
+    setIsProcessing(false);
+    setSignalQuality(0);
+    setFingerDetected(false);
+    setHeartRate(0);
+    setFilteredValue(0);
+    recentBpmValues.current = [];
+    processedFramesRef.current = 0;
+    setLastResult(null);
+    
+    console.log("useSignalProcessing: All processors reset");
+  }, []);
+  
   return {
     // Estados
     isProcessing,
     signalQuality,
     fingerDetected,
     heartRate,
+    filteredValue,
     lastResult,
     processedFrames: processedFramesRef.current,
     
@@ -232,6 +264,7 @@ export function useSignalProcessing() {
     startProcessing,
     stopProcessing,
     configureProcessors,
+    reset,
     
     // Procesadores
     ppgProcessor: ppgProcessorRef.current,

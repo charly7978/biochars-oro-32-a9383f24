@@ -5,15 +5,15 @@
  */
 
 import { useState, useEffect, useRef } from 'react';
-import { ModifiedVitalSignsProcessor } from '../modules/vital-signs/ModifiedVitalSignsProcessor';
-import { VitalSignsResult } from '../modules/vital-signs/types/vital-signs-result';
+import { VitalSignsProcessor } from '../modules/vital-signs/VitalSignsProcessor';
+import { VitalSignsResult } from '../types/vital-signs';
 
 /**
  * Hook for processing vital signs with integrated hydration
  */
 export const useVitalSignsProcessor = () => {
   // Create processor instance
-  const processorRef = useRef<ModifiedVitalSignsProcessor | null>(null);
+  const processorRef = useRef<VitalSignsProcessor | null>(null);
   
   // States
   const [lastResult, setLastResult] = useState<VitalSignsResult | null>(null);
@@ -22,14 +22,25 @@ export const useVitalSignsProcessor = () => {
   
   // Create processor on mount
   useEffect(() => {
-    console.log("Creating modified vital signs processor with hydration support");
-    processorRef.current = new ModifiedVitalSignsProcessor();
+    console.log("Creating vital signs processor with hydration support");
+    processorRef.current = new VitalSignsProcessor();
     
     return () => {
       console.log("Cleaning up vital signs processor");
       processorRef.current = null;
     };
   }, []);
+  
+  /**
+   * Initialize the processor
+   */
+  const initializeProcessor = () => {
+    console.log("Initializing vital signs processor");
+    if (!processorRef.current) {
+      processorRef.current = new VitalSignsProcessor();
+    }
+    setProcessedValues(0);
+  };
   
   /**
    * Process a PPG signal to calculate vital signs
@@ -47,7 +58,7 @@ export const useVitalSignsProcessor = () => {
     
     try {
       // Process signal
-      const result = processorRef.current.processSignal({ value, rrData });
+      const result = processorRef.current.processSignal(value, rrData);
       
       // Update state
       setLastResult(result);
@@ -89,13 +100,9 @@ export const useVitalSignsProcessor = () => {
   const reset = (): void => {
     console.log("Resetting vital signs processor");
     if (processorRef.current) {
-      const lastValid = processorRef.current.reset();
-      if (lastValid) {
-        setLastResult(lastValid);
-      } else {
-        setLastResult(null);
-      }
+      processorRef.current.reset();
     }
+    setLastResult(null);
     setProcessedValues(0);
   };
   
@@ -141,6 +148,7 @@ export const useVitalSignsProcessor = () => {
     processSignal,
     startProcessing,
     stopProcessing,
+    initializeProcessor,
     reset,
     fullReset,
     getArrhythmiaCounter,

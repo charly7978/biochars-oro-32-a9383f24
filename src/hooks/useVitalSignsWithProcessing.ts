@@ -34,6 +34,9 @@ export interface IntegratedVitalsResult {
   pressure: string;
   arrhythmiaStatus: string;
   arrhythmiaCount: number;
+  
+  // Nueva medición de hidratación
+  hydrationPercentage: number;
 }
 
 /**
@@ -106,7 +109,10 @@ export function useVitalSignsWithProcessing() {
           spo2: vitalsResult.spo2,
           pressure: vitalsResult.pressure,
           arrhythmiaStatus: vitalsResult.arrhythmiaStatus.split('|')[0] || '--',
-          arrhythmiaCount: parseInt(vitalsResult.arrhythmiaStatus.split('|')[1] || '0', 10)
+          arrhythmiaCount: parseInt(vitalsResult.arrhythmiaStatus.split('|')[1] || '0', 10),
+          
+          // Nueva medición de hidratación
+          hydrationPercentage: vitalsResult.lipids.hydrationPercentage
         };
         
         // Actualizar resultado
@@ -131,6 +137,7 @@ export function useVitalSignsWithProcessing() {
     extraction.startProcessing();
     processing.startProcessing();
     vitalSigns.initializeProcessor();
+    vitalSigns.startProcessing();
     
     processedFramesRef.current = 0;
     lastProcessTimeRef.current = Date.now();
@@ -147,7 +154,7 @@ export function useVitalSignsWithProcessing() {
     // Detener todos los subsistemas
     extraction.stopProcessing();
     processing.stopProcessing();
-    vitalSigns.reset();
+    vitalSigns.stopProcessing();
     
     setIsMonitoring(false);
     setLastResult(null);
@@ -163,11 +170,12 @@ export function useVitalSignsWithProcessing() {
     
     // Reiniciar todos los subsistemas
     extraction.reset();
-    vitalSigns.fullReset();
+    processing.reset();
+    vitalSigns.reset();
     
     processedFramesRef.current = 0;
     lastProcessTimeRef.current = Date.now();
-  }, [extraction, vitalSigns, stopMonitoring]);
+  }, [extraction, vitalSigns, stopMonitoring, processing]);
   
   return {
     // Estado

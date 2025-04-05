@@ -1,4 +1,3 @@
-
 /**
  * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
  * 
@@ -138,9 +137,16 @@ export function usePrecisionVitalSigns() {
     // Crear objeto de señal procesada
     const processedSignal: ProcessedSignal = {
       timestamp: Date.now(),
+      rawValue: signalProcessing.lastResult?.rawValue || 0,
       filteredValue: signalProcessing.filteredValue || 0,
       quality: signalProcessing.signalQuality,
-      fingerDetected: signalProcessing.fingerDetected
+      fingerDetected: signalProcessing.fingerDetected,
+      roi: {
+        x: 0,
+        y: 0,
+        width: 100,
+        height: 100
+      }
     };
     
     // Procesar señal
@@ -151,6 +157,7 @@ export function usePrecisionVitalSigns() {
     signalProcessing.filteredValue,
     signalProcessing.fingerDetected,
     signalProcessing.signalQuality,
+    signalProcessing.lastResult,
     processSignal
   ]);
   
