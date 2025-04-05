@@ -1,3 +1,4 @@
+
 /**
  * Hook for processing vital signs signals
  * Modified to use the new refactored blood pressure processing
@@ -7,10 +8,10 @@ import { VitalSignsProcessor } from '../modules/vital-signs';
 import { ProcessingPriority } from '../modules/extraction';
 import type { VitalSignsResult, RRIntervalData } from '../types/vital-signs';
 import type { ArrhythmiaWindow } from './vital-signs/types';
-import { getDiagnosticsData, clearDiagnosticsData } from '../hooks/heart-beat/signal-processing/peak-detection';
+import { getDiagnosticsData, clearDiagnosticsData } from './heart-beat/signal-processing/peak-detection';
 import { useBloodPressureMonitor } from './useBloodPressureMonitor';
 
-// Interfaz para datos de diagnóstico integral
+// Interface for comprehensive diagnostics data
 interface DiagnosticsInfo {
   processedSignals: number;
   signalLog: Array<{ timestamp: number, value: number, result: any, priority: ProcessingPriority }>;
@@ -29,7 +30,7 @@ export function useVitalSignsProcessor() {
   const [diagnosticsEnabled, setDiagnosticsEnabled] = useState<boolean>(true);
   
   // Use the blood pressure monitor hook
-  const bloodPressureMonitor = useBloodPressureMonitor({ useAI: true });
+  const bloodPressureMonitor = useBloodPressureMonitor({ useAI: false });
   
   // Debug info
   const debugInfo = useRef<DiagnosticsInfo>({
@@ -68,10 +69,10 @@ export function useVitalSignsProcessor() {
   }, [initializeProcessor, bloodPressureMonitor]);
   
   // Process signal data with blood pressure prioritization
-  const processSignal = useCallback(async (
+  const processSignal = useCallback((
     value: number, 
     rrData?: RRIntervalData
-  ): Promise<VitalSignsResult> => {
+  ): VitalSignsResult => {
     if (!processorRef.current) {
       console.warn("VitalSignsProcessor not initialized");
       return {
@@ -86,27 +87,11 @@ export function useVitalSignsProcessor() {
       };
     }
     
-    // Incrementar contador de señales procesadas
+    // Increment processed signals counter
     debugInfo.current.processedSignals++;
     
-    // Process blood pressure
-    const pressure = await bloodPressureMonitor.processPPG(value);
-    
-    // Procesar señal for other vital signs
-    const startTime = performance.now();
-    const baseResult = processorRef.current.processSignal({
-      value,
-      rrData
-    });
-    
-    // Replace the blood pressure result with our specialized processor result
-    const result: VitalSignsResult = {
-      ...baseResult,
-      pressure
-    };
-    
-    // Calcular tiempo de procesamiento
-    const processingTime = performance.now() - startTime;
+    // Process signal for other vital signs
+    const result = processorRef.current.processSignal(value, rrData);
     
     // Store valid results
     if (result.spo2 > 0) {
@@ -123,7 +108,7 @@ export function useVitalSignsProcessor() {
     }
     
     return result;
-  }, [bloodPressureMonitor]);
+  }, []);
   
   // Reset the processor and return last valid results
   const reset = useCallback((): VitalSignsResult | null => {
@@ -160,7 +145,7 @@ export function useVitalSignsProcessor() {
   const toggleDiagnostics = useCallback((enabled: boolean): void => {
     setDiagnosticsEnabled(enabled);
     if (!enabled) {
-      // Limpiar datos de diagnóstico si se desactiva
+      // Clear diagnostics data if disabled
       clearDiagnosticsData();
     }
     console.log(`Diagnostics channel ${enabled ? 'enabled' : 'disabled'}`);
