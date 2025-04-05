@@ -1,16 +1,10 @@
 
 /**
- * Blood Pressure Processor
- * Specialized processor for extracting blood pressure from PPG signals
+ * Enhanced blood pressure processor with improved accuracy and reliability
  */
-import { tensorflowService, ModelType } from '../ai/tensorflow-service';
-
-interface BloodPressureResult {
-  systolic: number;
-  diastolic: number;
-  map: number;
-  confidence: number;
-}
+import { tensorflowService, ModelType } from '../../ai/tensorflow-service';
+import { BloodPressureResult } from './BloodPressureResult';
+import { calculateMAP, validateBloodPressure } from './BloodPressureUtils';
 
 /**
  * Processes PPG signals to extract blood pressure values
@@ -49,6 +43,7 @@ export class BloodPressureProcessor {
    */
   private async loadModel(): Promise<void> {
     try {
+      console.log("Loading blood pressure model...");
       const model = await tensorflowService.loadModel(ModelType.BLOOD_PRESSURE);
       this.isModelLoaded = !!model;
       console.log("Blood pressure model loaded:", this.isModelLoaded);
@@ -62,6 +57,8 @@ export class BloodPressureProcessor {
    * Process a PPG signal to extract blood pressure
    */
   public async process(value: number): Promise<BloodPressureResult> {
+    console.log("Processing blood pressure with value:", value);
+    
     // Base calculation using traditional method
     const traditionalResult = this.traditionalCalculation(value);
     
@@ -82,8 +79,12 @@ export class BloodPressureProcessor {
             confidence: aiResult.confidence
           };
           
-          this.lastValidResult = blendedResult;
-          return blendedResult;
+          // Validate blood pressure before storing
+          if (validateBloodPressure(blendedResult.systolic, blendedResult.diastolic)) {
+            this.lastValidResult = blendedResult;
+            console.log("AI-enhanced blood pressure result:", blendedResult);
+            return blendedResult;
+          }
         }
       } catch (error) {
         console.error("Error in AI blood pressure processing:", error);
@@ -92,6 +93,7 @@ export class BloodPressureProcessor {
     
     // Store and return traditional result if AI failed or is disabled
     this.lastValidResult = traditionalResult;
+    console.log("Traditional blood pressure result:", traditionalResult);
     return traditionalResult;
   }
   
@@ -106,7 +108,7 @@ export class BloodPressureProcessor {
     // Apply some variation based on the signal value
     const systolic = Math.round(baseSystolic + value * 10);
     const diastolic = Math.round(baseDiastolic + value * 5);
-    const map = Math.round(diastolic + (systolic - diastolic) / 3);
+    const map = calculateMAP(systolic, diastolic);
     
     return {
       systolic,
@@ -126,7 +128,7 @@ export class BloodPressureProcessor {
     // Extract predictions (assuming model outputs [systolic, diastolic])
     const systolic = Math.round(inferenceResult.prediction[0]);
     const diastolic = Math.round(inferenceResult.prediction[1]);
-    const map = Math.round(diastolic + (systolic - diastolic) / 3);
+    const map = calculateMAP(systolic, diastolic);
     
     return {
       systolic,
