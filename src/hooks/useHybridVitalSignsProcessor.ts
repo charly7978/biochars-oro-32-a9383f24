@@ -14,6 +14,8 @@ interface UseHybridVitalSignsProcessorOptions {
   useNeuralModels?: boolean;
   neuralWeight?: number;
   neuralConfidenceThreshold?: number;
+  adaptiveProcessing?: boolean;
+  enhancedCalibration?: boolean;
 }
 
 /**
@@ -35,7 +37,9 @@ export const useHybridVitalSignsProcessor = (options?: UseHybridVitalSignsProces
     processorRef.current = new HybridVitalSignsProcessor({
       useNeuralModels: options?.useNeuralModels ?? false,
       neuralWeight: options?.neuralWeight ?? 0.6,
-      neuralConfidenceThreshold: options?.neuralConfidenceThreshold ?? 0.5
+      neuralConfidenceThreshold: options?.neuralConfidenceThreshold ?? 0.5,
+      adaptiveProcessing: options?.adaptiveProcessing ?? true,
+      enhancedCalibration: options?.enhancedCalibration ?? true
     });
     
     return () => {

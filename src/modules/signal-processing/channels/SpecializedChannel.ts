@@ -3,17 +3,7 @@
  * Base class for specialized signal processing channels
  * Each channel is optimized for a specific vital sign
  */
-import { ProcessorType } from '../types';
-
-/**
- * Channel configuration
- */
-export interface ChannelConfig {
-  name: string;
-  type: ProcessorType;
-  bufferSize?: number;
-  filterStrength?: number;
-}
+import { ProcessorType, ChannelConfig } from '../types';
 
 /**
  * Base channel interface
@@ -24,6 +14,24 @@ export interface BaseChannel<T> {
   getType(): ProcessorType;
   getName(): string;
   getQuality(): number;
+  id?: string;
+}
+
+/**
+ * Channel feedback interface
+ */
+export interface ChannelFeedback {
+  channelId: string;
+  signalQuality: number;
+  suggestedAdjustments: {
+    amplificationFactor?: number;
+    filterStrength?: number;
+    baselineCorrection?: number;
+    frequencyRangeMin?: number;
+    frequencyRangeMax?: number;
+  };
+  timestamp: number;
+  success: boolean;
 }
 
 /**
@@ -36,12 +44,15 @@ export abstract class SpecializedChannel<T> implements BaseChannel<T> {
   protected recentValues: number[] = [];
   protected readonly MAX_BUFFER_SIZE: number;
   protected filterStrength: number;
+  public id?: string;
   
   constructor(config: ChannelConfig) {
     this.type = config.type;
     this.name = config.name;
     this.MAX_BUFFER_SIZE = config.bufferSize || 50;
     this.filterStrength = config.filterStrength || 0.3;
+    // Generate a unique ID for the channel based on type and name
+    this.id = `${this.type}-${this.name}-${Date.now().toString(36)}`;
   }
   
   /**
@@ -76,6 +87,21 @@ export abstract class SpecializedChannel<T> implements BaseChannel<T> {
    */
   getQuality(): number {
     return this.quality;
+  }
+  
+  /**
+   * Apply feedback to adjust channel parameters
+   */
+  applyFeedback(feedback: ChannelFeedback): void {
+    if (feedback.suggestedAdjustments.amplificationFactor !== undefined) {
+      // Apply suggested amplification factor
+    }
+    
+    if (feedback.suggestedAdjustments.filterStrength !== undefined) {
+      this.filterStrength = feedback.suggestedAdjustments.filterStrength;
+    }
+    
+    // Additional feedback parameters can be applied here
   }
   
   /**
@@ -115,30 +141,56 @@ export abstract class SpecializedChannel<T> implements BaseChannel<T> {
   protected calculateSignalQuality(): number {
     if (this.recentValues.length < 10) return 0;
     
-    // Calculate mean and variance
-    const mean = this.recentValues.reduce((a, b) => a + b, 0) / this.recentValues.length;
-    const variance = this.recentValues.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / this.recentValues.length;
+    // Get recent values for analysis
+    const recentValues = this.recentValues.slice(-10);
     
-    // Low variance (flat signal) or extremely high variance (noise) both indicate poor quality
-    const minVariance = 0.0001;
-    const maxVariance = 0.1;
+    // Calculate signal amplitude (min to max) - real data only
+    const min = Math.min(...recentValues);
+    const max = Math.max(...recentValues);
+    const amplitude = max - min;
     
-    if (variance < minVariance || variance > maxVariance) {
-      return Math.max(0, Math.min(100, variance < minVariance ? 
-        variance / minVariance * 50 : maxVariance / variance * 50));
+    // Calculate average and standard deviation - real data only
+    const avg = recentValues.reduce((sum, val) => sum + val, 0) / recentValues.length;
+    const stdDev = Math.sqrt(
+      recentValues.reduce((sum, val) => sum + Math.pow(val - avg, 2), 0) / recentValues.length
+    );
+    
+    // Calculate noise to signal ratio
+    const noiseToSignalRatio = stdDev / (amplitude + 0.001);
+    
+    // Calculate consistency of peak spacing - real data only
+    let peakConsistency = 0;
+    let lastPeakIndex = -1;
+    let peakSpacings = [];
+    
+    for (let i = 1; i < recentValues.length - 1; i++) {
+      if (recentValues[i] > recentValues[i-1] && recentValues[i] > recentValues[i+1]) {
+        if (lastPeakIndex !== -1) {
+          peakSpacings.push(i - lastPeakIndex);
+        }
+        lastPeakIndex = i;
+      }
     }
     
-    // Amplitude factor
-    const min = Math.min(...this.recentValues);
-    const max = Math.max(...this.recentValues);
-    const amplitude = max - min;
-    const amplitudeFactor = Math.min(amplitude, 0.5) / 0.5;
+    if (peakSpacings.length >= 2) {
+      const avgSpacing = peakSpacings.reduce((sum, val) => sum + val, 0) / peakSpacings.length;
+      const spacingVariance = peakSpacings.reduce((sum, val) => sum + Math.pow(val - avgSpacing, 2), 0) / peakSpacings.length;
+      const spacingCoeffOfVar = Math.sqrt(spacingVariance) / avgSpacing;
+      peakConsistency = Math.max(0, 1 - spacingCoeffOfVar);
+    }
     
-    // Buffer size factor
-    const bufferSizeFactor = Math.min(this.recentValues.length / 30, 1);
+    // Calculate overall quality score with weighted components - real data only
+    const amplitudeScore = Math.min(1, amplitude / 0.5);  // Normalize amplitude
+    const stdDevScore = Math.min(1, Math.max(0, 1 - noiseToSignalRatio));  // Lower noise is better
     
-    // Calculate quality
-    const quality = (amplitudeFactor * 0.6 + bufferSizeFactor * 0.4) * 100;
-    return Math.max(0, Math.min(100, quality));
+    // Weight the factors to get overall quality
+    const weightedScore = (
+      amplitudeScore * 0.4 +          // 40% amplitude
+      stdDevScore * 0.4 +             // 40% signal-to-noise
+      peakConsistency * 0.2           // 20% peak consistency
+    );
+    
+    // Normalize to 0-1 range
+    return Math.max(0, Math.min(1, weightedScore));
   }
 }

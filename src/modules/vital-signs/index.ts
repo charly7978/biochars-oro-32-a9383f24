@@ -6,6 +6,9 @@
 // Export the VitalSignsProcessor
 export { VitalSignsProcessor } from './VitalSignsProcessor';
 
+// Export the HybridVitalSignsProcessor
+export { HybridVitalSignsProcessor } from './HybridVitalSignsProcessor';
+
 // Export type definitions for vital signs
 export type { 
   VitalSignsResult, 
@@ -35,6 +38,10 @@ export interface HybridProcessingOptions {
   neuralConfidenceThreshold?: number;
   adaptiveProcessing?: boolean;
   enhancedCalibration?: boolean;
+  // Add TensorFlow optimization options
+  useWebGPU?: boolean;
+  useQuantization?: boolean;
+  optimizeForMobile?: boolean;
 }
 
 // Re-export signal processing options to ensure compatibility
@@ -53,4 +60,23 @@ export interface ChannelFeedback {
   };
   timestamp: number;
   success: boolean;
+}
+
+// Export AutoCalibrationOptions for new calibration functionality
+export interface AutoCalibrationOptions {
+  useHistoricalData?: boolean;
+  calibrationPeriod?: number; // in milliseconds
+  minimumSamplesRequired?: number;
+  adaptToBiometrics?: boolean;
+  environmentalAdjustment?: boolean;
+}
+
+// Export interface for neural network model configuration
+export interface NeuralModelConfig {
+  modelType: string;
+  inputShape: number[];
+  outputShape: number[];
+  quantized?: boolean;
+  useTransformer?: boolean;
+  useAttention?: boolean;
 }

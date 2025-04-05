@@ -10,7 +10,16 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 import { useSignalProcessing } from './useSignalProcessing';
 import { VitalSignsProcessor } from '../modules/vital-signs';
 import type { VitalSignsResult } from '../modules/vital-signs';
-import type { ProcessedSignal } from '../types/signal';
+
+// Define ProcessedSignal interface to fix type errors
+interface ProcessedSignal {
+  timestamp: number;
+  rawValue: number;
+  filteredValue: number;
+  quality: number;
+  fingerDetected: boolean;
+  roi?: any;  // Required property from error message
+}
 
 /**
  * Estado del hook de signos vitales de precisión
@@ -114,15 +123,28 @@ export function usePrecisionVitalSigns() {
       const totalPixels = data.length / (4 * step);
       const ppgValue = sum / totalPixels / 255; // Normalize to [0,1]
       
-      // Process the PPG value
-      processValue(ppgValue);
+      // Create signal object for processing
+      const signalObj: ProcessedSignal = {
+        timestamp: Date.now(),
+        filteredValue: ppgValue,
+        quality: 75,
+        fingerDetected: true,
+        rawValue: ppgValue
+      };
+      
+      // Process using the signal value
+      if (signalProcessing.lastResult) {
+        processValue(signalProcessing.lastResult.filteredValue);
+      } else {
+        processValue(ppgValue);
+      }
       
       // Update environmental status based on image data
       updateEnvironmentalStatus(imageData);
     } catch (error) {
       console.error("Error procesando frame:", error);
     }
-  }, [state.isProcessing, processValue]);
+  }, [state.isProcessing, processValue, signalProcessing.lastResult]);
   
   /**
    * Actualizar estado ambiental basado en datos de imagen

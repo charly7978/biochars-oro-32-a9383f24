@@ -44,6 +44,7 @@ export interface ProcessedHeartbeatSignal {
   instantaneousBPM?: number | null;
   rrInterval?: number | null;
   heartRateVariability?: number | null;
+  value?: number; // Added to fix build errors
 }
 
 /**
@@ -89,5 +90,49 @@ export interface ChannelConfig {
   type: ProcessorType;
   bufferSize?: number;
   filterStrength?: number;
+  initialAmplification?: number;
+  frequencyBandMin?: number;
+  frequencyBandMax?: number;
 }
 
+/**
+ * Neural network model type for signal processing
+ */
+export interface NeuralModelSpec {
+  id: string;
+  type: "transformer" | "cnn" | "lstm" | "hybrid";
+  inputSize: number;
+  outputSize: number;
+  quantized: boolean;
+  optimizedForMobile: boolean;
+}
+
+/**
+ * Adaptive preprocessing configuration
+ */
+export interface AdaptivePreprocessingConfig {
+  normalizeInput: boolean;
+  adaptiveThresholds: boolean;
+  filterType: "sma" | "ema" | "wavelet" | "kalman";
+  baselineRemoval: boolean;
+}
+
+/**
+ * Post-processing configuration
+ */
+export interface PostProcessingConfig {
+  smoothingFactor: number;
+  outlierRemoval: boolean;
+  confidenceThreshold: number;
+  ensembleResults: boolean;
+}
+
+/**
+ * Calibration status
+ */
+export enum CalibrationStatus {
+  UNCALIBRATED = "uncalibrated",
+  CALIBRATING = "calibrating",
+  CALIBRATED = "calibrated",
+  INVALID = "invalid"
+}

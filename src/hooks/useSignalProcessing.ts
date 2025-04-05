@@ -1,3 +1,4 @@
+
 /**
  * Hook for central signal processing
  * Integrates specialized processors from signal-processing module
@@ -222,8 +223,9 @@ export function useSignalProcessing() {
    * Configure processors with custom options
    */
   const configureProcessors = useCallback((options: SignalProcessingOptions) => {
-    if (ppgProcessorRef.current && ppgProcessorRef.current.configure) {
-      ppgProcessorRef.current.configure(options);
+    const processor = ppgProcessorRef.current as any;
+    if (processor && typeof processor.configure === 'function') {
+      processor.configure(options);
     }
   }, []);
   
@@ -255,6 +257,7 @@ export function useSignalProcessing() {
     heartRate,
     lastResult,
     processedFrames: processedFramesRef.current,
+    filteredValue: lastResult?.filteredValue,
     
     // Actions
     processValue,
