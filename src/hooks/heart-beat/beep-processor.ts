@@ -1,12 +1,12 @@
 
 import { useState, useCallback, useRef } from 'react';
-import { playBeep, setAudioEnabled, isAudioEnabled } from '../../services/AudioManager';
+import { playBeep, setAudioEnabled } from '../../services/AudioManager';
 
 export function useBeepProcessor() {
   const pendingBeepsQueue = useRef<{time: number, value: number}[]>([]);
   const beepProcessorTimeoutRef = useRef<number | null>(null);
   const lastBeepTimeRef = useRef<number>(0);
-  const audioEnabledRef = useRef<boolean>(true);
+  const isAudioEnabledRef = useRef<boolean>(true);
   
   const MIN_BEEP_INTERVAL_MS = 500;
   
@@ -23,7 +23,7 @@ export function useBeepProcessor() {
     
     // AudioManager now handles the beep timing and generation
     // Just ensure the audio state is synced
-    setAudioEnabled(isMonitoringRef.current && audioEnabledRef.current);
+    setAudioEnabled(isMonitoringRef.current && isAudioEnabledRef.current);
     
     // Clear the local queue as it's now managed by AudioManager
     pendingBeepsQueue.current = []; 
@@ -54,7 +54,7 @@ export function useBeepProcessor() {
   }, []);
 
   const setIsAudioEnabled = useCallback((enabled: boolean) => {
-    audioEnabledRef.current = enabled;
+    isAudioEnabledRef.current = enabled;
     setAudioEnabled(enabled);
   }, []);
 

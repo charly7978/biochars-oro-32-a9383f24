@@ -67,7 +67,7 @@ export class UnifiedVitalSignsProcessor {
     const spo2Value = distributorResults[VitalSignType.SPO2];
     
     // Get heart rate from cardiac channel
-    const heartRate = this.cardiacChannel ? (this.cardiacChannel as any).getEstimatedHeartRate() : 0;
+    const heartRate = this.cardiacChannel ? this.cardiacChannel.getEstimatedHeartRate() : 0;
     
     // Process arrhythmia data from real RR intervals
     const arrhythmiaResult = this.processArrhythmiaData(rrData, heartRate);
@@ -75,7 +75,7 @@ export class UnifiedVitalSignsProcessor {
     // Process SPO2 value
     let spo2 = 0;
     if (this.spo2Channel) {
-      spo2 = (this.spo2Channel as any).getSaturationEstimate();
+      spo2 = this.spo2Channel.getSaturationEstimate();
     } else {
       // Fallback calculation if channel isn't available
       spo2 = spo2Value > 0 ? Math.round(95 + (spo2Value * 2)) : 0;
@@ -116,8 +116,8 @@ export class UnifiedVitalSignsProcessor {
     // Preference order: rrData, cardiac channel, empty array
     if (rrData?.intervals && rrData.intervals.length >= 3) {
       intervals = rrData.intervals;
-    } else if (this.cardiacChannel && 'getRRIntervals' in this.cardiacChannel) {
-      intervals = (this.cardiacChannel as any).getRRIntervals();
+    } else if (this.cardiacChannel) {
+      intervals = this.cardiacChannel.getRRIntervals();
     }
     
     // Need at least 3 intervals for analysis
@@ -152,15 +152,6 @@ export class UnifiedVitalSignsProcessor {
       isArrhythmia = maxVariation > 0.2 || (rmssd > 50 && maxVariation > 0.15);
     }
     
-    // Check from cardiac channel
-    if (this.cardiacChannel && 'isArrhythmia' in this.cardiacChannel) {
-      // Give more weight to the specialized cardiac channel
-      const channelDetectsArrhythmia = (this.cardiacChannel as any).isArrhythmia();
-      
-      // Combined decision with more weight on specialized channel
-      isArrhythmia = channelDetectsArrhythmia || (isArrhythmia && maxVariation > 0.25);
-    }
-    
     // Increment counter if arrhythmia detected
     if (isArrhythmia) {
       this.arrhythmiaCounter++;
@@ -171,7 +162,6 @@ export class UnifiedVitalSignsProcessor {
           channelId: this.cardiacChannel.getId(),
           success: true,
           signalQuality: 0.8,
-          timestamp: Date.now(),
           suggestedAdjustments: {
             // Adjust cardiac channel parameters based on arrhythmia detection
             filterStrength: 0.4, // Increase filter strength for more stable detection
