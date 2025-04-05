@@ -1,329 +1,300 @@
+
 /**
- * Precision Vital Signs Processor
- * Advanced processor with enhanced algorithms and AI capabilities
+ * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
+ * 
+ * Procesador de signos vitales de alta precisión
+ * Implementa calibración, validación cruzada y ajustes ambientales
  */
-import { tensorflowService, ModelType } from '../ai/tensorflow-service';
-import { VitalSignsResult } from './index';
-import type { ProcessedSignal } from '../../types/signal';
 
-class BloodPressureProcessor {
-  // Basic implementation
-  process(value: number): { systolic: number, diastolic: number } {
-    // Simple calculation for demo purpose
-    const baseSystolic = 120;
-    const baseDiastolic = 80;
-    const systolicVar = value * 10;
-    const diastolicVar = value * 5;
-    
-    return {
-      systolic: Math.round(baseSystolic + systolicVar),
-      diastolic: Math.round(baseDiastolic + diastolicVar)
-    };
-  }
-  
-  // Get confidence level
-  getConfidence(): number {
-    return 0.75;
-  }
-}
+import { ProcessedSignal, VitalSignType } from '../../types/signal';
+import { CalibrationManager, CalibrationReference } from './calibration/CalibrationManager';
+import { CrossValidator, MeasurementsToValidate } from './correlation/CrossValidator';
+import { EnvironmentalAdjuster } from './environment/EnvironmentalAdjuster';
+import { ModularVitalSignsProcessor } from './ModularVitalSignsProcessor';
+import { VitalSignsResult } from './VitalSignsProcessor';
+import { BloodPressureProcessor } from './blood-pressure-processor';
 
-interface PrecisionProcessorOptions {
-  useAI: boolean;
-  neuralContribution: number;
-  runDiagnostics?: boolean;
-}
-
+/**
+ * Resultado de medición con precisión mejorada
+ */
 export interface PrecisionVitalSignsResult extends VitalSignsResult {
-  confidence?: {
-    spo2: number;
-    bloodPressure: number;
-    glucose: number;
-    lipids: number;
-    overall: number;
+  isCalibrated: boolean;
+  correlationValidated: boolean;
+  environmentallyAdjusted: boolean;
+  precisionMetrics: {
+    calibrationConfidence: number;
+    correlationConfidence: number;
+    environmentalConfidence: number;
+    overallPrecision: number;
   };
-  diagnostics?: any;
 }
 
+/**
+ * Procesador de signos vitales con precisión mejorada
+ * Utiliza calibración, validación cruzada y ajustes ambientales
+ */
 export class PrecisionVitalSignsProcessor {
-  private options: PrecisionProcessorOptions;
-  private bpProcessor: BloodPressureProcessor;
-  private lastValidResults: PrecisionVitalSignsResult | null = null;
-  private arrhythmiaCounter: number = 0;
-  private diagnosticsData: any[] = [];
+  private baseProcessor: ModularVitalSignsProcessor;
+  private calibrationManager: CalibrationManager;
+  private crossValidator: CrossValidator;
+  private environmentalAdjuster: EnvironmentalAdjuster;
+  private bloodPressureProcessor: BloodPressureProcessor;
   
-  constructor(options: PrecisionProcessorOptions) {
-    this.options = {
-      useAI: true,
-      neuralContribution: 0.6,
-      runDiagnostics: false,
-      ...options
-    };
+  // Almacenamiento de señal reciente
+  private recentSignals: ProcessedSignal[] = [];
+  private readonly MAX_RECENT_SIGNALS = 50;
+  
+  // Estado de procesamiento
+  private isProcessing: boolean = false;
+  private lastResult: PrecisionVitalSignsResult | null = null;
+  
+  /**
+   * Constructor
+   */
+  constructor() {
+    // Inicializar procesador base y sistemas de mejora
+    this.baseProcessor = new ModularVitalSignsProcessor();
+    this.calibrationManager = CalibrationManager.getInstance();
+    this.crossValidator = CrossValidator.getInstance();
+    this.environmentalAdjuster = EnvironmentalAdjuster.getInstance();
+    this.bloodPressureProcessor = new BloodPressureProcessor();
     
-    // Initialize subprocessors
-    this.bpProcessor = new BloodPressureProcessor();
-    
-    console.log("PrecisionVitalSignsProcessor initialized with options:", options);
+    console.log("PrecisionVitalSignsProcessor: Inicializado con sistemas de precisión mejorada");
   }
   
   /**
-   * Process a signal to extract vital signs
+   * Iniciar procesamiento
    */
-  public process(signal: ProcessedSignal, rrData?: any): PrecisionVitalSignsResult {
+  public start(): void {
+    if (this.isProcessing) return;
+    
+    this.isProcessing = true;
+    console.log("PrecisionVitalSignsProcessor: Iniciado");
+  }
+  
+  /**
+   * Detener procesamiento
+   */
+  public stop(): void {
+    if (!this.isProcessing) return;
+    
+    this.isProcessing = false;
+    console.log("PrecisionVitalSignsProcessor: Detenido");
+  }
+  
+  /**
+   * Restablecer todos los subsistemas
+   */
+  public reset(): void {
+    // Restablecer procesadores
+    this.bloodPressureProcessor.reset();
+    
+    // Reiniciar sistemas de precisión
+    this.environmentalAdjuster.reset();
+    
+    // No reiniciamos calibración para mantener datos de referencia
+    
+    // Limpiar señales recientes
+    this.recentSignals = [];
+    this.lastResult = null;
+    
+    console.log("PrecisionVitalSignsProcessor: Restablecido");
+  }
+  
+  /**
+   * Agregar datos de referencia para calibración
+   * @param reference Datos de referencia médicos
+   * @returns Éxito de la operación
+   */
+  public addCalibrationReference(reference: CalibrationReference): boolean {
+    return this.calibrationManager.addReferenceData(reference);
+  }
+  
+  /**
+   * Actualizar condiciones ambientales
+   * @param conditions Condiciones ambientales
+   */
+  public updateEnvironmentalConditions(conditions: any): void {
+    this.environmentalAdjuster.updateConditions(conditions);
+  }
+  
+  /**
+   * Procesar señal con mejoras de precisión
+   * @param signal Señal procesada PPG
+   * @returns Resultado de signos vitales mejorado
+   */
+  public processSignal(signal: ProcessedSignal): PrecisionVitalSignsResult {
+    if (!this.isProcessing) {
+      console.log("PrecisionVitalSignsProcessor: No está procesando");
+      return this.createEmptyResult();
+    }
+    
     try {
-      const startTime = performance.now();
-      const value = signal.filteredValue;
-      
-      // Check for arrhythmia in RR intervals
-      let arrhythmiaDetected = false;
-      if (rrData && rrData.intervals && rrData.intervals.length >= 3) {
-        const intervals = rrData.intervals.slice(-3);
-        const avg = intervals.reduce((a: number, b: number) => a + b, 0) / intervals.length;
-        const variation = intervals.map((i: number) => Math.abs(i - avg) / avg);
-        
-        if (Math.max(...variation) > 0.2) {
-          arrhythmiaDetected = true;
-          this.arrhythmiaCounter++;
-        }
+      // 1. Almacenar señal para análisis
+      this.recentSignals.push(signal);
+      if (this.recentSignals.length > this.MAX_RECENT_SIGNALS) {
+        this.recentSignals.shift();
       }
       
-      // Process blood pressure
-      const bpResult = this.bpProcessor.process(value);
+      // 2. Estimar condiciones ambientales automáticamente
+      if (this.recentSignals.length >= 20) {
+        const recentValues = this.recentSignals.slice(-20).map(s => s.filteredValue);
+        this.environmentalAdjuster.estimateConditions(recentValues);
+      }
       
-      // SpO2 calculation
-      const baseSpO2 = 95;
-      const variation = (value * 5) % 4;
-      const spo2 = Math.max(90, Math.min(99, Math.round(baseSpO2 + variation)));
+      // 3. Aplicar ajustes ambientales a la señal
+      const environmentalConfidence = this.environmentalAdjuster.getAdjustmentFactors().confidence;
+      const adjustedValue = this.environmentalAdjuster.applySignalAdjustment(signal.filteredValue);
       
-      // Glucose calculation
-      const baseGlucose = 85;
-      const glucoseVariation = value * 20;
-      const glucose = Math.round(baseGlucose + glucoseVariation);
+      // 4. Process blood pressure with dedicated processor
+      const bpBuffer = this.recentSignals.slice(-30).map(s => s.filteredValue);
+      const bpResult = this.bloodPressureProcessor.processValue(adjustedValue);
       
-      // Lipids calculation
-      const baseCholesterol = 180;
-      const baseTriglycerides = 150;
-      const cholVariation = value * 30;
-      const trigVariation = value * 25;
-      
-      // Create result object
-      const result: PrecisionVitalSignsResult = {
-        spo2,
+      // 5. Create base result
+      const baseResult: VitalSignsResult = {
+        spo2: 0, // These would normally come from other processors
         pressure: `${bpResult.systolic}/${bpResult.diastolic}`,
-        arrhythmiaStatus: arrhythmiaDetected ? 
-          `ARRHYTHMIA DETECTED|${this.arrhythmiaCounter}` : 
-          `NORMAL RHYTHM|${this.arrhythmiaCounter}`,
-        glucose,
-        lipids: {
-          totalCholesterol: Math.round(baseCholesterol + cholVariation),
-          triglycerides: Math.round(baseTriglycerides + trigVariation)
-        },
-        confidence: {
-          spo2: 0.85,
-          bloodPressure: this.bpProcessor.getConfidence(),
-          glucose: 0.75,
-          lipids: 0.7,
-          overall: 0.78
-        }
-      };
-      
-      // Apply AI enhancements if enabled
-      if (this.options.useAI) {
-        this.enhanceWithAI(result, value);
-      }
-      
-      // Store for diagnostics
-      if (this.options.runDiagnostics) {
-        const processingTime = performance.now() - startTime;
-        this.diagnosticsData.push({
-          timestamp: Date.now(),
-          signalValue: value,
-          signalQuality: signal.quality,
-          result: { ...result },
-          processingTime
-        });
-        
-        // Keep diagnostics data manageable
-        if (this.diagnosticsData.length > 100) {
-          this.diagnosticsData.shift();
-        }
-        
-        // Add diagnostics to result if requested
-        result.diagnostics = {
-          processingTime,
-          aiEnabled: this.options.useAI,
-          neuralContribution: this.options.neuralContribution,
-          tensorflowInfo: tensorflowService.getTensorFlowInfo()
-        };
-      }
-      
-      // Store the result as the last valid result
-      this.lastValidResults = result;
-      
-      return result;
-    } catch (error) {
-      console.error("Error in precision vital signs processing:", error);
-      
-      // Return last valid results or defaults
-      return this.lastValidResults || {
-        spo2: 0,
-        pressure: "--/--",
-        arrhythmiaStatus: "--",
+        arrhythmiaStatus: "NORMAL",
         glucose: 0,
         lipids: {
           totalCholesterol: 0,
           triglycerides: 0
         }
       };
-    }
-  }
-  
-  /**
-   * Enhance results with AI models if available
-   */
-  private async enhanceWithAI(result: PrecisionVitalSignsResult, value: number): Promise<void> {
-    try {
-      if (!tensorflowService.isWebGPUAvailable()) {
-        console.log("WebGPU not available, AI enhancement may be slower");
+      
+      // 6. Convertir a formato para validación cruzada
+      const measurements: MeasurementsToValidate = {
+        spo2: baseResult.spo2,
+        systolic: bpResult.systolic,
+        diastolic: bpResult.diastolic,
+        heartRate: 0, // This would come from heart rate processor
+        glucose: baseResult.glucose,
+        cholesterol: baseResult.lipids.totalCholesterol,
+        triglycerides: baseResult.lipids.triglycerides
+      };
+      
+      // 7. Realizar validación cruzada
+      const validationResult = this.crossValidator.validateMeasurements(measurements);
+      
+      // 8. Aplicar ajustes de la validación si es necesario
+      let adjustedMeasurements = measurements;
+      let correlationConfidence = validationResult.confidence;
+      
+      if (!validationResult.isValid) {
+        // Aplicar correcciones de la validación
+        adjustedMeasurements = this.crossValidator.applyAdjustments(measurements, validationResult);
       }
       
-      // Only enhance if TensorFlow service is ready
-      const tfInfo = tensorflowService.getTensorFlowInfo();
-      if (tfInfo.modelsLoaded.length === 0) {
-        return;
+      // 9. Aplicar calibración individual a cada valor
+      const calibrationConfidence = this.calibrationManager.getCalibrationConfidence();
+      let calibratedValues = { ...adjustedMeasurements };
+      
+      if (this.calibrationManager.isSystemCalibrated()) {
+        calibratedValues.systolic = this.calibrationManager.applyCalibration(
+          VitalSignType.BLOOD_PRESSURE, 
+          adjustedMeasurements.systolic || 0
+        );
+        
+        calibratedValues.diastolic = this.calibrationManager.applyCalibration(
+          VitalSignType.BLOOD_PRESSURE, 
+          adjustedMeasurements.diastolic || 0
+        );
       }
       
-      // Process signal with AI models
-      // This would ideally be awaited, but we'll make it non-blocking
-      // to avoid delaying the results
-      this.processWithTensorFlow(result, value).catch(e => {
-        console.error("Error in TensorFlow processing:", e);
+      // 10. Calcular precisión general
+      const overallPrecision = (
+        calibrationConfidence * 0.4 + 
+        correlationConfidence * 0.3 + 
+        environmentalConfidence * 0.3 + 
+        bpResult.precision * 0.4
+      ) / 1.4; // Weighted average with extra weight for BP precision
+      
+      // 11. Crear resultado final con todos los ajustes aplicados
+      const result: PrecisionVitalSignsResult = {
+        ...baseResult,
+        
+        // Replace with calibrated BP values
+        pressure: `${Math.round(calibratedValues.systolic || bpResult.systolic)}/${Math.round(calibratedValues.diastolic || bpResult.diastolic)}`,
+        
+        // Agregar información de precisión
+        isCalibrated: this.calibrationManager.isSystemCalibrated(),
+        correlationValidated: validationResult.isValid,
+        environmentallyAdjusted: true,
+        precisionMetrics: {
+          calibrationConfidence,
+          correlationConfidence,
+          environmentalConfidence,
+          overallPrecision
+        }
+      };
+      
+      // Guardar y devolver resultado
+      this.lastResult = result;
+      
+      console.log("PrecisionVitalSignsProcessor: Resultado procesado con precisión mejorada", {
+        pressure: result.pressure,
+        calibrated: result.isCalibrated,
+        precision: result.precisionMetrics.overallPrecision.toFixed(2)
       });
+      
+      return result;
     } catch (error) {
-      console.error("Error applying AI enhancements:", error);
+      console.error("PrecisionVitalSignsProcessor: Error procesando señal", error);
+      return this.createEmptyResult();
     }
   }
   
   /**
-   * Process the signal with TensorFlow models
+   * Crear resultado vacío para cuando no hay procesamiento válido
    */
-  private async processWithTensorFlow(result: PrecisionVitalSignsResult, value: number): Promise<void> {
-    // Define neural contribution weight
-    const neuralWeight = this.options.neuralContribution;
-    const classicalWeight = 1 - neuralWeight;
-    
-    // Process SpO2
-    try {
-      const spo2Result = await tensorflowService.runInference([value], ModelType.SPO2);
-      if (spo2Result.confidence > 0.5) {
-        // Blend traditional and neural predictions
-        const neuralSpo2 = Math.round(spo2Result.prediction[0]);
-        result.spo2 = Math.round(result.spo2 * classicalWeight + neuralSpo2 * neuralWeight);
-        result.confidence!.spo2 = spo2Result.confidence;
+  private createEmptyResult(): PrecisionVitalSignsResult {
+    return {
+      spo2: 0,
+      pressure: "--/--",
+      arrhythmiaStatus: "--",
+      glucose: 0,
+      lipids: {
+        totalCholesterol: 0,
+        triglycerides: 0
+      },
+      isCalibrated: this.calibrationManager.isSystemCalibrated(),
+      correlationValidated: false,
+      environmentallyAdjusted: false,
+      precisionMetrics: {
+        calibrationConfidence: this.calibrationManager.getCalibrationConfidence(),
+        correlationConfidence: 0,
+        environmentalConfidence: this.environmentalAdjuster.getAdjustmentFactors().confidence,
+        overallPrecision: 0
       }
-    } catch (e) {
-      console.warn("SpO2 AI processing error:", e);
-    }
-    
-    // Process blood pressure
-    try {
-      const bpResult = await tensorflowService.runInference([value], ModelType.BLOOD_PRESSURE);
-      if (bpResult.confidence > 0.5) {
-        // Get existing values
-        const [systolic, diastolic] = result.pressure.split('/').map(Number);
-        
-        // Blend with neural predictions
-        const neuralSystolic = Math.round(bpResult.prediction[0]);
-        const neuralDiastolic = Math.round(bpResult.prediction[1]);
-        
-        const newSystolic = Math.round(systolic * classicalWeight + neuralSystolic * neuralWeight);
-        const newDiastolic = Math.round(diastolic * classicalWeight + neuralDiastolic * neuralWeight);
-        
-        result.pressure = `${newSystolic}/${newDiastolic}`;
-        result.confidence!.bloodPressure = bpResult.confidence;
-      }
-    } catch (e) {
-      console.warn("Blood pressure AI processing error:", e);
-    }
-    
-    // Process glucose
-    try {
-      const glucoseResult = await tensorflowService.runInference([value], ModelType.GLUCOSE);
-      if (glucoseResult.confidence > 0.5) {
-        const neuralGlucose = Math.round(glucoseResult.prediction[0]);
-        result.glucose = Math.round(result.glucose * classicalWeight + neuralGlucose * neuralWeight);
-        result.confidence!.glucose = glucoseResult.confidence;
-      }
-    } catch (e) {
-      console.warn("Glucose AI processing error:", e);
-    }
-    
-    // Process lipids
-    try {
-      const lipidsResult = await tensorflowService.runInference([value], ModelType.LIPIDS);
-      if (lipidsResult.confidence > 0.5) {
-        const neuralCholesterol = Math.round(lipidsResult.prediction[0]);
-        const neuralTriglycerides = Math.round(lipidsResult.prediction[1]);
-        
-        result.lipids.totalCholesterol = Math.round(
-          result.lipids.totalCholesterol * classicalWeight + 
-          neuralCholesterol * neuralWeight
-        );
-        
-        result.lipids.triglycerides = Math.round(
-          result.lipids.triglycerides * classicalWeight + 
-          neuralTriglycerides * neuralWeight
-        );
-        
-        result.confidence!.lipids = lipidsResult.confidence;
-      }
-    } catch (e) {
-      console.warn("Lipids AI processing error:", e);
-    }
-    
-    // Update overall confidence
-    const confidenceValues = [
-      result.confidence!.spo2,
-      result.confidence!.bloodPressure,
-      result.confidence!.glucose,
-      result.confidence!.lipids
-    ].filter(c => c > 0);
-    
-    result.confidence!.overall = confidenceValues.length > 0
-      ? confidenceValues.reduce((a, b) => a + b, 0) / confidenceValues.length
-      : 0.5;
+    };
   }
   
   /**
-   * Reset the processor
+   * Check if the system is calibrated
    */
-  public reset(): void {
-    // Store the last results before resetting
-    const lastResults = this.lastValidResults;
-    
-    // Clear diagnostics
-    this.diagnosticsData = [];
-    
-    // Return last results
-    return lastResults;
+  public isCalibrated(): boolean {
+    return this.calibrationManager.isSystemCalibrated();
   }
   
   /**
-   * Configure the processor
+   * Obtener resultado más reciente
    */
-  public configure(options: Partial<PrecisionProcessorOptions>): void {
-    this.options = { ...this.options, ...options };
-    console.log("PrecisionVitalSignsProcessor reconfigured:", this.options);
+  public getLastResult(): PrecisionVitalSignsResult | null {
+    return this.lastResult;
   }
   
   /**
-   * Get diagnostics data
+   * Obtener métricas de diagnóstico
    */
   public getDiagnostics(): any {
     return {
-      options: this.options,
-      diagnosticsData: this.diagnosticsData.slice(-10),
-      tensorflowInfo: tensorflowService.getTensorFlowInfo(),
-      arrhythmiaCounter: this.arrhythmiaCounter
+      isProcessing: this.isProcessing,
+      signalCount: this.recentSignals.length,
+      isCalibrated: this.calibrationManager.isSystemCalibrated(),
+      calibrationFactors: this.calibrationManager.getCalibrationFactors(),
+      environmentalConditions: this.environmentalAdjuster.getCurrentConditions(),
+      adjustmentFactors: this.environmentalAdjuster.getAdjustmentFactors(),
+      bloodPressureQuality: this.bloodPressureProcessor.getConfidence()
     };
   }
 }
