@@ -13,6 +13,23 @@ export interface HeartBeatResult {
     intervals: number[];
     lastPeakTime: number | null;
   };
+  diagnosticData?: {
+    signalStrength?: number;
+    signalQuality?: string;
+    detectionStatus?: string;
+    lastProcessedTime?: number;
+    lastPeakDetected?: number | null;
+    peakStrength?: number;
+    lastValidBpmTime?: number;
+    bpmReliability?: number;
+    confidenceStatus?: string;
+    processingStatus?: string;
+    isFingerDetected?: boolean;
+    rhythmAnalysis?: {
+      regularity?: number;
+      variability?: number;
+    };
+  };
 }
 
 /**

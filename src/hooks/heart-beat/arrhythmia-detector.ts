@@ -10,9 +10,9 @@ export function useArrhythmiaDetector() {
   const currentBeatIsArrhythmiaRef = useRef<boolean>(false);
   const lastRRIntervalsRef = useRef<number[]>([]);
   
-  // Arrhythmia detection parameters
-  const RMSSD_THRESHOLD = 50;  // Root mean square of successive differences threshold
-  const RR_VARIATION_THRESHOLD = 0.2;  // RR interval variation threshold (%)
+  // Arrhythmia detection parameters - reduced thresholds to increase detection sensitivity
+  const RMSSD_THRESHOLD = 40;  // Root mean square of successive differences threshold (reduced from 50)
+  const RR_VARIATION_THRESHOLD = 0.18;  // RR interval variation threshold (%) (reduced from 0.2)
   
   /**
    * Process RR intervals and detect arrhythmia
@@ -23,6 +23,8 @@ export function useArrhythmiaDetector() {
     }
     
     try {
+      console.log("Analyzing RR intervals for arrhythmia:", rrIntervals);
+      
       // Store the most recent intervals for analysis
       lastRRIntervalsRef.current = [...rrIntervals].slice(-10);
       
@@ -47,11 +49,32 @@ export function useArrhythmiaDetector() {
       // Store HRV metrics
       heartRateVariabilityRef.current = rmssd;
       
-      // Check for arrhythmia conditions
+      // Check for arrhythmia conditions - now more sensitive
       const isArrhythmic = rmssd > RMSSD_THRESHOLD || rrVariation > RR_VARIATION_THRESHOLD;
       
+      console.log(`Arrhythmia analysis - RMSSD: ${rmssd.toFixed(2)}, Variation: ${(rrVariation*100).toFixed(2)}%, Is arrhythmic: ${isArrhythmic}`);
+      
       if (isArrhythmic && !currentBeatIsArrhythmiaRef.current) {
-        setArrhythmiaCount(prev => prev + 1);
+        console.log("⚠️ ARRHYTHMIA DETECTED!");
+        setArrhythmiaCount(prev => {
+          const newCount = prev + 1;
+          console.log(`Arrhythmia count increased to ${newCount}`);
+          return newCount;
+        });
+        
+        // Dispatch arrhythmia event for other components 
+        if (typeof window !== 'undefined') {
+          const event = new CustomEvent('arrhythmia-detected', {
+            detail: {
+              timestamp: Date.now(),
+              rmssd,
+              rrVariation,
+              intervals: [...rrIntervals],
+              confidence: 0.85
+            }
+          });
+          window.dispatchEvent(event);
+        }
         
         // Dispatch arrhythmia window event for visualization
         if (typeof window !== 'undefined') {

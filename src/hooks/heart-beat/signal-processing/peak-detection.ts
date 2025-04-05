@@ -55,6 +55,19 @@ export function handlePeakDetection(
       
       // Request beep on detected peak
       requestImmediateBeep(result?.filteredValue || 0);
+      
+      // If arrhythmia is detected, dispatch an event for visualization
+      if (result?.isArrhythmia) {
+        console.log("Peak with arrhythmia detected, dispatching event");
+        const arrhythmiaEvent = new CustomEvent('arrhythmia-detected', {
+          detail: {
+            timestamp: now,
+            confidence: result.confidence || 0.7,
+            intensity: (result?.filteredValue || 0.5) * 1.5
+          }
+        });
+        window.dispatchEvent(arrhythmiaEvent);
+      }
     }
   } catch (error) {
     console.error('Error in handlePeakDetection:', error);
