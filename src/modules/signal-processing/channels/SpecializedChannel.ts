@@ -1,67 +1,45 @@
 
 /**
- * Base class for specialized signal processing channels
- * Each channel is optimized for a specific vital sign
+ * Base class for specialized channels
+ * Provides common functionality and type safety
  */
-import { ProcessorType, ChannelConfig } from '../types';
+import { ProcessorType } from '../types';
 
-/**
- * Base channel interface
- */
-export interface BaseChannel<T> {
-  processValue(value: number): T;
-  reset(): void;
-  getType(): ProcessorType;
-  getName(): string;
-  getQuality(): number;
-  id?: string;
+export interface ChannelConfig {
+  name: string;
+  type: ProcessorType;
+  bufferSize?: number;
+  filterStrength?: number;
+  initialAmplification?: number;
+  frequencyBandMin?: number;
+  frequencyBandMax?: number;
 }
 
-/**
- * Channel feedback interface
- */
-export interface ChannelFeedback {
-  channelId: string;
-  signalQuality: number;
-  suggestedAdjustments: {
-    amplificationFactor?: number;
-    filterStrength?: number;
-    baselineCorrection?: number;
-    frequencyRangeMin?: number;
-    frequencyRangeMax?: number;
-  };
-  timestamp: number;
-  success: boolean;
-}
-
-/**
- * Abstract base class for specialized channels
- */
-export abstract class SpecializedChannel<T> implements BaseChannel<T> {
-  protected type: ProcessorType;
-  protected name: string;
-  protected quality: number = 0;
+export abstract class SpecializedChannel<T> {
+  protected readonly name: string;
+  protected readonly type: ProcessorType;
+  protected readonly bufferSize: number;
+  protected readonly filterStrength: number;
   protected recentValues: number[] = [];
-  protected readonly MAX_BUFFER_SIZE: number;
-  protected filterStrength: number;
-  public id?: string;
+  protected quality: number = 0;
   
   constructor(config: ChannelConfig) {
-    this.type = config.type;
     this.name = config.name;
-    this.MAX_BUFFER_SIZE = config.bufferSize || 50;
-    this.filterStrength = config.filterStrength || 0.3;
-    // Generate a unique ID for the channel based on type and name
-    this.id = `${this.type}-${this.name}-${Date.now().toString(36)}`;
+    this.type = config.type;
+    this.bufferSize = config.bufferSize || 100;
+    this.filterStrength = config.filterStrength || 0.5;
+    
+    // Initialize buffer
+    this.recentValues = [];
   }
   
   /**
-   * Process a signal value
+   * Process incoming signal
    */
-  abstract processValue(value: number): T;
+  abstract processSignal(value: number): T;
   
   /**
-   * Reset the channel state
+   * Reset channel state
    */
   reset(): void {
     this.recentValues = [];
@@ -69,128 +47,75 @@ export abstract class SpecializedChannel<T> implements BaseChannel<T> {
   }
   
   /**
-   * Get the channel type
-   */
-  getType(): ProcessorType {
-    return this.type;
-  }
-  
-  /**
-   * Get the channel name
+   * Get channel name
    */
   getName(): string {
     return this.name;
   }
   
   /**
-   * Get the current signal quality
+   * Get channel type
+   */
+  getType(): ProcessorType {
+    return this.type;
+  }
+  
+  /**
+   * Get channel quality
    */
   getQuality(): number {
     return this.quality;
   }
   
   /**
-   * Apply feedback to adjust channel parameters
+   * Get channel feedback
    */
-  applyFeedback(feedback: ChannelFeedback): void {
-    if (feedback.suggestedAdjustments.amplificationFactor !== undefined) {
-      // Apply suggested amplification factor
-    }
-    
-    if (feedback.suggestedAdjustments.filterStrength !== undefined) {
-      this.filterStrength = feedback.suggestedAdjustments.filterStrength;
-    }
-    
-    // Additional feedback parameters can be applied here
+  getFeedback() {
+    return {
+      channelId: this.name,
+      signalQuality: this.quality,
+      suggestedAdjustments: {},
+      timestamp: Date.now(),
+      success: true
+    };
   }
   
   /**
-   * Add a value to the buffer
+   * Apply simple moving average filter
    */
-  protected addToBuffer(value: number): void {
+  protected applySMA(value: number, windowSize: number = 5): number {
     this.recentValues.push(value);
-    if (this.recentValues.length > this.MAX_BUFFER_SIZE) {
+    
+    if (this.recentValues.length > this.bufferSize) {
       this.recentValues.shift();
     }
-  }
-  
-  /**
-   * Apply an SMA filter to the signal
-   */
-  protected applySMAFilter(value: number): number {
-    if (this.recentValues.length === 0) return value;
     
-    const windowSize = Math.min(5, this.recentValues.length);
-    const values = this.recentValues.slice(-windowSize);
-    return [...values, value].reduce((a, b) => a + b, 0) / (windowSize + 1);
-  }
-  
-  /**
-   * Apply an EMA filter to the signal
-   */
-  protected applyEMAFilter(value: number): number {
-    if (this.recentValues.length === 0) return value;
-    
-    const lastValue = this.recentValues[this.recentValues.length - 1];
-    return this.filterStrength * value + (1 - this.filterStrength) * lastValue;
-  }
-  
-  /**
-   * Calculate signal quality based on signal properties
-   */
-  protected calculateSignalQuality(): number {
-    if (this.recentValues.length < 10) return 0;
-    
-    // Get recent values for analysis
-    const recentValues = this.recentValues.slice(-10);
-    
-    // Calculate signal amplitude (min to max) - real data only
-    const min = Math.min(...recentValues);
-    const max = Math.max(...recentValues);
-    const amplitude = max - min;
-    
-    // Calculate average and standard deviation - real data only
-    const avg = recentValues.reduce((sum, val) => sum + val, 0) / recentValues.length;
-    const stdDev = Math.sqrt(
-      recentValues.reduce((sum, val) => sum + Math.pow(val - avg, 2), 0) / recentValues.length
-    );
-    
-    // Calculate noise to signal ratio
-    const noiseToSignalRatio = stdDev / (amplitude + 0.001);
-    
-    // Calculate consistency of peak spacing - real data only
-    let peakConsistency = 0;
-    let lastPeakIndex = -1;
-    let peakSpacings = [];
-    
-    for (let i = 1; i < recentValues.length - 1; i++) {
-      if (recentValues[i] > recentValues[i-1] && recentValues[i] > recentValues[i+1]) {
-        if (lastPeakIndex !== -1) {
-          peakSpacings.push(i - lastPeakIndex);
-        }
-        lastPeakIndex = i;
-      }
+    if (this.recentValues.length < windowSize) {
+      return value;
     }
     
-    if (peakSpacings.length >= 2) {
-      const avgSpacing = peakSpacings.reduce((sum, val) => sum + val, 0) / peakSpacings.length;
-      const spacingVariance = peakSpacings.reduce((sum, val) => sum + Math.pow(val - avgSpacing, 2), 0) / peakSpacings.length;
-      const spacingCoeffOfVar = Math.sqrt(spacingVariance) / avgSpacing;
-      peakConsistency = Math.max(0, 1 - spacingCoeffOfVar);
+    const window = this.recentValues.slice(-windowSize);
+    const sum = window.reduce((a, b) => a + b, 0);
+    return sum / windowSize;
+  }
+  
+  /**
+   * Calculate signal quality
+   */
+  protected updateQuality(): void {
+    if (this.recentValues.length < 10) {
+      this.quality = Math.min(this.recentValues.length * 10, 100);
+      return;
     }
     
-    // Calculate overall quality score with weighted components - real data only
-    const amplitudeScore = Math.min(1, amplitude / 0.5);  // Normalize amplitude
-    const stdDevScore = Math.min(1, Math.max(0, 1 - noiseToSignalRatio));  // Lower noise is better
+    // Calculate signal variance
+    const mean = this.recentValues.reduce((a, b) => a + b, 0) / this.recentValues.length;
+    const variance = this.recentValues.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / this.recentValues.length;
     
-    // Weight the factors to get overall quality
-    const weightedScore = (
-      amplitudeScore * 0.4 +          // 40% amplitude
-      stdDevScore * 0.4 +             // 40% signal-to-noise
-      peakConsistency * 0.2           // 20% peak consistency
-    );
+    // Calculate signal-to-noise ratio
+    const snr = mean / Math.sqrt(variance);
     
-    // Normalize to 0-1 range
-    return Math.max(0, Math.min(1, weightedScore));
+    // Map SNR to quality (0-100)
+    this.quality = Math.min(100, Math.max(0, Math.round(snr * 10)));
   }
 }

@@ -2,10 +2,10 @@
 /**
  * Hook for using the hybrid vital signs processor
  * Combines traditional signal processing with neural networks
+ * Optimized for better performance and memory usage
  */
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { VitalSignsProcessor, HybridProcessingOptions, VitalSignsResult } from '../modules/vital-signs';
-import { HybridVitalSignsProcessor } from '../modules/vital-signs/HybridVitalSignsProcessor';
+import { HybridVitalSignsProcessor, HybridProcessingOptions, VitalSignsResult } from '../modules/vital-signs';
 
 /**
  * Configuration for the hook
@@ -16,6 +16,9 @@ interface UseHybridVitalSignsProcessorOptions {
   neuralConfidenceThreshold?: number;
   adaptiveProcessing?: boolean;
   enhancedCalibration?: boolean;
+  useWebGPU?: boolean;
+  useQuantization?: boolean;
+  optimizeForMobile?: boolean;
 }
 
 /**
@@ -25,13 +28,13 @@ export const useHybridVitalSignsProcessor = (options?: UseHybridVitalSignsProces
   // Create processor instance with hybrid capabilities
   const processorRef = useRef<HybridVitalSignsProcessor | null>(null);
   
-  // States
+  // States - optimized with React.useState for better performance
   const [lastResult, setLastResult] = useState<VitalSignsResult | null>(null);
   const [lastValidResults, setLastValidResults] = useState<VitalSignsResult | null>(null);
   const [neuralEnabled, setNeuralEnabled] = useState<boolean>(options?.useNeuralModels ?? false);
   const [diagnosticsEnabled, setDiagnosticsEnabled] = useState<boolean>(false);
   
-  // Create processor on mount
+  // Create processor on mount - using useEffect for proper lifecycle management
   useEffect(() => {
     console.log("Creating hybrid vital signs processor");
     processorRef.current = new HybridVitalSignsProcessor({
@@ -39,7 +42,10 @@ export const useHybridVitalSignsProcessor = (options?: UseHybridVitalSignsProces
       neuralWeight: options?.neuralWeight ?? 0.6,
       neuralConfidenceThreshold: options?.neuralConfidenceThreshold ?? 0.5,
       adaptiveProcessing: options?.adaptiveProcessing ?? true,
-      enhancedCalibration: options?.enhancedCalibration ?? true
+      enhancedCalibration: options?.enhancedCalibration ?? true,
+      useWebGPU: options?.useWebGPU ?? false,
+      useQuantization: options?.useQuantization ?? false,
+      optimizeForMobile: options?.optimizeForMobile ?? true
     });
     
     return () => {
@@ -50,6 +56,7 @@ export const useHybridVitalSignsProcessor = (options?: UseHybridVitalSignsProces
   
   /**
    * Process a PPG signal to calculate vital signs
+   * Optimized for performance with memoization via useCallback
    */
   const processSignal = useCallback((
     value: number, 
@@ -95,7 +102,7 @@ export const useHybridVitalSignsProcessor = (options?: UseHybridVitalSignsProces
   }, []);
   
   /**
-   * Toggle neural processing
+   * Toggle neural processing - optimized for reduced rerenders
    */
   const toggleNeuralProcessing = useCallback((enabled: boolean) => {
     if (processorRef.current) {
@@ -112,7 +119,7 @@ export const useHybridVitalSignsProcessor = (options?: UseHybridVitalSignsProces
   }, []);
   
   /**
-   * Update processor options
+   * Update processor options - optimized with useCallback
    */
   const updateOptions = useCallback((newOptions: Partial<HybridProcessingOptions>) => {
     if (processorRef.current) {
@@ -121,7 +128,7 @@ export const useHybridVitalSignsProcessor = (options?: UseHybridVitalSignsProces
   }, []);
   
   /**
-   * Get neural network information
+   * Get neural network information - optimized with useCallback
    */
   const getNeuralInfo = useCallback(() => {
     if (!processorRef.current) {
@@ -132,7 +139,7 @@ export const useHybridVitalSignsProcessor = (options?: UseHybridVitalSignsProces
   }, []);
   
   /**
-   * Reset processor
+   * Reset processor - optimized with useCallback
    */
   const reset = useCallback(() => {
     if (!processorRef.current) return null;

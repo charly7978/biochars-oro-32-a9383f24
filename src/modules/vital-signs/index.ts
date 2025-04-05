@@ -1,15 +1,14 @@
 
 /**
  * Central export for vital signs module
+ * Optimized and consolidated exports following SOLID principles
  */
 
-// Export the VitalSignsProcessor
+// Core processors
 export { VitalSignsProcessor } from './VitalSignsProcessor';
-
-// Export the HybridVitalSignsProcessor
 export { HybridVitalSignsProcessor } from './HybridVitalSignsProcessor';
 
-// Export type definitions for vital signs
+// Type definitions
 export type { 
   VitalSignsResult, 
   LipidsResult, 
@@ -17,28 +16,26 @@ export type {
   ProcessorFeedback
 } from './types/vital-signs-result';
 
-// Export the confidence calculator
+// Calculation utilities
 export { ConfidenceCalculator } from './calculators/confidence-calculator';
-
-// Export the result factory
 export { ResultFactory } from './factories/result-factory';
 
-// Export specialized processors
-export * from './specialized/BaseVitalSignProcessor';
-export * from './specialized/HydrationProcessor';
-export * from './signal-processor';
+// Specialized processors
+export { BaseVitalSignProcessor } from './specialized/BaseVitalSignProcessor';
+export { HydrationProcessor } from './specialized/HydrationProcessor';
+export { SignalProcessor } from './signal-processor';
 
-// Export shared utilities
+// Shared utilities
 export * from './shared-signal-utils';
 
-// Export HybridProcessingOptions interface for configuration
+// Configuration interfaces
 export interface HybridProcessingOptions {
   useNeuralModels?: boolean;
   neuralWeight?: number;
   neuralConfidenceThreshold?: number;
   adaptiveProcessing?: boolean;
   enhancedCalibration?: boolean;
-  // Add TensorFlow optimization options
+  // TensorFlow optimization options
   useWebGPU?: boolean;
   useQuantization?: boolean;
   optimizeForMobile?: boolean;
@@ -47,7 +44,7 @@ export interface HybridProcessingOptions {
 // Re-export signal processing options to ensure compatibility
 export { type SignalProcessingOptions } from '../signal-processing/types';
 
-// Export channel feedback interface for communication between components
+// Channel feedback interface
 export interface ChannelFeedback {
   channelId: string;
   signalQuality: number;
@@ -62,7 +59,7 @@ export interface ChannelFeedback {
   success: boolean;
 }
 
-// Export AutoCalibrationOptions for new calibration functionality
+// Auto-calibration options
 export interface AutoCalibrationOptions {
   useHistoricalData?: boolean;
   calibrationPeriod?: number; // in milliseconds
@@ -71,7 +68,7 @@ export interface AutoCalibrationOptions {
   environmentalAdjustment?: boolean;
 }
 
-// Export interface for neural network model configuration
+// Neural network model configuration
 export interface NeuralModelConfig {
   modelType: string;
   inputShape: number[];

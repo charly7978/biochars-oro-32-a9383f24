@@ -1,85 +1,111 @@
 
 /**
- * Hook integrador para procesamiento de señales y extracción de signos vitales
- * Conecta los módulos de extracción con los de procesamiento
+ * Integrated hook that connects signal extraction with vital signs processing
+ * Optimized for performance and memory usage
  */
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import { usePPGExtraction } from './usePPGExtraction';
-import { useSignalProcessing, ProcessedSignalResult } from './useSignalProcessing';
+import { useSignalProcessing } from './useSignalProcessing';
 import { useVitalSignsProcessor } from './useVitalSignsProcessor';
+import { useHybridVitalSignsProcessor } from './useHybridVitalSignsProcessor';
 
 /**
- * Resultado integrado del procesamiento completo
+ * Integrated result type
  */
 export interface IntegratedVitalsResult {
-  // Datos de señal
+  // Signal data
   timestamp: number;
   quality: number;
   fingerDetected: boolean;
   
-  // Señales procesadas
+  // Processed signals
   rawValue: number;
   filteredValue: number;
   amplifiedValue: number;
   
-  // Información cardíaca
+  // Heart data
   heartRate: number;
   isPeak: boolean;
   rrInterval: number | null;
   
-  // Signos vitales
+  // Vital signs
   spo2: number;
   pressure: string;
   arrhythmiaStatus: string;
   arrhythmiaCount: number;
+  hydration?: number;
 }
 
 /**
- * Hook que integra extracción y procesamiento
+ * Hook configuration
  */
-export function useVitalSignsWithProcessing() {
-  // Hooks de extracción y procesamiento
+interface UseVitalSignsWithProcessingOptions {
+  useNeuralModels?: boolean;
+  useAdaptiveProcessing?: boolean;
+  useWebGPU?: boolean;
+}
+
+/**
+ * Integrated hook for vital signs extraction and processing
+ */
+export function useVitalSignsWithProcessing(options?: UseVitalSignsWithProcessingOptions) {
+  // Core processing hooks
   const extraction = usePPGExtraction();
-  const processing = useSignalProcessing();
-  const vitalSigns = useVitalSignsProcessor();
+  const signalProcessing = useSignalProcessing();
+  const standardProcessor = useVitalSignsProcessor();
+  const hybridProcessor = useHybridVitalSignsProcessor({
+    useNeuralModels: options?.useNeuralModels ?? false,
+    adaptiveProcessing: options?.useAdaptiveProcessing ?? true,
+    useWebGPU: options?.useWebGPU ?? false
+  });
   
-  // Estado integrado
+  // Integrated state
   const [isMonitoring, setIsMonitoring] = useState<boolean>(false);
   const [lastResult, setLastResult] = useState<IntegratedVitalsResult | null>(null);
+  const [useNeural, setUseNeural] = useState<boolean>(options?.useNeuralModels ?? false);
   
-  // Contadores y buffers
+  // Performance metrics
   const processedFramesRef = useRef<number>(0);
   const lastProcessTimeRef = useRef<number>(Date.now());
+  const fpsCounterRef = useRef<{count: number, lastUpdate: number}>({count: 0, lastUpdate: Date.now()});
+  const [fps, setFps] = useState<number>(0);
   
   /**
-   * Procesa un frame completo de la cámara
+   * Process a camera frame
    */
   const processFrame = useCallback((imageData: ImageData) => {
     if (!isMonitoring) return;
     
     try {
-      // 1. Extraer valor PPG crudo del frame
+      // Extract PPG value from frame
       extraction.processFrame(imageData);
       
-      // El procesamiento posterior se maneja en el useEffect
+      // Track FPS
+      fpsCounterRef.current.count++;
+      const now = Date.now();
+      if (now - fpsCounterRef.current.lastUpdate > 1000) {
+        setFps(fpsCounterRef.current.count);
+        fpsCounterRef.current = {count: 0, lastUpdate: now};
+      }
     } catch (error) {
-      console.error("Error procesando frame:", error);
+      console.error("Error processing frame:", error);
     }
   }, [isMonitoring, extraction]);
   
   /**
-   * Realiza el procesamiento cuando hay un nuevo resultado de extracción
+   * Process signal when new extraction result is available
    */
   useEffect(() => {
     if (!isMonitoring || !extraction.lastResult) return;
     
     try {
-      // 2. Procesar el valor PPG extraído
-      const processedSignal = processing.processValue(extraction.lastResult.filteredValue);
+      // Process the extracted PPG value
+      const processedSignal = signalProcessing.processValue(extraction.lastResult.filteredValue);
       
       if (processedSignal && processedSignal.fingerDetected) {
-        // 3. Procesar para obtener signos vitales
-        const vitalsResult = vitalSigns.processSignal(
+        // Process vital signs using appropriate processor
+        const processor = useNeural ? hybridProcessor : standardProcessor;
+        const vitalsResult = processor.processSignal(
           processedSignal.filteredValue, 
           { 
             intervals: processedSignal.rrInterval ? [processedSignal.rrInterval] : [],
@@ -87,7 +113,7 @@ export function useVitalSignsWithProcessing() {
           }
         );
         
-        // 4. Crear resultado integrado
+        // Create integrated result
         const integratedResult: IntegratedVitalsResult = {
           timestamp: processedSignal.timestamp,
           quality: processedSignal.quality,
@@ -104,84 +130,117 @@ export function useVitalSignsWithProcessing() {
           spo2: vitalsResult.spo2,
           pressure: vitalsResult.pressure,
           arrhythmiaStatus: vitalsResult.arrhythmiaStatus.split('|')[0] || '--',
-          arrhythmiaCount: parseInt(vitalsResult.arrhythmiaStatus.split('|')[1] || '0', 10)
+          arrhythmiaCount: parseInt(vitalsResult.arrhythmiaStatus.split('|')[1] || '0', 10),
+          hydration: vitalsResult.lipids.hydrationPercentage
         };
         
-        // Actualizar resultado
+        // Update result
         setLastResult(integratedResult);
         
-        // Incrementar contador de frames procesados
+        // Increment counter and update timestamp
         processedFramesRef.current++;
-        lastProcessTimeRef.current = Date.now();
+        lastProcessTimeRef.current = now;
       }
     } catch (error) {
-      console.error("Error en procesamiento integrado:", error);
+      console.error("Error in integrated processing:", error);
     }
-  }, [isMonitoring, extraction.lastResult, processing, vitalSigns]);
+  }, [isMonitoring, extraction.lastResult, signalProcessing, standardProcessor, hybridProcessor, useNeural]);
   
   /**
-   * Inicia el monitoreo completo
+   * Start monitoring
    */
   const startMonitoring = useCallback(() => {
-    console.log("useVitalSignsWithProcessing: Iniciando monitoreo");
+    console.log("useVitalSignsWithProcessing: Starting monitoring");
     
-    // Iniciar todos los subsistemas
+    // Start all subsystems
     extraction.startProcessing();
-    processing.startProcessing();
-    vitalSigns.startProcessing(); // Changed from initializeProcessor to startProcessing
+    signalProcessing.startProcessing();
+    standardProcessor.startProcessing();
     
+    // Reset counters
     processedFramesRef.current = 0;
     lastProcessTimeRef.current = Date.now();
+    fpsCounterRef.current = {count: 0, lastUpdate: Date.now()};
     
     setIsMonitoring(true);
-  }, [extraction, processing, vitalSigns]);
+  }, [extraction, signalProcessing, standardProcessor]);
   
   /**
-   * Detiene el monitoreo completo
+   * Stop monitoring
    */
   const stopMonitoring = useCallback(() => {
-    console.log("useVitalSignsWithProcessing: Deteniendo monitoreo");
+    console.log("useVitalSignsWithProcessing: Stopping monitoring");
     
-    // Detener todos los subsistemas
+    // Stop all subsystems
     extraction.stopProcessing();
-    processing.stopProcessing();
-    vitalSigns.reset();
+    signalProcessing.stopProcessing();
+    standardProcessor.reset();
+    hybridProcessor.reset();
     
     setIsMonitoring(false);
     setLastResult(null);
-  }, [extraction, processing, vitalSigns]);
+  }, [extraction, signalProcessing, standardProcessor, hybridProcessor]);
   
   /**
-   * Reinicia completamente el sistema
+   * Toggle neural processing
+   */
+  const toggleNeuralProcessing = useCallback((enabled: boolean) => {
+    setUseNeural(enabled);
+    hybridProcessor.toggleNeuralProcessing(enabled);
+  }, [hybridProcessor]);
+  
+  /**
+   * Reset the entire system
    */
   const reset = useCallback(() => {
-    console.log("useVitalSignsWithProcessing: Reiniciando sistema");
+    console.log("useVitalSignsWithProcessing: Resetting system");
     
     stopMonitoring();
     
-    // Reiniciar todos los subsistemas
+    // Reset all subsystems
     extraction.reset();
-    vitalSigns.fullReset();
+    signalProcessing.reset();
+    standardProcessor.fullReset();
+    hybridProcessor.reset();
     
+    // Reset counters
     processedFramesRef.current = 0;
     lastProcessTimeRef.current = Date.now();
-  }, [extraction, vitalSigns, stopMonitoring]);
+    fpsCounterRef.current = {count: 0, lastUpdate: Date.now()};
+  }, [extraction, signalProcessing, standardProcessor, hybridProcessor, stopMonitoring]);
   
-  return {
-    // Estado
+  // Optimized return object using useMemo
+  return useMemo(() => ({
+    // State
     isMonitoring,
     lastResult,
     processedFrames: processedFramesRef.current,
+    fps,
+    useNeural,
     
-    // Métricas de extracción
-    signalQuality: processing.signalQuality,
-    fingerDetected: processing.fingerDetected,
-    heartRate: processing.heartRate,
+    // Metrics from extraction
+    signalQuality: signalProcessing.signalQuality,
+    fingerDetected: signalProcessing.fingerDetected,
+    heartRate: signalProcessing.heartRate,
     
-    // Acciones
+    // Actions
     processFrame,
     startMonitoring,
     stopMonitoring,
-    reset
-  };
+    reset,
+    toggleNeuralProcessing
+  }), [
+    isMonitoring,
+    lastResult,
+    fps,
+    useNeural,
+    signalProcessing.signalQuality,
+    signalProcessing.fingerDetected,
+    signalProcessing.heartRate,
+    processFrame,
+    startMonitoring,
+    stopMonitoring,
+    reset,
+    toggleNeuralProcessing
+  ]);
 }

@@ -1,6 +1,7 @@
 
 /**
  * Signal processing types
+ * Optimized and consolidated type definitions
  */
 
 /**
@@ -39,12 +40,12 @@ export interface ProcessedHeartbeatSignal {
   confidence: number;
   isPeak: boolean;
   rr?: number | null;
-  // Additional properties needed by implementations
+  // Additional properties
   peakConfidence?: number;
   instantaneousBPM?: number | null;
   rrInterval?: number | null;
   heartRateVariability?: number | null;
-  value?: number; // Added to fix build errors
+  value?: number; // For compatibility
 }
 
 /**
@@ -55,7 +56,7 @@ export interface SignalProcessingOptions {
   filterStrength?: number;
   qualityThreshold?: number;
   fingerDetectionSensitivity?: number;
-  // Additional options needed by implementations
+  // Additional options
   useAdaptiveControl?: boolean;
   qualityEnhancedByPrediction?: boolean;
   adaptationRate?: number;
