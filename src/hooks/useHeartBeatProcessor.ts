@@ -1,3 +1,4 @@
+
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { HeartBeatResult } from './heart-beat/types';
 import { useArrhythmiaDetector } from './heart-beat/arrhythmia-detector';
@@ -219,38 +220,6 @@ export function useHeartBeatProcessor() {
     
     console.log("HeartBeatProcessor: Reset completed");
   }, [resetArrhythmia]);
-  
-  // Start monitoring
-  const startMonitoring = useCallback(() => {
-    setIsMonitoring(true);
-    monitoringRef.current = true;
-    
-    // Initialize audio if not already
-    if (!heartbeatAudioRef.current && typeof AudioContext !== 'undefined') {
-      try {
-        heartbeatAudioRef.current = new AudioContext();
-      } catch (err) {
-        console.error("Error creating audio context:", err);
-      }
-    }
-    
-    console.log("HeartBeatProcessor: Monitoring state set to true");
-  }, []);
-  
-  // Stop monitoring
-  const stopMonitoring = useCallback(() => {
-    setIsMonitoring(false);
-    monitoringRef.current = false;
-    console.log("HeartBeatProcessor: Monitoring stopped");
-    
-    // Close audio context if it exists
-    if (heartbeatAudioRef.current) {
-      heartbeatAudioRef.current.close().catch(err => {
-        console.error("Error closing audio context:", err);
-      });
-      heartbeatAudioRef.current = null;
-    }
-  }, []);
   
   return {
     currentBPM,
