@@ -1,5 +1,7 @@
 
 /**
+ * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
+ * 
  * Hook integrador para procesamiento de señales y extracción de signos vitales
  * Conecta los módulos de extracción con los de procesamiento
  */
@@ -128,7 +130,7 @@ export function useVitalSignsWithProcessing() {
     // Iniciar todos los subsistemas
     extraction.startProcessing();
     processing.startProcessing();
-    vitalSigns.startProcessing(); // Changed from initializeProcessor to startProcessing
+    vitalSigns.initializeProcessor();
     
     processedFramesRef.current = 0;
     lastProcessTimeRef.current = Date.now();
