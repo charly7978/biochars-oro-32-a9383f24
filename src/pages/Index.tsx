@@ -8,9 +8,6 @@ import PPGSignalMeter from "@/components/PPGSignalMeter";
 import MonitorButton from "@/components/MonitorButton";
 import AppTitle from "@/components/AppTitle";
 import { VitalSignsResult } from "@/modules/vital-signs";
-import { useNavigate } from "react-router-dom";
-import { Button } from "@/components/ui/button";
-import { Activity } from "lucide-react";
 
 const Index = () => {
   const [isMonitoring, setIsMonitoring] = useState(false);
@@ -54,8 +51,6 @@ const Index = () => {
       console.log('Error al entrar en pantalla completa:', err);
     }
   };
-
-  const navigate = useNavigate();
 
   useEffect(() => {
     const preventScroll = (e: Event) => e.preventDefault();
@@ -384,16 +379,6 @@ const Index = () => {
           </div>
         </div>
       </div>
-
-      <Button 
-        variant="outline" 
-        size="sm" 
-        className="fixed bottom-4 right-4 bg-black/80 text-white border-zinc-700 hover:bg-black/90" 
-        onClick={() => navigate('/monitoring')}
-      >
-        <Activity className="w-4 h-4 mr-2" />
-        Monitoreo Técnico
-      </Button>
     </div>
   );
 };

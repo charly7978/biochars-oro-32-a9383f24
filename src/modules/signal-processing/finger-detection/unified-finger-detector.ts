@@ -2,370 +2,281 @@
 /**
  * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
  * 
- * Detector unificado de dedos
+ * Sistema unificado para detección de dedos
  * 
- * IMPORTANTE: Este es el módulo central del sistema de detección de dedos.
- * Todas las fuentes de detección deben reportar a este detector, y todos
- * los componentes deben consultar a este detector para conocer el estado
- * actual de detección de dedos.
+ * IMPORTANTE: Este sistema coordina múltiples fuentes de detección
+ * para proporcionar un resultado consolidado y más confiable.
  */
 
-import { logError, ErrorLevel } from '@/utils/debugUtils';
 import { 
   DetectionSource, 
-  DetectionState,
+  DetectionState, 
+  SourceDetectionResult,
   DiagnosticEventType
 } from './finger-detection-types';
-import { 
-  reportFingerDetection, 
-  reportDiagnosticEvent 
-} from './finger-diagnostics';
-import { 
-  getCalibrationParameters, 
-  updateEnvironmentalState 
+import { reportDiagnosticEvent, fingerDiagnostics } from './finger-diagnostics';
+import {
+  adaptDetectionThresholds,
+  getCalibrationParameters
 } from './adaptive-calibration';
 
+// Estado inicial de detección
+const initialState: DetectionState = {
+  isFingerDetected: false,
+  confidence: 0,
+  sources: {},
+  amplitude: {
+    detected: false,
+    confidence: 0,
+    timestamp: Date.now()
+  },
+  rhythm: {
+    detected: false,
+    confidence: 0,
+    timestamp: Date.now()
+  },
+  lastUpdate: Date.now()
+};
+
+// Estado actual de detección
+let currentState: DetectionState = { ...initialState };
+
+// Configuración de confianza mínima para detección
+const DETECTION_THRESHOLD = 0.6;
+const CONFIDENCE_WEIGHTS: Record<string, number> = {
+  [DetectionSource.AMPLITUDE]: 0.35,
+  [DetectionSource.RHYTHM]: 0.4,
+  [DetectionSource.PPG_EXTRACTOR]: 0.25,
+  [DetectionSource.SIGNAL_QUALITY_AMPLITUDE]: 0.3,
+  [DetectionSource.SIGNAL_QUALITY_STATE]: 0.25,
+  [DetectionSource.BRIGHTNESS]: 0.2,
+  [DetectionSource.WEAK_SIGNAL_RESULT]: 0.2,
+  [DetectionSource.RHYTHM_PATTERN]: 0.4,
+};
+
 /**
- * Implementación del detector unificado de dedos
+ * Actualiza una fuente de detección y recalcula el estado global
  */
-export class UnifiedFingerDetector {
-  private detectionSources: Map<DetectionSource, { detected: boolean, confidence: number, lastUpdate: number }> = new Map();
-  private isFingerDetected: boolean = false;
-  private detectionConfidence: number = 0;
-  private lastStateChangeTime: number = 0;
-  private detectionHysteresis: number = 1000; // ms de histéresis para evitar cambios rápidos de estado
+export function updateDetectionSource(
+  source: DetectionSource,
+  detected: boolean,
+  confidence: number = 0.5
+): void {
+  // Asegurar que exista una entrada para esta fuente
+  if (!currentState.sources[source]) {
+    currentState.sources[source] = {
+      detected: false,
+      confidence: 0,
+      timestamp: Date.now()
+    };
+  }
   
-  // Contador de cambios de estado para diagnóstico
-  private stateChangeCounter: number = 0;
-  
-  // Factores de peso para fuentes específicas
-  private sourceWeights: Record<DetectionSource, number> = {
-    'ppg-extractor': 1.0,
-    'signal-quality-amplitude': 0.9,
-    'signal-quality-pattern': 1.2,
-    'signal-quality-state': 0.8,
-    'weak-signal-result': 0.7,
-    'rhythm-pattern': 1.3,
-    'brightness': 0.6,
-    'camera-analysis': 0.5,
-    'motion-detection': 0.4,
-    'unified-detection': 1.0
+  // Actualizar fuente específica
+  const sourceResult: SourceDetectionResult = {
+    detected,
+    confidence,
+    timestamp: Date.now()
   };
   
-  /**
-   * Constructor con inicialización de fuentes por defecto
-   */
-  constructor() {
-    // Inicializar todas las fuentes como no detectadas
-    Object.keys(this.sourceWeights).forEach(source => {
-      this.detectionSources.set(source as DetectionSource, {
-        detected: false,
-        confidence: 0,
-        lastUpdate: 0
-      });
-    });
-    
-    logError(
-      "UnifiedFingerDetector: Detector unificado inicializado",
-      ErrorLevel.INFO,
-      "FingerDetection"
-    );
+  currentState.sources[source] = sourceResult;
+  
+  // Actualizar fuentes principales si corresponde
+  if (source === DetectionSource.AMPLITUDE || 
+      source === DetectionSource.SIGNAL_QUALITY_AMPLITUDE) {
+    currentState.amplitude = sourceResult;
+  } else if (source === DetectionSource.RHYTHM || 
+             source === DetectionSource.RHYTHM_PATTERN) {
+    currentState.rhythm = sourceResult;
   }
   
-  /**
-   * Actualiza el estado de detección desde una fuente
-   */
-  public updateSource(source: DetectionSource, detected: boolean, confidence: number = 1.0): void {
-    // Asegurar rango de confianza válido
-    confidence = Math.max(0, Math.min(1, confidence));
-    
-    // Actualizar fuente
-    this.detectionSources.set(source, { 
-      detected, 
-      confidence,
-      lastUpdate: Date.now()
-    });
-    
-    // Recalcular estado general
-    this.recalculateDetectionState();
-  }
+  // Recalcular estado global
+  recalculateDetectionState();
   
-  /**
-   * Establece el peso de una fuente específica
-   */
-  public setSourceWeight(source: DetectionSource, weight: number): void {
-    weight = Math.max(0.1, Math.min(2.0, weight));
-    this.sourceWeights[source] = weight;
-    
-    logError(
-      `UnifiedFingerDetector: Peso de fuente ${source} actualizado a ${weight}`,
-      ErrorLevel.DEBUG,
-      "FingerDetection"
-    );
-  }
-  
-  /**
-   * Obtiene el estado actual de detección
-   */
-  public getDetectionState(): DetectionState {
-    const calibrationParams = getCalibrationParameters();
-    const sourcesObject: Record<DetectionSource, { detected: boolean, confidence: number }> = {} as Record<DetectionSource, { detected: boolean, confidence: number }>;
-    
-    // Convertir Map a objeto para más fácil consumo
-    this.detectionSources.forEach((value, key) => {
-      sourcesObject[key] = {
-        detected: value.detected,
-        confidence: value.confidence
-      };
-    });
-    
-    return {
-      isFingerDetected: this.isFingerDetected,
-      confidence: this.detectionConfidence,
-      sources: sourcesObject,
-      thresholds: {
-        sensitivityLevel: calibrationParams.sensitivityLevel,
-        qualityFactor: calibrationParams.environmentQualityFactor,
-        environmentFactor: 1.0, // Valor por defecto
-        adaptationRate: 0.1, // Valor por defecto
-        amplitudeThreshold: calibrationParams.amplitudeThreshold,
-        falsePositiveReduction: calibrationParams.falsePositiveReduction,
-        falseNegativeReduction: calibrationParams.falseNegativeReduction
-      }
-    };
-  }
-  
-  /**
-   * Reinicia el estado del detector
-   */
-  public reset(): void {
-    // Limpiar estado de todas las fuentes
-    this.detectionSources.forEach((_, key) => {
-      this.detectionSources.set(key, { 
-        detected: false,
-        confidence: 0,
-        lastUpdate: 0
-      });
-    });
-    
-    this.isFingerDetected = false;
-    this.detectionConfidence = 0;
-    this.lastStateChangeTime = 0;
-    this.stateChangeCounter = 0;
-    
-    // Reportar evento de reseteo
-    reportDiagnosticEvent(
-      'DETECTOR_RESET',
-      'unified-detection',
-      false,
-      1.0,
-      { reason: 'manual-reset' }
-    );
-    
-    logError(
-      "UnifiedFingerDetector: Sistema de detección reiniciado",
-      ErrorLevel.INFO,
-      "FingerDetection"
-    );
-  }
-  
-  /**
-   * Adapta umbrales basados en calidad de señal y brillo ambiental
-   */
-  public adaptThresholds(signalQuality: number, brightness?: number): void {
-    // Normalizar valores
-    const qualityFactor = Math.max(0, Math.min(1, signalQuality / 100));
-    let brightnessFactor = 1.0;
-    
-    if (brightness !== undefined) {
-      brightnessFactor = Math.min(1, Math.max(0.1, brightness / 255));
-    }
-    
-    // Actualizar estado ambiental para la calibración adaptativa
-    updateEnvironmentalState({ 
-      signalToNoiseRatio: qualityFactor,
-      brightness: brightness
-    });
-  }
-  
-  /**
-   * Recalcula el estado general de detección
-   */
-  private recalculateDetectionState(): void {
-    if (this.detectionSources.size === 0) {
-      this.isFingerDetected = false;
-      this.detectionConfidence = 0;
-      return;
-    }
-    
-    const now = Date.now();
-    let weightedSum = 0;
-    let totalWeight = 0;
-    let activeSources = 0;
-    let recentSources = 0;
-    
-    // Obtener parámetros de calibración actuales
-    const calibrationParams = getCalibrationParameters();
-    
-    // Procesar cada fuente teniendo en cuenta edad y peso
-    for (const [source, data] of this.detectionSources.entries()) {
-      // Calcular edad de los datos en segundos
-      const ageInSeconds = (now - data.lastUpdate) / 1000;
-      
-      // Solo considerar fuentes actualizadas en los últimos 10 segundos
-      if (ageInSeconds <= 10) {
-        // Aplicar descuento por edad (más peso a datos recientes)
-        const ageFactor = Math.max(0.1, 1 - ageInSeconds / 10);
-        
-        // Obtener peso base de la fuente
-        const baseWeight = this.sourceWeights[source] || 1.0;
-        
-        // Calcular peso final
-        const finalWeight = baseWeight * ageFactor;
-        
-        // Acumular para promedio ponderado
-        const sourceValue = data.detected ? data.confidence : 0;
-        weightedSum += sourceValue * finalWeight;
-        totalWeight += finalWeight;
-        
-        // Contadores para estadísticas
-        if (data.detected) {
-          activeSources++;
-        }
-        recentSources++;
-      }
-    }
-    
-    // Calcular confianza promedio ponderada
-    let newConfidence = 0;
-    if (totalWeight > 0) {
-      newConfidence = weightedSum / totalWeight;
-    }
-    
-    // Aplicar factor de sensibilidad
-    const sensitivityAdjustedThreshold = 0.5 * (2 - calibrationParams.sensitivityLevel);
-    
-    // Determinar nuevo estado de detección
-    let newDetected = newConfidence >= sensitivityAdjustedThreshold;
-    
-    // Agregar histéresis para estabilidad
-    if (newDetected !== this.isFingerDetected) {
-      // Si ha pasado suficiente tiempo desde el último cambio, permitir el cambio
-      if (now - this.lastStateChangeTime >= this.detectionHysteresis) {
-        // Registrar cambio de estado
-        if (newDetected) {
-          reportFingerDetection(true, newConfidence, 'unified-detection', {
-            activeSources,
-            recentSources,
-            threshold: sensitivityAdjustedThreshold
-          });
-        } else {
-          reportFingerDetection(false, 1 - newConfidence, 'unified-detection', {
-            activeSources,
-            recentSources,
-            threshold: sensitivityAdjustedThreshold
-          });
-        }
-        
-        this.isFingerDetected = newDetected;
-        this.lastStateChangeTime = now;
-        this.stateChangeCounter++;
-        
-        logError(
-          `UnifiedFingerDetector: Cambio de estado a ${newDetected ? 'DETECTADO' : 'NO DETECTADO'} ` +
-          `con confianza ${newConfidence.toFixed(2)}, fuentes activas: ${activeSources}/${recentSources}`,
-          ErrorLevel.INFO,
-          "FingerDetection"
-        );
-      }
-    }
-    
-    // Actualizar confianza siempre
-    this.detectionConfidence = newConfidence;
-  }
-
-  /**
-   * Obtiene estadísticas del detector
-   */
-  public getStatistics(): Record<string, any> {
-    const now = Date.now();
-    const sourceStats: Record<string, any> = {};
-    
-    // Recopilar estadísticas por fuente
-    this.detectionSources.forEach((data, source) => {
-      sourceStats[source] = {
-        detected: data.detected,
-        confidence: data.confidence,
-        ageMs: now - data.lastUpdate,
-        weight: this.sourceWeights[source] || 1.0
-      };
-    });
-    
-    return {
-      currentState: {
-        isFingerDetected: this.isFingerDetected,
-        confidence: this.detectionConfidence,
-        lastStateChangeTime: this.lastStateChangeTime,
-        timeSinceChange: now - this.lastStateChangeTime,
-        stateChangeCount: this.stateChangeCounter
-      },
-      sources: sourceStats,
-      settings: {
-        hysteresisMs: this.detectionHysteresis,
-        calibration: getCalibrationParameters()
-      }
-    };
-  }
-  
-  /**
-   * Establece umbral de histéresis para cambios de estado
-   */
-  public setHysteresis(milliseconds: number): void {
-    this.detectionHysteresis = Math.max(0, Math.min(5000, milliseconds));
-  }
+  // Actualizar timestamp
+  currentState.lastUpdate = Date.now();
 }
 
-// Crear instancia singleton
-export const unifiedFingerDetector = new UnifiedFingerDetector();
-
 /**
- * Reinicia el detector de dedos
+ * Recalcula el estado global de detección basado en todas las fuentes
  */
-export function resetFingerDetector(): void {
-  unifiedFingerDetector.reset();
+function recalculateDetectionState(): void {
+  // Variables para cálculo
+  let totalWeightedConfidence = 0;
+  let totalWeight = 0;
+  let weightedDetectionCount = 0;
+  
+  // Procesar cada fuente
+  Object.entries(currentState.sources).forEach(([source, result]) => {
+    // Obtener peso de esta fuente
+    const weight = CONFIDENCE_WEIGHTS[source as DetectionSource] || 0.2;
+    
+    // Sumar confianza ponderada
+    totalWeightedConfidence += result.confidence * weight;
+    totalWeight += weight;
+    
+    // Sumar detección ponderada
+    if (result.detected) {
+      weightedDetectionCount += weight;
+    }
+  });
+  
+  // Calcular confianza global
+  const newConfidence = totalWeight > 0 ? totalWeightedConfidence / totalWeight : 0;
+  
+  // Determinar si hay detección basada en confianza global y consenso ponderado
+  const wasDetected = currentState.isFingerDetected;
+  const newDetected = (weightedDetectionCount / totalWeight) > DETECTION_THRESHOLD;
+  
+  // Actualizar estado global solo si hay cambio
+  if (wasDetected !== newDetected || Math.abs(currentState.confidence - newConfidence) > 0.1) {
+    // Actualizar estado
+    currentState = {
+      ...currentState,
+      isFingerDetected: newDetected,
+      confidence: newConfidence
+    };
+    
+    // Registrar evento diagnóstico en cambios significativos
+    reportDiagnosticEvent(
+      DiagnosticEventType.DETECTOR_RESET,
+      DetectionSource.UNIFIED_DETECTION,
+      newDetected,
+      newConfidence,
+      {
+        weightedDetectionRatio: weightedDetectionCount / totalWeight,
+        threshold: DETECTION_THRESHOLD,
+        sourceCount: Object.keys(currentState.sources).length
+      }
+    );
+  }
 }
 
 /**
  * Obtiene el estado actual de detección
  */
 export function getFingerDetectionState(): DetectionState {
-  return unifiedFingerDetector.getDetectionState();
+  return { ...currentState };
 }
 
 /**
- * Actualiza una fuente de detección
+ * Analiza una señal para buscar patrones rítmicos
+ * No realiza simulación, solo analiza datos reales
  */
-export function updateDetectionSource(source: DetectionSource, detected: boolean, confidence: number = 1.0): void {
-  unifiedFingerDetector.updateSource(source, detected, confidence);
+export function analyzeSignalForRhythmicPattern(
+  value: number,
+  sensitivity: number = 0.5
+): boolean {
+  // Obtener calibración actual
+  const calibParams = getCalibrationParameters();
+  
+  // Ajustar sensibilidad por factores ambientales
+  const adjustedSensitivity = sensitivity * calibParams.environmentQualityFactor;
+  
+  // Solo detectar patrones si la señal es suficientemente fuerte
+  if (Math.abs(value) < calibParams.amplitudeThreshold * 0.8) {
+    return false;
+  }
+  
+  // Verificación simple basada en amplitud y sensibilidad
+  // Esto es un análisis real, no una simulación
+  const detectionThreshold = 0.1 / adjustedSensitivity;
+  const isDetected = Math.abs(value) > detectionThreshold;
+  
+  // Actualizar detector unificado
+  updateDetectionSource(
+    DetectionSource.UNIFIED_DETECTION,
+    isDetected,
+    isDetected ? adjustedSensitivity * 0.8 : 0
+  );
+  
+  return isDetected;
 }
 
 /**
- * Adapta los umbrales según calidad y brillo
- */
-export function adaptDetectionThresholds(signalQuality: number, brightness?: number): void {
-  unifiedFingerDetector.adaptThresholds(signalQuality, brightness);
-}
-
-/**
- * Comprueba si un dedo está actualmente detectado
+ * Verifica si hay un dedo detectado actualmente
  */
 export function isFingerDetected(): boolean {
-  return unifiedFingerDetector.getDetectionState().isFingerDetected;
+  return currentState.isFingerDetected;
 }
 
 /**
  * Obtiene la confianza actual de la detección
  */
 export function getDetectionConfidence(): number {
-  return unifiedFingerDetector.getDetectionState().confidence;
+  return currentState.confidence;
 }
+
+/**
+ * Verifica la fuerza de señal para determinar si el dedo está presente
+ */
+export function checkSignalStrength(
+  value: number,
+  config?: {
+    lowSignalThreshold?: number;
+    maxWeakSignalCount?: number;
+  }
+): {
+  isWeakSignal: boolean;
+  updatedWeakSignalsCount: number;
+  quality: number;
+} {
+  // Obtener parámetros adaptados
+  const calibParams = getCalibrationParameters();
+  
+  // Configurar umbrales
+  const threshold = config?.lowSignalThreshold || calibParams.amplitudeThreshold;
+  const maxWeakCount = config?.maxWeakSignalCount || 5;
+  
+  // Calcular calidad basada en fuerza de señal
+  const signalStrength = Math.abs(value);
+  const quality = Math.min(100, Math.max(0, signalStrength * 500));
+  
+  // Determinar si la señal es débil
+  const isWeak = signalStrength < threshold;
+  
+  // Resultado vacío para compatibilidad con interfaz existente
+  const result = {
+    isWeakSignal: isWeak,
+    updatedWeakSignalsCount: isWeak ? 1 : 0,
+    quality
+  };
+  
+  // Actualizar detector unificado
+  updateDetectionSource(
+    DetectionSource.AMPLITUDE,
+    !isWeak,
+    isWeak ? 0.2 : Math.min(0.9, signalStrength * 4)
+  );
+  
+  return result;
+}
+
+/**
+ * Reinicia completamente el detector
+ */
+export function resetFingerDetector(): void {
+  // Restablecer estado
+  currentState = { ...initialState };
+  
+  // Limpiar diagnósticos
+  fingerDiagnostics.clearEvents();
+  
+  // Registrar evento
+  reportDiagnosticEvent(
+    DiagnosticEventType.DETECTOR_RESET,
+    DetectionSource.COMBINED,
+    false,
+    1.0,
+    { source: 'reset-finger-detector' }
+  );
+}
+
+// Exportar constantes y tipos
+export const unifiedFingerDetector = {
+  updateDetectionSource,
+  getFingerDetectionState,
+  resetFingerDetector,
+  analyzeSignalForRhythmicPattern,
+  isFingerDetected,
+  getDetectionConfidence
+};

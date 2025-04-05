@@ -1,3 +1,4 @@
+
 /**
  * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
  *
@@ -10,7 +11,8 @@ import {
   checkSignalStrength,
   analyzeSignalForRhythmicPattern,
   isFingerDetected as unifiedIsFingerDetected
-} from '@/modules/signal-processing';
+} from '@/modules/signal-processing/finger-detection/unified-finger-detector';
+import { DetectionSource } from '@/modules/signal-processing/finger-detection/finger-detection-types';
 
 // Signal history for pattern detection
 let signalHistory: Array<{time: number, value: number}> = [];
@@ -142,7 +144,7 @@ export function resetSignalQualityState() {
   
   // Actualizar detector unificado
   updateDetectionSource(
-    'signal-quality-state',
+    DetectionSource.SIGNAL_QUALITY_STATE,
     false,
     0.9 // Alta confianza en el reset
   );
@@ -163,7 +165,7 @@ export function isFingerDetected(): boolean {
   
   // Actualizar detector unificado con nuestro estado
   updateDetectionSource(
-    'signal-quality-state',
+    DetectionSource.SIGNAL_QUALITY_STATE,
     localDetection,
     localDetection ? 0.8 : 0.5
   );
@@ -195,7 +197,7 @@ export function shouldProcessMeasurement(value: number): boolean {
 export function createWeakSignalResult(arrhythmiaCounter: number = 0): any {
   // Actualizar detector con señal débil
   updateDetectionSource(
-    'weak-signal-result',
+    DetectionSource.WEAK_SIGNAL_RESULT,
     false,
     0.9 // Alta confianza en que no hay dedo
   );

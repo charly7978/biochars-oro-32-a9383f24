@@ -1,77 +1,142 @@
 
 /**
- * Utilidades para depuración y manejo de errores
+ * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
+ * 
+ * Utilidades de depuración para el sistema
  */
 
-/**
- * Niveles de error para logging
- */
+// Niveles de error
 export enum ErrorLevel {
-  DEBUG = 'debug',
   INFO = 'info',
-  WARN = 'warn',
-  WARNING = 'warning',  // Add WARNING as an alias to WARN for backward compatibility
+  WARNING = 'warning',
   ERROR = 'error',
-  FATAL = 'fatal',
-  CRITICAL = 'critical'  // Add CRITICAL as an alias to FATAL for backward compatibility
+  CRITICAL = 'critical'
 }
+
+// Configuración global de depuración
+export interface DebugConfig {
+  showLogs: boolean;
+  logLevel: ErrorLevel;
+  categories: string[];
+}
+
+// Estado global de depuración
+const debugConfig: DebugConfig = {
+  showLogs: true,
+  logLevel: ErrorLevel.INFO,
+  categories: ['FingerDetection', 'SignalProcessing', 'VitalSigns', 'Camera']
+};
 
 /**
  * Registra un error o mensaje de depuración
  */
 export function logError(
-  message: string, 
-  level: ErrorLevel = ErrorLevel.ERROR, 
-  context: string = 'General',
-  metadata?: any
+  message: string,
+  level: ErrorLevel = ErrorLevel.ERROR,
+  category: string = 'General',
+  details?: any
 ): void {
-  // Determinar el método de console a usar según nivel
-  switch (level) {
-    case ErrorLevel.DEBUG:
-      console.debug(`[${context}] ${message}`);
-      break;
-    case ErrorLevel.INFO:
-      console.info(`[${context}] ${message}`);
-      break;
-    case ErrorLevel.WARN:
-    case ErrorLevel.WARNING:
-      console.warn(`[${context}] ${message}`);
-      break;
-    case ErrorLevel.FATAL:
-    case ErrorLevel.CRITICAL:
-      console.error(`[FATAL] [${context}] ${message}`);
-      break;
-    case ErrorLevel.ERROR:
-    default:
-      console.error(`[${context}] ${message}`);
-      break;
+  // No mostrar si los logs están desactivados
+  if (!debugConfig.showLogs) return;
+  
+  // No mostrar si el nivel es menor que el configurado
+  if (shouldShowErrorLevel(level) && shouldShowCategory(category)) {
+    const timestamp = new Date().toISOString();
+    
+    // Formatear mensaje según nivel
+    switch (level) {
+      case ErrorLevel.INFO:
+        console.log(`${timestamp} info: [${category}] ${message}`, details || '');
+        break;
+      case ErrorLevel.WARNING:
+        console.warn(`${timestamp} warning: [${category}] ${message}`, details || '');
+        break;
+      case ErrorLevel.ERROR:
+      case ErrorLevel.CRITICAL:
+        console.error(`${timestamp} ${level}: [${category}] ${message}`, details || '');
+        break;
+      default:
+        console.log(`${timestamp} debug: [${category}] ${message}`, details || '');
+    }
   }
 }
 
-// Helper functions for error buffer management
-export function getErrorBuffer() {
-  return [];
+/**
+ * Determina si se debe mostrar un nivel de error
+ */
+function shouldShowErrorLevel(level: ErrorLevel): boolean {
+  const levels = [
+    ErrorLevel.INFO,
+    ErrorLevel.WARNING,
+    ErrorLevel.ERROR,
+    ErrorLevel.CRITICAL
+  ];
+  
+  const configLevelIndex = levels.indexOf(debugConfig.logLevel);
+  const currentLevelIndex = levels.indexOf(level);
+  
+  return currentLevelIndex >= configLevelIndex;
 }
 
-export function clearErrorBuffer() {
-  // Implementation to clear error buffer
+/**
+ * Determina si se debe mostrar una categoría
+ */
+function shouldShowCategory(category: string): boolean {
+  return debugConfig.categories.includes(category) || debugConfig.categories.includes('All');
 }
 
-export function setVerboseLogging(enabled: boolean) {
-  // Implementation to set verbose logging
+/**
+ * Actualiza la configuración de depuración
+ */
+export function updateDebugConfig(newConfig: Partial<DebugConfig>): void {
+  Object.assign(debugConfig, newConfig);
+  
+  logError(
+    `Configuración de depuración actualizada: ${JSON.stringify(debugConfig)}`,
+    ErrorLevel.INFO,
+    'System'
+  );
 }
 
-// Function to detect circular references
-export function detectCircular(obj: any): boolean {
-  return false;
+/**
+ * Activa o desactiva los logs
+ */
+export function setLogsEnabled(enabled: boolean): void {
+  debugConfig.showLogs = enabled;
+  
+  if (enabled) {
+    console.log('Sistema de logs activado');
+  }
 }
 
-// Function to safely stringify objects with circular references
-export function safeStringify(obj: any): string {
-  return JSON.stringify(obj);
+/**
+ * Establece el nivel de log
+ */
+export function setLogLevel(level: ErrorLevel): void {
+  debugConfig.logLevel = level;
+  
+  logError(
+    `Nivel de log establecido a: ${level}`,
+    ErrorLevel.INFO,
+    'System'
+  );
 }
 
-// Function to initialize error tracking
-export function initializeErrorTracking() {
-  // Implementation to initialize error tracking
+/**
+ * Obtiene la configuración actual de depuración
+ */
+export function getDebugConfig(): DebugConfig {
+  return { ...debugConfig };
+}
+
+/**
+ * Hook para usar la configuración de depuración
+ */
+export function useDebugConfig() {
+  return {
+    config: getDebugConfig(),
+    updateConfig: updateDebugConfig,
+    setLogsEnabled,
+    setLogLevel
+  };
 }

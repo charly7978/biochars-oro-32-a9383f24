@@ -1,160 +1,101 @@
 
-import { useState, useCallback, useEffect } from 'react';
-import { 
-  logError, 
-  setVerboseLogging, 
-  ErrorLevel,
-  initializeErrorTracking 
-} from '@/utils/debugUtils';
-import { 
-  initializeErrorPreventionSystem,
-  acknowledgeIssues
-} from '@/utils/errorPrevention';
+/**
+ * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
+ * 
+ * Hook para gestionar el modo de depuración
+ */
 
-export const useDebugMode = () => {
-  // Check for debug mode in localStorage
-  const initialDebugMode = localStorage.getItem('debugMode') === 'true';
-  const [isDebugMode, setIsDebugMode] = useState<boolean>(initialDebugMode);
-  const [isPanelVisible, setIsPanelVisible] = useState<boolean>(false);
-  const [signalData, setSignalData] = useState<any[]>([]);
-  const [rawValues, setRawValues] = useState<number[]>([]);
-  const [filteredValues, setFilteredValues] = useState<number[]>([]);
-  const [metrics, setMetrics] = useState<any>({});
-  
-  // Initialize debug mode
-  useEffect(() => {
-    let cleanupErrorPrevention: (() => void) | null = null;
+import { useState, useEffect, useCallback } from 'react';
+import { useLocalStorage } from './useLocalStorage';
+import { ErrorLevel, setLogsEnabled, setLogLevel } from '@/utils/debugUtils';
 
-    if (isDebugMode) {
-      setVerboseLogging(true);
-      logError("Modo de depuración activado", ErrorLevel.INFO, "DebugMode");
-      
-      // Initialize error tracking and prevention systems
-      initializeErrorTracking({
-        verbose: true,
-        setupGlobalHandlers: true
-      });
-      
-      cleanupErrorPrevention = initializeErrorPreventionSystem();
-      
-      // Set up keyboard shortcut (Ctrl+Shift+D)
-      const handleKeyDown = (e: KeyboardEvent) => {
-        if (e.ctrlKey && e.shiftKey && e.key === 'D') {
-          setIsPanelVisible(prev => !prev);
-        }
-      };
-      
-      window.addEventListener('keydown', handleKeyDown);
-      
-      return () => {
-        window.removeEventListener('keydown', handleKeyDown);
-        if (cleanupErrorPrevention) {
-          cleanupErrorPrevention();
-        }
-      };
-    } else {
-      setVerboseLogging(false);
-      
-      // Initialize with basic error tracking
-      initializeErrorTracking({
-        verbose: false,
-        setupGlobalHandlers: true
-      });
-      
-      cleanupErrorPrevention = initializeErrorPreventionSystem();
-      
-      return () => {
-        if (cleanupErrorPrevention) {
-          cleanupErrorPrevention();
-        }
-      };
-    }
-  }, [isDebugMode]);
-  
-  // Toggle debug mode
-  const toggleDebugMode = useCallback(() => {
-    const newMode = !isDebugMode;
-    setIsDebugMode(newMode);
-    localStorage.setItem('debugMode', newMode.toString());
-    
-    logError(
-      `Modo de depuración ${newMode ? 'activado' : 'desactivado'}`, 
-      ErrorLevel.INFO, 
-      "DebugMode"
-    );
-  }, [isDebugMode]);
-  
-  // Show/hide debug panel
-  const toggleDebugPanel = useCallback(() => {
-    setIsPanelVisible(prev => !prev);
-  }, []);
-  
-  // Add signal data for visualization
-  const addSignalData = useCallback((data: any) => {
-    setSignalData(prev => {
-      const newData = [...prev, data];
-      // Keep only the last 300 points
-      if (newData.length > 300) {
-        return newData.slice(-300);
-      }
-      return newData;
-    });
-  }, []);
-  
-  // Add raw value for visualization
-  const addRawValue = useCallback((value: number) => {
-    setRawValues(prev => {
-      const newData = [...prev, value];
-      // Keep only the last 300 points
-      if (newData.length > 300) {
-        return newData.slice(-300);
-      }
-      return newData;
-    });
-  }, []);
-  
-  // Add filtered value for visualization
-  const addFilteredValue = useCallback((value: number) => {
-    setFilteredValues(prev => {
-      const newData = [...prev, value];
-      // Keep only the last 300 points
-      if (newData.length > 300) {
-        return newData.slice(-300);
-      }
-      return newData;
-    });
-  }, []);
-  
-  // Update metrics
-  const updateMetrics = useCallback((newMetrics: any) => {
-    setMetrics(prev => ({
-      ...prev,
-      ...newMetrics
-    }));
-  }, []);
-  
-  // Acknowledge and reset issues
-  const resetIssues = useCallback(() => {
-    acknowledgeIssues();
-    logError("Issues acknowledged and reset", ErrorLevel.INFO, "DebugMode");
-  }, []);
-  
-  return {
-    isDebugMode,
-    toggleDebugMode,
-    isPanelVisible,
-    toggleDebugPanel,
-    showDebugPanel: () => setIsPanelVisible(true),
-    hideDebugPanel: () => setIsPanelVisible(false),
-    signalData,
-    addSignalData,
-    rawValues,
-    addRawValue,
-    filteredValues,
-    addFilteredValue,
-    metrics,
-    updateMetrics,
-    resetIssues
-  };
+// Interface para el modo de depuración
+export interface DebugModeConfig {
+  enabled: boolean;
+  showDiagnostics: boolean;
+  verboseLogging: boolean;
+  showPerformanceMetrics: boolean;
+  logToConsole: boolean;
+  logLevel: ErrorLevel;
+}
+
+// Configuración por defecto
+const DEFAULT_DEBUG_CONFIG: DebugModeConfig = {
+  enabled: false,
+  showDiagnostics: false,
+  verboseLogging: false,
+  showPerformanceMetrics: false,
+  logToConsole: false,
+  logLevel: ErrorLevel.WARNING
 };
 
+/**
+ * Hook para usar el modo de depuración
+ */
+export function useDebugMode() {
+  // Cargar configuración del almacenamiento local
+  const [storedConfig, setStoredConfig] = useLocalStorage<DebugModeConfig>(
+    'debug-mode-config',
+    DEFAULT_DEBUG_CONFIG
+  );
+  
+  // Estado local
+  const [debugConfig, setDebugConfig] = useState<DebugModeConfig>(storedConfig);
+  
+  // Aplicar configuración al sistema de logs
+  useEffect(() => {
+    setLogsEnabled(debugConfig.logToConsole);
+    setLogLevel(debugConfig.logLevel);
+    
+    // Log inicial al activar
+    if (debugConfig.enabled && debugConfig.logToConsole) {
+      console.log('Modo de depuración activado', { 
+        config: debugConfig,
+        timestamp: new Date().toISOString()
+      });
+    }
+  }, [debugConfig]);
+  
+  // Actualizar configuración
+  const updateDebugConfig = useCallback((newConfig: Partial<DebugModeConfig>) => {
+    setDebugConfig(prev => {
+      const updated = { ...prev, ...newConfig };
+      setStoredConfig(updated); // Guardar en almacenamiento local
+      return updated;
+    });
+  }, [setStoredConfig]);
+  
+  // Alternar modo de depuración
+  const toggleDebugMode = useCallback(() => {
+    updateDebugConfig({ enabled: !debugConfig.enabled });
+  }, [debugConfig.enabled, updateDebugConfig]);
+  
+  // Alternar diagnósticos
+  const toggleDiagnostics = useCallback(() => {
+    updateDebugConfig({ showDiagnostics: !debugConfig.showDiagnostics });
+  }, [debugConfig.showDiagnostics, updateDebugConfig]);
+  
+  // Alternar métricas de rendimiento
+  const togglePerformanceMetrics = useCallback(() => {
+    updateDebugConfig({ showPerformanceMetrics: !debugConfig.showPerformanceMetrics });
+  }, [debugConfig.showPerformanceMetrics, updateDebugConfig]);
+  
+  // Alternar logging verboso
+  const toggleVerboseLogging = useCallback(() => {
+    updateDebugConfig({ 
+      verboseLogging: !debugConfig.verboseLogging,
+      logLevel: !debugConfig.verboseLogging ? ErrorLevel.INFO : ErrorLevel.WARNING
+    });
+  }, [debugConfig.verboseLogging, updateDebugConfig]);
+  
+  // Retornar interfaz del hook
+  return {
+    ...debugConfig,
+    updateDebugConfig,
+    toggleDebugMode,
+    toggleDiagnostics,
+    togglePerformanceMetrics,
+    toggleVerboseLogging,
+    isDebugEnabled: debugConfig.enabled
+  };
+}
