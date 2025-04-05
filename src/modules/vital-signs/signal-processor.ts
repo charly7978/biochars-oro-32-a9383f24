@@ -1,42 +1,58 @@
+/**
+ * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
+ */
+import { VitalSignsResult } from './types/vital-signs-result';
 
 /**
- * Simple signal processor for PPG signals
+ * Interface for signal processor
  */
+export interface ISignalProcessor {
+  processSignal(value: number): any;
+  reset(): void;
+}
 
-export class SignalProcessor {
-  private ppgValues: number[] = [];
-  private readonly MAX_BUFFER_SIZE = 300;
+/**
+ * Signal processor for vital signs
+ */
+export class SignalProcessor implements ISignalProcessor {
+  private valueBuffer: number[] = [];
+  private readonly MAX_BUFFER_SIZE = 50;
   
   /**
-   * Apply Simple Moving Average filter
+   * Process a signal value
    */
-  public applySMAFilter(value: number): number {
-    // Add to buffer
-    this.ppgValues.push(value);
-    if (this.ppgValues.length > this.MAX_BUFFER_SIZE) {
-      this.ppgValues.shift();
+  processSignal(value: number): number {
+    // Store in buffer
+    this.valueBuffer.push(value);
+    
+    // Keep buffer size in check
+    if (this.valueBuffer.length > this.MAX_BUFFER_SIZE) {
+      this.valueBuffer.shift();
     }
     
-    // Apply SMA if we have enough points
-    if (this.ppgValues.length >= 5) {
-      const window = this.ppgValues.slice(-5);
-      return window.reduce((sum, val) => sum + val, 0) / window.length;
-    }
-    
-    return value;
+    // Apply simple filtering
+    return this.applyFiltering(value);
   }
   
   /**
-   * Get PPG values buffer
+   * Reset processor
    */
-  public getPPGValues(): number[] {
-    return this.ppgValues;
+  reset(): void {
+    this.valueBuffer = [];
   }
   
   /**
-   * Reset processor state
+   * Apply signal filtering
    */
-  public reset(): void {
-    this.ppgValues = [];
+  private applyFiltering(value: number): number {
+    if (this.valueBuffer.length < 3) {
+      return value;
+    }
+    
+    // Apply simple moving average
+    const recentValues = this.valueBuffer.slice(-3);
+    const avg = recentValues.reduce((a, b) => a + b, 0) / recentValues.length;
+    
+    return avg;
   }
 }

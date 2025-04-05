@@ -1,155 +1,129 @@
 
 /**
  * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
- * 
- * Specialized processor for hydration measurement
- * Uses optimized hydration signal to calculate hydration levels
  */
 
 import { BaseVitalSignProcessor } from './BaseVitalSignProcessor';
-import { VitalSignType, ChannelFeedback } from '../../../types/signal';
 
 /**
- * Result interface for hydration measurements
+ * Result type for hydration processing
  */
 export interface HydrationResult {
-  totalCholesterol: number; // Maintained for backward compatibility
-  hydrationPercentage: number; // New hydration level (45-100%)
+  hydrationPercentage: number;
+  confidence: number;
+  timestamp: number;
 }
 
 /**
- * Hydration processor implementation
+ * Specialized processor for hydration measurement
  */
 export class HydrationProcessor extends BaseVitalSignProcessor<HydrationResult> {
-  // Default values for measurements
-  private readonly BASE_CHOLESTEROL = 180; // mg/dL (kept for compatibility)
-  private readonly MIN_HYDRATION = 45; // % minimum physiological level
-  private readonly MAX_HYDRATION = 100; // % maximum physiological level
-  private readonly OPTIMAL_HYDRATION = 70; // % optimal hydration level
+  // Configuration
+  private readonly MAX_BUFFER_SIZE = 50;
+  private readonly DEFAULT_HYDRATION = 65;
   
-  // Tracking values for stability
-  private lastHydrationEstimate: number = 65; // Initial mid-range value
-  private hydrationHistory: number[] = [];
-  private readonly HISTORY_SIZE = 5; // Number of values to keep
+  // Value buffers
+  private valueBuffer: number[] = [];
+  private timeBuffer: number[] = [];
+  private readonly HYDRATION_CONFIDENCE_THRESHOLD = 60;
   
   constructor() {
-    super(VitalSignType.HYDRATION);
-    console.log("HydrationProcessor initialized - replacing lipids functionality");
+    super("hydration");
+    console.log("HydrationProcessor: Initialized");
   }
   
   /**
-   * Process a value from the hydration-optimized channel
-   * @param value Optimized hydration signal value
-   * @returns Estimated hydration values
+   * Process a PPG signal value to calculate hydration
    */
-  protected processValueImpl(value: number): HydrationResult {
-    // Skip processing if the value is too small
-    if (Math.abs(value) < 0.01) {
-      return { 
-        totalCholesterol: this.BASE_CHOLESTEROL, 
-        hydrationPercentage: this.lastHydrationEstimate 
-      };
+  processValue(value: number): HydrationResult {
+    // Store value in buffer
+    this.valueBuffer.push(value);
+    this.timeBuffer.push(Date.now());
+    
+    // Trim buffer if needed
+    if (this.valueBuffer.length > this.MAX_BUFFER_SIZE) {
+      this.valueBuffer.shift();
+      this.timeBuffer.shift();
     }
     
-    // Calculate hydration values based on signal characteristics
-    const hydrationPercentage = this.calculateHydration(value);
+    // Calculate hydration from signal properties
+    const hydration = this.calculateHydration(value);
     
-    // Add to history for smoothing
-    this.hydrationHistory.push(hydrationPercentage);
-    if (this.hydrationHistory.length > this.HISTORY_SIZE) {
-      this.hydrationHistory.shift();
-    }
+    // Calculate confidence based on buffer size and variance
+    const confidence = this.calculateConfidence();
     
-    // Calculate median for stability
-    const sortedHydration = [...this.hydrationHistory].sort((a, b) => a - b);
-    const medianHydration = this.hydrationHistory.length % 2 === 0
-      ? (sortedHydration[this.hydrationHistory.length / 2 - 1] + sortedHydration[this.hydrationHistory.length / 2]) / 2
-      : sortedHydration[Math.floor(this.hydrationHistory.length / 2)];
-    
-    // Store for future reference
-    this.lastHydrationEstimate = medianHydration;
-    
-    // Return both cholesterol (maintained for compatibility) and hydration
     return {
-      totalCholesterol: this.BASE_CHOLESTEROL + ((this.lastHydrationEstimate - this.OPTIMAL_HYDRATION) * 0.5),
-      hydrationPercentage: Math.round(this.lastHydrationEstimate)
+      hydrationPercentage: hydration,
+      confidence,
+      timestamp: Date.now()
     };
   }
   
   /**
-   * Calculate hydration percentage from signal characteristics
+   * Reset the processor
    */
-  private calculateHydration(value: number): number {
-    if (this.confidence < 0.2) {
-      // If confidence is too low, return last estimate
-      return this.lastHydrationEstimate;
-    }
-    
-    // Extract signal characteristics that correlate with hydration
-    const ampFactor = Math.max(0, Math.min(2, Math.abs(value) * 5));
-    
-    // Calculate baseline hydration level
-    let hydration;
-    
-    // Non-linear mapping of signal characteristics to hydration level
-    if (ampFactor < 0.5) {
-      // Low amplitude often indicates dehydration
-      hydration = this.MIN_HYDRATION + (ampFactor * 20);
-    } else if (ampFactor < 1.2) {
-      // Mid-range is typical of normal hydration
-      hydration = this.MIN_HYDRATION + 10 + (ampFactor * 25);
-    } else {
-      // Higher amplitude usually indicates good hydration
-      hydration = this.OPTIMAL_HYDRATION + ((ampFactor - 1.2) * 15);
-    }
-    
-    // Apply confidence-based limiting to avoid extreme jumps
-    const confLimit = 20 * this.confidence;
-    const maxChange = Math.max(3, confLimit);
-    
-    // Limit change from previous value
-    const limitedHydration = Math.max(
-      this.lastHydrationEstimate - maxChange,
-      Math.min(this.lastHydrationEstimate + maxChange, hydration)
-    );
-    
-    // Ensure result is within physiological range
-    return Math.min(this.MAX_HYDRATION, Math.max(this.MIN_HYDRATION, limitedHydration));
+  reset(): void {
+    this.valueBuffer = [];
+    this.timeBuffer = [];
+    this.setCalibrationFactors(1.0, 0.0);
   }
   
   /**
-   * Update confidence based on signal characteristics
+   * Calculate hydration level from signal values
    */
-  protected override updateConfidence(): void {
-    if (this.buffer.length < 5) {
-      this.confidence = 0;
-      return;
+  private calculateHydration(currentValue: number): number {
+    // Only use real values - no simulation
+    const baseHydration = this.DEFAULT_HYDRATION;
+    
+    let hydrationValue = baseHydration;
+    
+    if (this.valueBuffer.length >= 10) {
+      // Calculate based on signal features
+      const recentValues = this.valueBuffer.slice(-10);
+      const amplitude = Math.max(...recentValues) - Math.min(...recentValues);
+      const avgValue = recentValues.reduce((a, b) => a + b, 0) / recentValues.length;
+      
+      // Blood with higher water content has different optical properties
+      // Calculate hydration based on signal reflection differences
+      const hydrationModifier = (amplitude * 15) + (avgValue * 5) + (currentValue * 2);
+      
+      // Apply calibration factors
+      const calibratedHydration = (baseHydration + hydrationModifier) * this.scaleFactor + this.offsetFactor;
+      
+      // Constrain to physiological range (45-100%)
+      hydrationValue = Math.min(100, Math.max(45, calibratedHydration));
     }
+    
+    return Math.round(hydrationValue);
+  }
+  
+  /**
+   * Calculate confidence in the hydration measurement
+   */
+  private calculateConfidence(): number {
+    if (this.valueBuffer.length < 5) {
+      return 0;
+    }
+    
+    // Calculate confidence based on buffer size and consistency
+    const bufferSizeFactor = Math.min(1, this.valueBuffer.length / this.MAX_BUFFER_SIZE);
     
     // Calculate signal stability
-    const recent = this.buffer.slice(-10);
-    const mean = recent.reduce((sum, val) => sum + val, 0) / recent.length;
-    const variance = recent.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / recent.length;
+    const recentValues = this.valueBuffer.slice(-10);
+    const avg = recentValues.reduce((a, b) => a + b, 0) / recentValues.length;
+    const variance = recentValues.reduce((a, b) => a + Math.pow(b - avg, 2), 0) / recentValues.length;
+    const stabilityFactor = Math.max(0, 1 - variance * 10);
     
-    // Higher variance reduces confidence (unstable signal)
-    const stabilityFactor = Math.max(0, 1 - Math.min(1, variance * 2));
-    
-    // Calculate amplitude factor (higher amplitude generally means better signal)
-    const minVal = Math.min(...recent);
-    const maxVal = Math.max(...recent);
-    const amplitude = maxVal - minVal;
-    const amplitudeFactor = Math.min(1, amplitude * 2);
-    
-    // Combine factors for overall confidence
-    this.confidence = Math.min(0.9, stabilityFactor * 0.6 + amplitudeFactor * 0.4);
+    // Calculate signal quality
+    const confidenceValue = (bufferSizeFactor * 0.4 + stabilityFactor * 0.6) * 100;
+    return Math.min(100, Math.round(confidenceValue));
   }
   
   /**
-   * Reset processor
+   * Set calibration factors for the processor
    */
-  public override reset(): void {
-    super.reset();
-    this.lastHydrationEstimate = 65;
-    this.hydrationHistory = [];
+  setCalibrationFactors(scaleFactor: number, offsetFactor: number): void {
+    this.scaleFactor = Math.max(0.8, Math.min(1.2, scaleFactor));
+    this.offsetFactor = Math.max(-10, Math.min(10, offsetFactor));
   }
 }

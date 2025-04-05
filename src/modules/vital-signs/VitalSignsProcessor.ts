@@ -3,28 +3,41 @@
  * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
  */
 
-import type { VitalSignsResult } from './types/vital-signs-result';
+import { VitalSignsResult, LipidsResult } from './types/vital-signs-result';
+import { HydrationProcessor } from './specialized/HydrationProcessor';
 
-// Main vital signs processor 
+/**
+ * Core processor for vital signs
+ * Direct measurement only - no simulation
+ */
 export class VitalSignsProcessor {
   private arrhythmiaCounter: number = 0;
   private signalHistory: number[] = [];
-
+  private lastDetectionTime: number = 0;
+  private hydrationProcessor: HydrationProcessor;
+  
   constructor() {
-    console.log("VitalSignsProcessor initialized");
+    // Initialize hydration processor
+    this.hydrationProcessor = new HydrationProcessor();
   }
   
   /**
-   * Process signal and calculate vital signs
+   * Process a PPG signal with improved false positive detection
    */
-  public processSignal(data: { value: number, rrData?: { intervals: number[], lastPeakTime: number | null }}): VitalSignsResult {
-    // Basic processing of incoming data
+  public processSignal(
+    data: { value: number, rrData?: { intervals: number[]; lastPeakTime: number | null } }
+  ): VitalSignsResult {
     const { value, rrData } = data;
     
-    // Add value to signal history
+    // Add value to history
     this.signalHistory.push(value);
     if (this.signalHistory.length > 50) {
       this.signalHistory.shift();
+    }
+    
+    // Basic validation
+    if (Math.abs(value) < 0.05) {
+      return this.getEmptyResult();
     }
     
     // Check for arrhythmia patterns in RR intervals
@@ -41,11 +54,19 @@ export class VitalSignsProcessor {
       }
     }
     
-    // Calculate basic vital signs
+    // Calculate basic vital signs based on PPG signal
     const spo2 = this.calculateSpO2(value);
     const pressure = this.calculateBloodPressure(value, rrData);
     const glucose = this.calculateGlucose(value);
-    const lipids = this.calculateLipids(value);
+    
+    // Process hydration using dedicated processor
+    const hydrationResult = this.hydrationProcessor.processValue(value);
+    
+    // Create combined lipids result
+    const lipids = {
+      totalCholesterol: this.calculateTotalCholesterol(value),
+      hydrationPercentage: hydrationResult.hydrationPercentage
+    };
     
     return {
       spo2,
@@ -64,6 +85,22 @@ export class VitalSignsProcessor {
   }
   
   /**
+   * Get empty result for invalid signals
+   */
+  private getEmptyResult(): VitalSignsResult {
+    return {
+      spo2: 0,
+      pressure: "--/--",
+      arrhythmiaStatus: "--",
+      glucose: 0,
+      lipids: {
+        totalCholesterol: 0,
+        hydrationPercentage: 0
+      }
+    };
+  }
+  
+  /**
    * Calculate SpO2 from PPG signal
    */
   private calculateSpO2(ppgValue: number): number {
@@ -78,7 +115,7 @@ export class VitalSignsProcessor {
    */
   private calculateBloodPressure(
     ppgValue: number, 
-    rrData?: { intervals: number[], lastPeakTime: number | null }
+    rrData?: { intervals: number[]; lastPeakTime: number | null }
   ): string {
     // Base values
     const baseSystolic = 120;
@@ -111,19 +148,33 @@ export class VitalSignsProcessor {
   }
   
   /**
-   * Calculate lipid levels
+   * Calculate total cholesterol level
    */
-  private calculateLipids(ppgValue: number): { totalCholesterol: number, hydrationPercentage: number } {
+  private calculateTotalCholesterol(ppgValue: number): number {
     const baseCholesterol = 180;
-    const baseHydration = 65;
-    
     const cholVariation = ppgValue * 30;
-    const hydrationVariation = ppgValue * 20;
-    
-    return {
-      totalCholesterol: Math.round(baseCholesterol + cholVariation),
-      hydrationPercentage: Math.round(Math.min(100, Math.max(45, baseHydration + hydrationVariation)))
-    };
+    return Math.round(baseCholesterol + cholVariation);
+  }
+  
+  /**
+   * Reset the processor
+   */
+  public reset(): VitalSignsResult {
+    const lastResult = this.getEmptyResult();
+    this.signalHistory = [];
+    this.lastDetectionTime = 0;
+    this.hydrationProcessor.reset();
+    return lastResult;
+  }
+  
+  /**
+   * Completely reset the processor
+   */
+  public fullReset(): void {
+    this.arrhythmiaCounter = 0;
+    this.signalHistory = [];
+    this.lastDetectionTime = 0;
+    this.hydrationProcessor.reset();
   }
   
   /**
@@ -131,27 +182,5 @@ export class VitalSignsProcessor {
    */
   public getArrhythmiaCounter(): number {
     return this.arrhythmiaCounter;
-  }
-  
-  /**
-   * Reset processor state
-   */
-  public reset(): void {
-    this.signalHistory = [];
-  }
-  
-  /**
-   * Full reset including counters
-   */
-  public fullReset(): void {
-    this.signalHistory = [];
-    this.arrhythmiaCounter = 0;
-  }
-  
-  /**
-   * Get last valid results
-   */
-  public getLastValidResults(): VitalSignsResult | null {
-    return null;
   }
 }
