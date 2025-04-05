@@ -39,6 +39,11 @@ export interface ProcessedHeartbeatSignal {
   confidence: number;
   isPeak: boolean;
   rr?: number | null;
+  // Additional properties needed by implementations
+  peakConfidence?: number;
+  instantaneousBPM?: number | null;
+  rrInterval?: number | null;
+  heartRateVariability?: number | null;
 }
 
 /**
@@ -49,6 +54,11 @@ export interface SignalProcessingOptions {
   filterStrength?: number;
   qualityThreshold?: number;
   fingerDetectionSensitivity?: number;
+  // Additional options needed by implementations
+  useAdaptiveControl?: boolean;
+  qualityEnhancedByPrediction?: boolean;
+  adaptationRate?: number;
+  predictionHorizon?: number;
 }
 
 /**
@@ -60,6 +70,18 @@ export interface ISignalProcessor<T = any> {
 }
 
 /**
+ * Enhanced signal processor interface with additional methods
+ * This interface extends ISignalProcessor to maintain compatibility
+ */
+export interface SignalProcessor<T = any> extends ISignalProcessor<T> {
+  processSignal(value: number): T;
+  reset(): void;
+  configure?(options: SignalProcessingOptions): void;
+  getPPGValues?(): number[];
+  applySMAFilter?(value: number, values?: number[]): number;
+}
+
+/**
  * Channel configuration
  */
 export interface ChannelConfig {
@@ -68,3 +90,4 @@ export interface ChannelConfig {
   bufferSize?: number;
   filterStrength?: number;
 }
+

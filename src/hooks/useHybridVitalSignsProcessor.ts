@@ -1,154 +1,60 @@
 
 /**
- * Hook for processing vital signs signals with hybrid processing
- * Combines traditional algorithms with neural networks
+ * Hook for using the hybrid vital signs processor
+ * Combines traditional signal processing with neural networks
  */
-import { useState, useCallback, useRef, useEffect } from 'react';
-import { 
-  HybridVitalSignsProcessor,
-  HybridProcessingOptions,
-  VitalSignsResult 
-} from '../modules/vital-signs';
-import type { RRIntervalData } from '../types/vital-signs';
-import type { ArrhythmiaWindow } from './vital-signs/types';
-import { getDiagnosticsData, clearDiagnosticsData } from '../hooks/heart-beat/signal-processing/peak-detection';
-import { tensorflowService } from '../modules/ai/tensorflow-service';
+import { useState, useRef, useCallback, useEffect } from 'react';
+import { VitalSignsProcessor, HybridProcessingOptions, VitalSignsResult } from '../modules/vital-signs';
+import { HybridVitalSignsProcessor } from '../modules/vital-signs/HybridVitalSignsProcessor';
 
-// Interface for diagnostics info
-interface DiagnosticsInfo {
-  processedSignals: number;
-  signalLog: Array<{ timestamp: number, value: number, result: any, neuralUsed: boolean }>;
-  performanceMetrics: {
-    avgProcessTime: number;
-    traditionalPercentage: number;
-    neuralPercentage: number;
-    hybridPercentage: number;
-    avgConfidence: number;
-  };
-  neuralInfo: {
-    modelsLoaded: string[];
-    backend: string;
-    webgpuEnabled: boolean;
-  };
+/**
+ * Configuration for the hook
+ */
+interface UseHybridVitalSignsProcessorOptions {
+  useNeuralModels?: boolean;
+  neuralWeight?: number;
+  neuralConfidenceThreshold?: number;
 }
 
-export function useHybridVitalSignsProcessor(initialOptions?: Partial<HybridProcessingOptions>) {
+/**
+ * Hook for processing vital signs with hybrid approach
+ */
+export const useHybridVitalSignsProcessor = (options?: UseHybridVitalSignsProcessorOptions) => {
+  // Create processor instance with hybrid capabilities
   const processorRef = useRef<HybridVitalSignsProcessor | null>(null);
+  
+  // States
+  const [lastResult, setLastResult] = useState<VitalSignsResult | null>(null);
   const [lastValidResults, setLastValidResults] = useState<VitalSignsResult | null>(null);
-  const [arrhythmiaWindows, setArrhythmiaWindows] = useState<ArrhythmiaWindow[]>([]);
-  const [diagnosticsEnabled, setDiagnosticsEnabled] = useState<boolean>(true);
-  const [neuralEnabled, setNeuralEnabled] = useState<boolean>(initialOptions?.useNeuralModels ?? true);
+  const [neuralEnabled, setNeuralEnabled] = useState<boolean>(options?.useNeuralModels ?? false);
+  const [diagnosticsEnabled, setDiagnosticsEnabled] = useState<boolean>(false);
   
-  // State for enhanced diagnostics
-  const debugInfo = useRef<DiagnosticsInfo>({
-    processedSignals: 0,
-    signalLog: [],
-    performanceMetrics: {
-      avgProcessTime: 0,
-      traditionalPercentage: 0,
-      neuralPercentage: 0,
-      hybridPercentage: 0,
-      avgConfidence: 0
-    },
-    neuralInfo: {
-      modelsLoaded: [],
-      backend: '',
-      webgpuEnabled: false
-    }
-  });
-  
-  // Initialize processor on mount
-  const initializeProcessor = useCallback(() => {
-    const options: Partial<HybridProcessingOptions> = {
-      ...initialOptions,
-      useNeuralModels: neuralEnabled
-    };
-    
-    processorRef.current = new HybridVitalSignsProcessor(options);
-    
-    console.log("HybridVitalSignsProcessor initialized with options:", options);
-    
-    // Update neural info
-    const tfInfo = tensorflowService.getTensorFlowInfo();
-    debugInfo.current.neuralInfo = {
-      modelsLoaded: tfInfo.modelsLoaded,
-      backend: tfInfo.backend,
-      webgpuEnabled: tfInfo.webgpuEnabled
-    };
-  }, [initialOptions, neuralEnabled]);
-
-  // Initialization effect
+  // Create processor on mount
   useEffect(() => {
-    if (!processorRef.current) {
-      initializeProcessor();
-    }
+    console.log("Creating hybrid vital signs processor");
+    processorRef.current = new HybridVitalSignsProcessor({
+      useNeuralModels: options?.useNeuralModels ?? false,
+      neuralWeight: options?.neuralWeight ?? 0.6,
+      neuralConfidenceThreshold: options?.neuralConfidenceThreshold ?? 0.5
+    });
     
-    // Cleanup on unmount
     return () => {
-      if (processorRef.current) {
-        console.log("HybridVitalSignsProcessor cleanup");
-        processorRef.current = null;
-        clearDiagnosticsData(); // Clear diagnostics data
-      }
+      console.log("Cleaning up hybrid vital signs processor");
+      processorRef.current = null;
     };
-  }, [initializeProcessor]);
+  }, []);
   
-  // Update neural processing when toggled
-  useEffect(() => {
-    if (processorRef.current) {
-      processorRef.current.setNeuralProcessing(neuralEnabled);
-    }
-  }, [neuralEnabled]);
-  
-  // Update performance metrics periodically
-  useEffect(() => {
-    if (!diagnosticsEnabled) return;
-    
-    const updateInterval = setInterval(() => {
-      // Get diagnostics data from peak detection module
-      const peakDiagnostics = getDiagnosticsData();
-      
-      if (peakDiagnostics.length > 0) {
-        // Calculate performance metrics
-        const totalTime = peakDiagnostics.reduce((sum, data) => sum + data.processTime, 0);
-        
-        // Update neural info
-        const tfInfo = tensorflowService.getTensorFlowInfo();
-        debugInfo.current.neuralInfo = {
-          modelsLoaded: tfInfo.modelsLoaded,
-          backend: tfInfo.backend,
-          webgpuEnabled: tfInfo.webgpuEnabled
-        };
-        
-        // Update metrics
-        if (debugInfo.current.signalLog.length > 0) {
-          const neuralCount = debugInfo.current.signalLog.filter(log => log.neuralUsed).length;
-          const totalSignals = debugInfo.current.signalLog.length;
-          
-          debugInfo.current.performanceMetrics = {
-            avgProcessTime: totalTime / peakDiagnostics.length,
-            neuralPercentage: (neuralCount / totalSignals) * 100,
-            traditionalPercentage: ((totalSignals - neuralCount) / totalSignals) * 100,
-            hybridPercentage: (debugInfo.current.signalLog.filter(log => 
-              log.neuralUsed && log.result?.confidence?.overall > 0.7
-            ).length / totalSignals) * 100,
-            avgConfidence: debugInfo.current.signalLog.reduce((sum, log) => 
-              sum + (log.result?.confidence?.overall || 0), 0) / totalSignals
-          };
-        }
-      }
-    }, 5000); // Update every 5 seconds
-    
-    return () => clearInterval(updateInterval);
-  }, [diagnosticsEnabled]);
-  
-  // Process signal data
-  const processSignal = useCallback(async (
+  /**
+   * Process a PPG signal to calculate vital signs
+   */
+  const processSignal = useCallback((
     value: number, 
-    rrData?: RRIntervalData
-  ): Promise<VitalSignsResult> => {
+    rrData?: { 
+      intervals: number[], 
+      lastPeakTime: number | null 
+    }
+  ): VitalSignsResult => {
     if (!processorRef.current) {
-      console.warn("HybridVitalSignsProcessor not initialized");
       return {
         spo2: 0,
         pressure: "--/--",
@@ -161,148 +67,92 @@ export function useHybridVitalSignsProcessor(initialOptions?: Partial<HybridProc
       };
     }
     
-    // Increment processed signals counter
-    debugInfo.current.processedSignals++;
-    
-    // Measure processing time
-    const startTime = performance.now();
-    
-    // Process signal
-    const result = await processorRef.current.processSignal({
-      value,
-      rrData
-    });
-    
-    // Calculate processing time
-    const processingTime = performance.now() - startTime;
-    
-    // Log for debugging
-    if (diagnosticsEnabled && debugInfo.current.processedSignals % 30 === 0) {
-      debugInfo.current.signalLog.push({
-        timestamp: Date.now(),
-        value,
-        result: { ...result },
-        neuralUsed: processorRef.current.isNeuralProcessingEnabled()
-      });
+    try {
+      // Process signal with hybrid processor
+      const result = processorRef.current.processSignal({ value, rrData });
       
-      // Keep log size manageable
-      if (debugInfo.current.signalLog.length > 20) {
-        debugInfo.current.signalLog.shift();
-      }
+      // Update state
+      setLastResult(result);
       
-      // Detailed log
-      console.log(`Signal processed in ${processingTime.toFixed(2)}ms [Neural: ${processorRef.current.isNeuralProcessingEnabled() ? 'ON' : 'OFF'}]`, {
-        signalStrength: Math.abs(value),
-        arrhythmiaCount: processorRef.current.getArrhythmiaCounter(),
-        spo2: result.spo2,
-        pressure: result.pressure,
-        confidence: result.confidence?.overall || 0
-      });
-    }
-    
-    // Store valid results
-    if (result.spo2 > 0) {
-      setLastValidResults(result);
-    }
-    
-    // Check for arrhythmia and update windows
-    if (result.arrhythmiaStatus.includes("ARRHYTHMIA DETECTED")) {
-      const now = Date.now();
-      setArrhythmiaWindows(prev => {
-        const newWindow = { start: now, end: now + 5000 };
-        return [...prev, newWindow];
-      });
-    }
-    
-    return result;
-  }, [diagnosticsEnabled]);
-  
-  // Reset the processor and return last valid results
-  const reset = useCallback((): VitalSignsResult | null => {
-    if (processorRef.current) {
-      processorRef.current.reset();
-    }
-    return lastValidResults;
-  }, [lastValidResults]);
-  
-  // Completely reset the processor
-  const fullReset = useCallback((): void => {
-    if (processorRef.current) {
-      console.log("Full reset of HybridVitalSignsProcessor");
-      processorRef.current.fullReset();
-      setLastValidResults(null);
-      setArrhythmiaWindows([]);
-      debugInfo.current = {
-        processedSignals: 0,
-        signalLog: [],
-        performanceMetrics: {
-          avgProcessTime: 0,
-          traditionalPercentage: 0,
-          neuralPercentage: 0,
-          hybridPercentage: 0,
-          avgConfidence: 0
-        },
-        neuralInfo: {
-          modelsLoaded: [],
-          backend: '',
-          webgpuEnabled: false
+      return result;
+    } catch (error) {
+      console.error("Error processing vital signs:", error);
+      return {
+        spo2: 0,
+        pressure: "--/--",
+        arrhythmiaStatus: "--",
+        glucose: 0,
+        lipids: {
+          totalCholesterol: 0,
+          hydrationPercentage: 0
         }
       };
-      clearDiagnosticsData(); // Clear diagnostics data
     }
   }, []);
   
-  // Toggle diagnostics
-  const toggleDiagnostics = useCallback((enabled: boolean): void => {
+  /**
+   * Toggle neural processing
+   */
+  const toggleNeuralProcessing = useCallback((enabled: boolean) => {
+    if (processorRef.current) {
+      processorRef.current.toggleNeuralProcessing(enabled);
+      setNeuralEnabled(enabled);
+    }
+  }, []);
+  
+  /**
+   * Toggle diagnostics
+   */
+  const toggleDiagnostics = useCallback((enabled: boolean) => {
     setDiagnosticsEnabled(enabled);
-    if (!enabled) {
-      // Clear diagnostics data if disabled
-      clearDiagnosticsData();
-    }
-    console.log(`Diagnostics ${enabled ? 'enabled' : 'disabled'}`);
   }, []);
   
-  // Toggle neural processing
-  const toggleNeuralProcessing = useCallback((enabled: boolean): void => {
-    setNeuralEnabled(enabled);
+  /**
+   * Update processor options
+   */
+  const updateOptions = useCallback((newOptions: Partial<HybridProcessingOptions>) => {
     if (processorRef.current) {
-      processorRef.current.setNeuralProcessing(enabled);
-    }
-    console.log(`Neural processing ${enabled ? 'enabled' : 'disabled'}`);
-  }, []);
-  
-  // Update processor options
-  const updateOptions = useCallback((options: Partial<HybridProcessingOptions>): void => {
-    if (processorRef.current) {
-      processorRef.current.updateOptions(options);
+      processorRef.current.updateOptions(newOptions);
     }
   }, []);
   
-  // Get diagnostics data from peak detection module
-  const getPeakDetectionDiagnostics = useCallback(() => {
-    return getDiagnosticsData();
-  }, []);
-  
-  // Get neural information
+  /**
+   * Get neural network information
+   */
   const getNeuralInfo = useCallback(() => {
-    return tensorflowService.getTensorFlowInfo();
+    if (!processorRef.current) {
+      return { enabled: false };
+    }
+    
+    return processorRef.current.getDiagnosticInfo();
+  }, []);
+  
+  /**
+   * Reset processor
+   */
+  const reset = useCallback(() => {
+    if (!processorRef.current) return null;
+    
+    const lastValid = processorRef.current.reset();
+    if (lastValid) {
+      setLastValidResults(lastValid);
+    }
+    
+    return lastValid;
   }, []);
   
   return {
     processSignal,
-    reset,
-    fullReset,
-    initializeProcessor,
+    lastResult,
     lastValidResults,
-    arrhythmiaCounter: processorRef.current?.getArrhythmiaCounter() || 0,
-    arrhythmiaWindows,
-    debugInfo: debugInfo.current,
-    diagnosticsEnabled,
-    toggleDiagnostics,
     neuralEnabled,
     toggleNeuralProcessing,
     updateOptions,
-    getPeakDetectionDiagnostics,
-    getNeuralInfo
+    diagnosticsEnabled,
+    toggleDiagnostics,
+    debugInfo: diagnosticsEnabled ? getNeuralInfo() : null,
+    getNeuralInfo,
+    reset,
+    processor: processorRef.current
   };
-}
+};

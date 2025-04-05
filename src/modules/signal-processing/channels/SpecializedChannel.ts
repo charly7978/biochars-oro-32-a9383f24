@@ -3,7 +3,17 @@
  * Base class for specialized signal processing channels
  * Each channel is optimized for a specific vital sign
  */
-import { ProcessorType, ChannelConfig } from '../types';
+import { ProcessorType } from '../types';
+
+/**
+ * Channel configuration
+ */
+export interface ChannelConfig {
+  name: string;
+  type: ProcessorType;
+  bufferSize?: number;
+  filterStrength?: number;
+}
 
 /**
  * Base channel interface

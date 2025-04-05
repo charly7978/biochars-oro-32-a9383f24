@@ -27,3 +27,30 @@ export * from './signal-processor';
 
 // Export shared utilities
 export * from './shared-signal-utils';
+
+// Export HybridProcessingOptions interface for configuration
+export interface HybridProcessingOptions {
+  useNeuralModels?: boolean;
+  neuralWeight?: number;
+  neuralConfidenceThreshold?: number;
+  adaptiveProcessing?: boolean;
+  enhancedCalibration?: boolean;
+}
+
+// Re-export signal processing options to ensure compatibility
+export { type SignalProcessingOptions } from '../signal-processing/types';
+
+// Export channel feedback interface for communication between components
+export interface ChannelFeedback {
+  channelId: string;
+  signalQuality: number;
+  suggestedAdjustments: {
+    amplificationFactor?: number;
+    filterStrength?: number;
+    baselineCorrection?: number;
+    frequencyRangeMin?: number;
+    frequencyRangeMax?: number;
+  };
+  timestamp: number;
+  success: boolean;
+}

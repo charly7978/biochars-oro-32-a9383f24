@@ -1,4 +1,3 @@
-
 /**
  * Hook for central signal processing
  * Integrates specialized processors from signal-processing module
@@ -115,8 +114,8 @@ export function useSignalProcessing() {
       setFingerDetected(ppgResult.fingerDetected);
       
       // Calculate BPM average
-      if (heartbeatResult.instantaneousBPM !== null && heartbeatResult.peakConfidence > 0.5) {
-        recentBpmValues.current.push(heartbeatResult.instantaneousBPM);
+      if ((heartbeatResult.instantaneousBPM ?? 0) > 0 && heartbeatResult.confidence > 0.5) {
+        recentBpmValues.current.push(heartbeatResult.instantaneousBPM ?? 0);
         
         // Keep only the most recent values
         if (recentBpmValues.current.length > 10) {
@@ -165,11 +164,11 @@ export function useSignalProcessing() {
         
         // Cardiac information
         isPeak: heartbeatResult.isPeak,
-        peakConfidence: heartbeatResult.peakConfidence,
-        instantaneousBPM: heartbeatResult.instantaneousBPM,
+        peakConfidence: heartbeatResult.confidence,
+        instantaneousBPM: heartbeatResult.instantaneousBPM ?? null,
         averageBPM,
-        rrInterval: heartbeatResult.rrInterval,
-        heartRateVariability: heartbeatResult.heartRateVariability
+        rrInterval: heartbeatResult.rrInterval ?? null,
+        heartRateVariability: heartbeatResult.heartRateVariability ?? null
       };
       
       // Update last result
@@ -223,7 +222,7 @@ export function useSignalProcessing() {
    * Configure processors with custom options
    */
   const configureProcessors = useCallback((options: SignalProcessingOptions) => {
-    if (ppgProcessorRef.current) {
+    if (ppgProcessorRef.current && ppgProcessorRef.current.configure) {
       ppgProcessorRef.current.configure(options);
     }
   }, []);
