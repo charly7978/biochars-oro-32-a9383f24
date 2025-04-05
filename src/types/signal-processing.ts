@@ -35,11 +35,6 @@ export interface ProcessedSignalResult {
   quality: number;
   fingerDetected: boolean;
   signalStrength: number;
-  
-  // Adding missing properties for compatibility
-  isPeak?: boolean;
-  rrInterval?: number | null;
-  averageBPM?: number;
 }
 
 // Resultado del análisis de intervalo RR

@@ -75,14 +75,8 @@ export abstract class SpecializedChannel {
   
   /**
    * Aplica retroalimentación al canal
-   * Default implementation that can be overridden
    */
-  public applyFeedback(feedback: ChannelFeedback): void {
-    // Base implementation - update quality if provided
-    if (feedback.signalQuality !== undefined) {
-      this.quality = feedback.signalQuality;
-    }
-  }
+  public abstract applyFeedback(feedback: ChannelFeedback): void;
   
   /**
    * Reinicia el canal
