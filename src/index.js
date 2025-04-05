@@ -30,10 +30,7 @@ const Index = () => {
   
   const { startProcessing, stopProcessing, lastSignal, processFrame } = useSignalProcessor();
   const { processSignal: processHeartBeat } = useHeartBeatProcessor();
-  const { 
-    processSignal: processVitalSigns, 
-    reset: resetVitalSigns 
-  } = useVitalSignsProcessor();
+  const { processSignal: processVitalSigns, reset: resetVitalSigns } = useVitalSignsProcessor();
 
   const enterFullScreen = async () => {
     const elem = document.documentElement;
@@ -258,17 +255,13 @@ const Index = () => {
       const heartBeatResult = processHeartBeat(lastSignal.filteredValue);
       setHeartRate(heartBeatResult.bpm);
       
-      processVitalSigns(lastSignal.filteredValue, heartBeatResult.rrData)
-        .then(vitals => {
-          if (vitals) {
-            setVitalSigns(vitals);
-            setArrhythmiaCount(vitals.arrhythmiaStatus.split('|')[1] || "--");
-          }
-          setSignalQuality(lastSignal.quality);
-        })
-        .catch(error => {
-          console.error("Error processing vital signs:", error);
-        });
+      const vitals = processVitalSigns(lastSignal.filteredValue, heartBeatResult.rrData);
+      if (vitals) {
+        setVitalSigns(vitals);
+        setArrhythmiaCount(vitals.arrhythmiaStatus.split('|')[1] || "--");
+      }
+      
+      setSignalQuality(lastSignal.quality);
     }
   }, [lastSignal, isMonitoring, processHeartBeat, processVitalSigns]);
 

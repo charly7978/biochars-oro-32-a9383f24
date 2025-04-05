@@ -61,74 +61,94 @@ export interface SignalProcessor {
   initialize(): Promise<void>;
 }
 
-// Types of vital signs that can be processed
-export enum VitalSignType {
-  HEART_RATE = 'heartRate',
-  SPO2 = 'spo2',
-  BLOOD_PRESSURE = 'bloodPressure',
-  GLUCOSE = 'glucose',
-  LIPIDS = 'lipids',
-  ARRHYTHMIA = 'arrhythmia',
-  CARDIAC = 'cardiac'
-}
-
-// Feedback from a channel to improve processing
-export interface ChannelFeedback {
-  channelId: string;
-  signalQuality: number;
-  suggestedAdjustments: Record<string, number>;
-  timestamp: number;
-  success: boolean;
-}
-
-// Additional interfaces needed by various modules
+// PPG Data point
 export interface PPGDataPoint {
-  value: number;
+  red: number;
+  ir?: number;
+  green?: number;
+  blue?: number;
   timestamp: number;
-  quality?: number;
 }
 
+// Timestamped PPG Data
 export interface TimestampedPPGData {
-  values: number[];
-  timestamp: number;
-  quality?: number;
+  data: PPGDataPoint[];
+  startTime: number;
+  endTime: number;
+  samplingRate: number;
 }
 
-export interface SignalDiagnosticInfo {
-  processingStage: string;
-  validationPassed: boolean;
-  errorCode?: string;
-  errorMessage?: string;
-  processingTimeMs?: number;
-  timestamp?: number;
-}
-
+// Signal validation result
 export interface SignalValidationResult {
   isValid: boolean;
-  errorCode?: string;
-  errorMessage?: string;
+  quality: number;
+  issues: string[];
+  timestamp: number;
 }
 
+// Signal validation configuration
 export interface SignalValidationConfig {
-  qualityThreshold: number;
-  validateAmplitude: boolean;
   minAmplitude: number;
-  maxAmplitude: number;
-  validateFrequency: boolean;
+  maxVariance: number;
   minFrequency: number;
   maxFrequency: number;
 }
 
+// Signal diagnostic info
+export interface SignalDiagnosticInfo {
+  timestamp: number;
+  processingStage: string;
+  executionTime: number;
+  signalQuality: number;
+  processingPriority: string;
+  inputValues: number[];
+  outputValues: number[];
+  processorType: string;
+  warnings: string[];
+  signalProperties?: {
+    mean: number;
+    variance: number;
+    peakCount: number;
+    dominantFrequency: number;
+  };
+}
+
+// Error handler configuration
 export interface ErrorHandlerConfig {
   logErrors: boolean;
   throwOnCritical: boolean;
-  recoveryAttempts: number;
-  debugMode: boolean;
+  maxRetries: number;
+  fallbackEnabled: boolean;
 }
 
+// Channel feedback for signal optimization
+export interface ChannelFeedback {
+  channelId: string;
+  signalQuality: number;
+  suggestedAdjustments: {
+    amplificationFactor?: number;
+    filterStrength?: number;
+    frequencyRangeMin?: number;
+    frequencyRangeMax?: number;
+    [key: string]: any;
+  };
+  timestamp: number;
+  success: boolean;
+}
+
+// Signal distributor configuration
 export interface SignalDistributorConfig {
   channelCount: number;
-  bufferSize: number;
-  processingInterval: number;
-  autoStart: boolean;
+  optimizationInterval: number;
+  adaptiveFiltering: boolean;
+  signalBufferSize: number;
+}
+
+// Vital sign types
+export enum VitalSignType {
+  SPO2 = 'spo2',
+  BLOOD_PRESSURE = 'bloodPressure',
+  GLUCOSE = 'glucose',
+  LIPIDS = 'lipids',
+  CARDIAC = 'cardiac'
 }
