@@ -1,3 +1,17 @@
+/**
+ * Signal type definitions
+ */
+
+/**
+ * Types of vital signs that can be measured from signals
+ */
+export enum VitalSignType {
+  SPO2 = 'spo2',
+  BLOOD_PRESSURE = 'blood_pressure',
+  GLUCOSE = 'glucose',
+  HYDRATION = 'hydration',
+  CARDIAC = 'cardiac'
+}
 
 /**
  * Interface for PPG data point with timestamp
@@ -135,17 +149,6 @@ export interface OptimizedSignalChannel {
   applyFeedback: (feedback: ChannelFeedback) => void;  // Apply feedback from algorithm
   getQuality: () => number;       // Get channel quality (0-1)
   reset: () => void;              // Reset channel state
-}
-
-/**
- * Types of vital sign measurements
- */
-export enum VitalSignType {
-  GLUCOSE = 'glucose',
-  HYDRATION = 'hydration',
-  BLOOD_PRESSURE = 'blood_pressure',
-  SPO2 = 'spo2',
-  CARDIAC = 'cardiac'
 }
 
 /**

@@ -1,3 +1,4 @@
+
 /**
  * Hook for processing vital signs signals with hybrid processing
  * Combines traditional algorithms with neural networks
@@ -155,7 +156,7 @@ export function useHybridVitalSignsProcessor(initialOptions?: Partial<HybridProc
         glucose: 0,
         lipids: {
           totalCholesterol: 0,
-          triglycerides: 0
+          hydrationPercentage: 0
         }
       };
     }
