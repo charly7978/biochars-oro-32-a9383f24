@@ -1,5 +1,5 @@
 
-import { BrowserRouter as Router, Routes, Route } from "react-navigation-native";
+import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import { Toaster } from "@/components/ui/toaster";
 import Index from "./src/pages/Index";
 import NotFound from "./src/pages/NotFound";
