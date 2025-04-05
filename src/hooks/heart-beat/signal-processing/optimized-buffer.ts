@@ -150,19 +150,21 @@ export class OptimizedPPGBuffer<T extends TimestampedPPGData = TimestampedPPGDat
     const optimizedBuffer = new OptimizedPPGBuffer<U>(Math.max(points.length, 10));
     
     // Transferir los datos al nuevo buffer
-    points.forEach(point => {
+    for (const point of points) {
       // Ensure point has all required properties
-      const enhancedPoint = { ...point } as U;
-      
-      // Garantizar que tanto time como timestamp existan
-      if ('timestamp' in point && typeof point.timestamp === 'number' && !('time' in point)) {
-        (enhancedPoint as any).time = point.timestamp;
-      } else if ('time' in point && typeof (point as any).time === 'number' && !('timestamp' in point)) {
-        enhancedPoint.timestamp = (point as any).time;
+      if (point) {
+        const enhancedPoint = { ...point } as U;
+        
+        // Garantizar que tanto time como timestamp existan
+        if ('timestamp' in point && typeof point.timestamp === 'number' && !('time' in point)) {
+          (enhancedPoint as any).time = point.timestamp;
+        } else if ('time' in point && typeof (point as any).time === 'number' && !('timestamp' in point)) {
+          enhancedPoint.timestamp = (point as any).time;
+        }
+        
+        optimizedBuffer.push(enhancedPoint);
       }
-      
-      optimizedBuffer.push(enhancedPoint);
-    });
+    }
     
     return optimizedBuffer;
   }
