@@ -74,7 +74,7 @@ export const useVitalSignsProcessor = () => {
       }
       
       try {
-        // Process signal with direct processing
+        // Process signal with direct processing - ABSOLUTELY NO SIMULATION
         const result = processorRef.current.processSignal(value, rrData);
         
         // Update state for valid results (with non-zero values)
@@ -86,7 +86,7 @@ export const useVitalSignsProcessor = () => {
         // Update processed values counter
         setProcessedValues(prev => prev + 1);
         
-        // Detailed logging to debug measurement issues
+        // More detailed periodic logging to debug values
         if (debugCounterRef.current % 30 === 0) {
           console.log("Vital signs processed:", {
             valuesProcessed: debugCounterRef.current,
@@ -95,7 +95,7 @@ export const useVitalSignsProcessor = () => {
               spo2: result.spo2,
               pressure: result.pressure,
               glucose: result.glucose,
-              hydration: result.lipids.hydrationPercentage,
+              hydration: result.hydration,
               cholesterol: result.lipids.totalCholesterol,
               arrhythmia: result.arrhythmiaStatus
             }
@@ -131,6 +131,8 @@ export const useVitalSignsProcessor = () => {
     
     // Start processing
     setIsProcessing(true);
+    
+    console.log("Vital signs processing started");
   }, []);
   
   /**
@@ -206,7 +208,8 @@ export const useVitalSignsProcessor = () => {
       lipids: {
         totalCholesterol: 0,
         hydrationPercentage: 0
-      }
+      },
+      hydration: 0
     };
   };
   

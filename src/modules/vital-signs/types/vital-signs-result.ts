@@ -20,7 +20,7 @@ export interface VitalSignsResult {
     rmssd?: number;
     rrVariation?: number;
   } | null;
-  hydration?: number; // Added explicit hydration field
+  hydration: number; // Explicit hydration field
 }
 
 // Lipids result interface

@@ -32,7 +32,8 @@ const VitalSign: React.FC<VitalSignProps> = ({
   return (
     <div className={cn(
       "flex flex-col items-center p-2 rounded-lg transition-all duration-300",
-      highlighted ? "bg-gray-800/60 shadow-lg scale-105" : "bg-gray-900/40"
+      highlighted ? "bg-gray-800/60 shadow-lg scale-105" : "bg-gray-900/40",
+      isValidValue ? "text-white" : "text-gray-500"
     )}>
       <span className="text-xs text-gray-400 uppercase tracking-wider mb-1">
         {label}
@@ -41,7 +42,7 @@ const VitalSign: React.FC<VitalSignProps> = ({
       <div className="flex items-baseline">
         <span className={cn(
           "text-2xl font-bold",
-          highlighted ? "text-white" : "text-gray-200"
+          highlighted ? "text-white" : isValidValue ? "text-gray-200" : "text-gray-500"
         )}>
           {displayValue()}
         </span>
