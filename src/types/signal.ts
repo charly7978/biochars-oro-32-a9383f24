@@ -1,4 +1,3 @@
-
 /**
  * Interface for PPG data point with timestamp
  */
@@ -141,11 +140,11 @@ export interface OptimizedSignalChannel {
  * Types of vital sign measurements
  */
 export enum VitalSignType {
-  GLUCOSE = 'glucose',
-  LIPIDS = 'lipids',
+  CARDIAC = 'cardiac',
   BLOOD_PRESSURE = 'blood_pressure',
   SPO2 = 'spo2',
-  CARDIAC = 'cardiac'
+  GLUCOSE = 'glucose',
+  HYDRATION = 'hydration',
 }
 
 /**

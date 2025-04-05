@@ -1,171 +1,242 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { OptimizedMobileProcessor } from '../modules/vital-signs/OptimizedMobileProcessor';
-import { VitalSignsResult } from '../modules/vital-signs/types/vital-signs-result';
-import { useIsMobile } from './use-mobile';
 
-/**
- * Resultado del procesador móvil optimizado con metadata
- */
-interface OptimizedProcessorResult {
-  isProcessing: boolean;
-  lastResult: VitalSignsResult | null;
+// Tipos para la bidirección de datos
+interface ProcessorConfiguration {
+  enabledChannels: string[];
+  sensitivityFactors: Record<string, number>;
+  qualityThresholds: Record<string, number>;
+  bidirectionalEnabled: boolean;
+}
+
+interface ProcessorFeedback {
   signalQuality: number;
-  batteryOptimized: boolean;
-  processingQuality: 'high' | 'medium' | 'low';
+  arrhythmiaDetected: boolean;
+  processingLatency: number;
+  lastUpdateTimestamp: number;
+  channelFeedback: Record<string, {
+    confidence: number;
+    noise: number;
+    valid: boolean;
+  }>;
 }
 
 /**
- * Hook para usar el procesador de señales vitales optimizado para móviles
+ * Hook para usar el procesador optimizado para móviles con sistema bidireccional
  */
 export function useOptimizedMobileProcessor() {
-  // Estado del procesador
-  const [state, setState] = useState<OptimizedProcessorResult>({
-    isProcessing: false,
-    lastResult: null,
-    signalQuality: 0,
-    batteryOptimized: true,
-    processingQuality: 'medium'
+  const [results, setResults] = useState<any>(null);
+  const processorRef = useRef<OptimizedMobileProcessor | null>(null);
+  const configurationRef = useRef<ProcessorConfiguration>({
+    enabledChannels: ['cardiac', 'blood_pressure', 'spo2', 'glucose', 'hydration'],
+    sensitivityFactors: {
+      cardiac: 1.0,
+      blood_pressure: 1.0,
+      spo2: 1.0,
+      glucose: 1.0,
+      hydration: 1.0
+    },
+    qualityThresholds: {
+      cardiac: 0.6,
+      blood_pressure: 0.7,
+      spo2: 0.65,
+      glucose: 0.75,
+      hydration: 0.7
+    },
+    bidirectionalEnabled: true
   });
-  
-  // Referencias
-  const processorRef = useRef<OptimizedMobileProcessor>(OptimizedMobileProcessor.getInstance());
-  const isMobile = useIsMobile();
-  const processingIntervalRef = useRef<number | null>(null);
-  
-  // Iniciar procesamiento
-  const startProcessing = useCallback(() => {
-    if (state.isProcessing) return;
-    
-    setState(prev => ({
-      ...prev,
-      isProcessing: true
-    }));
-    
-    // Determinar calidad de procesamiento basada en rendimiento del dispositivo
-    const setOptimalQuality = () => {
-      // Prueba de rendimiento simple
-      const startTime = performance.now();
-      let counter = 0;
-      for (let i = 0; i < 100000; i++) {
-        counter += Math.sqrt(i);
-      }
-      const endTime = performance.now();
-      const duration = endTime - startTime;
-      
-      // Determinar calidad según rendimiento
-      let quality: 'high' | 'medium' | 'low';
-      if (duration < 20) {
-        quality = 'high';
-      } else if (duration < 50) {
-        quality = 'medium';
-      } else {
-        quality = 'low';
-      }
-      
-      processorRef.current.setProcessingQuality(quality);
-      setState(prev => ({ ...prev, processingQuality: quality }));
-      
-      console.log(`OptimizedMobileProcessor: Performance test completed in ${duration.toFixed(2)}ms, quality set to ${quality}`);
-    };
-    
-    // Realizar prueba de rendimiento y configurar
-    setOptimalQuality();
-    
-  }, [state.isProcessing]);
-  
-  // Detener procesamiento
-  const stopProcessing = useCallback(() => {
-    if (!state.isProcessing) return;
-    
-    if (processingIntervalRef.current) {
-      clearInterval(processingIntervalRef.current);
-      processingIntervalRef.current = null;
-    }
-    
-    setState(prev => ({
-      ...prev,
-      isProcessing: false
-    }));
-    
-    console.log("OptimizedMobileProcessor: Processing stopped");
-  }, [state.isProcessing]);
-  
-  // Procesar valor
-  const processValue = useCallback((
-    value: number,
-    rrData?: { intervals: number[]; lastPeakTime: number | null }
-  ): VitalSignsResult | null => {
-    if (!state.isProcessing) return null;
-    
-    try {
-      // Procesar con optimizaciones para móvil
-      const result = processorRef.current.processValue(value, rrData);
-      
-      if (result) {
-        setState(prev => ({
-          ...prev,
-          lastResult: result,
-          signalQuality: result.confidence?.overall || 0
-        }));
-      }
-      
-      return result;
-    } catch (error) {
-      console.error("Error en procesamiento optimizado:", error);
-      return null;
-    }
-  }, [state.isProcessing]);
-  
-  // Cambiar calidad de procesamiento
-  const setProcessingQuality = useCallback((quality: 'high' | 'medium' | 'low') => {
-    processorRef.current.setProcessingQuality(quality);
-    setState(prev => ({ ...prev, processingQuality: quality }));
-  }, []);
-  
-  // Reiniciar procesador
-  const reset = useCallback(() => {
-    processorRef.current.reset();
-    setState({
-      isProcessing: false,
-      lastResult: null,
-      signalQuality: 0,
-      batteryOptimized: true,
-      processingQuality: 'medium'
-    });
-  }, []);
-  
-  // Reinicio completo
-  const fullReset = useCallback(() => {
-    processorRef.current.fullReset();
-    reset();
-  }, [reset]);
-  
-  // Limpiar al desmontar
+  const feedbackRef = useRef<ProcessorFeedback>({
+    signalQuality: 0,
+    arrhythmiaDetected: false,
+    processingLatency: 0,
+    lastUpdateTimestamp: 0,
+    channelFeedback: {}
+  });
+
+  // Inicializar el procesador
   useEffect(() => {
+    if (!processorRef.current) {
+      processorRef.current = new OptimizedMobileProcessor();
+      console.log('Procesador móvil optimizado inicializado');
+    }
+    
     return () => {
-      if (processingIntervalRef.current) {
-        clearInterval(processingIntervalRef.current);
+      if (processorRef.current) {
+        processorRef.current.reset();
+        processorRef.current = null;
       }
     };
   }, []);
-  
-  // Optimizar automáticamente para móvil
-  useEffect(() => {
-    if (isMobile && state.processingQuality !== 'low') {
-      // Bajar calidad en dispositivos móviles para ahorrar batería
-      setProcessingQuality('medium');
+
+  /**
+   * Procesar un valor de señal PPG
+   */
+  const processValue = useCallback((value: number, quality: number, timestamp: number) => {
+    if (!processorRef.current) return null;
+    
+    const startTime = performance.now();
+    
+    // Actualizar configuración en el procesador (bidireccionalidad)
+    if (configurationRef.current.bidirectionalEnabled) {
+      processorRef.current.updateConfiguration(configurationRef.current);
     }
-  }, [isMobile, state.processingQuality, setProcessingQuality]);
-  
+    
+    // Procesar el valor
+    const result = processorRef.current.processValue(value, quality);
+    
+    // Calcular latencia
+    const latency = performance.now() - startTime;
+    
+    // Obtener retroalimentación del procesador (bidireccionalidad)
+    const feedback = processorRef.current.getFeedback();
+    
+    // Actualizar referencias bidireccionales
+    feedbackRef.current = {
+      signalQuality: feedback.signalQuality || quality,
+      arrhythmiaDetected: feedback.arrhythmiaDetected || false,
+      processingLatency: latency,
+      lastUpdateTimestamp: timestamp,
+      channelFeedback: feedback.channelFeedback || {}
+    };
+    
+    // Ajustar configuración basada en retroalimentación (bidireccionalidad adaptativa)
+    if (configurationRef.current.bidirectionalEnabled) {
+      adjustConfigurationBasedOnFeedback(feedbackRef.current);
+    }
+    
+    // Actualizar resultados
+    setResults(result);
+    
+    return result;
+  }, []);
+
+  /**
+   * Ajustar configuración basada en retroalimentación del procesador
+   */
+  const adjustConfigurationBasedOnFeedback = useCallback((feedback: ProcessorFeedback) => {
+    // Copiar configuración actual
+    const newConfig = {...configurationRef.current};
+    
+    // Ajustar sensibilidad basado en calidad de señal
+    if (feedback.signalQuality < 0.3) {
+      // Señal muy débil - aumentar sensibilidad
+      Object.keys(newConfig.sensitivityFactors).forEach(channel => {
+        newConfig.sensitivityFactors[channel] = Math.min(2.0, newConfig.sensitivityFactors[channel] * 1.05);
+      });
+    } else if (feedback.signalQuality > 0.8) {
+      // Señal muy buena - normalizar sensibilidad
+      Object.keys(newConfig.sensitivityFactors).forEach(channel => {
+        newConfig.sensitivityFactors[channel] = 1.0 + (newConfig.sensitivityFactors[channel] - 1.0) * 0.95;
+      });
+    }
+    
+    // Ajustar umbrales de calidad basados en retroalimentación de canales
+    Object.entries(feedback.channelFeedback).forEach(([channel, data]) => {
+      if (data.confidence < 0.3 && newConfig.qualityThresholds[channel]) {
+        // Reducir umbral para canales con baja confianza
+        newConfig.qualityThresholds[channel] = Math.max(
+          0.4, 
+          newConfig.qualityThresholds[channel] * 0.95
+        );
+      }
+    });
+    
+    // Actualizar configuración
+    configurationRef.current = newConfig;
+  }, []);
+
+  /**
+   * Obtener configuración actual del procesador
+   */
+  const getConfiguration = useCallback(() => {
+    return {...configurationRef.current};
+  }, []);
+
+  /**
+   * Actualizar configuración del procesador
+   */
+  const updateConfiguration = useCallback((config: Partial<ProcessorConfiguration>) => {
+    configurationRef.current = {...configurationRef.current, ...config};
+    
+    // Sincronizar con el procesador inmediatamente
+    if (processorRef.current && configurationRef.current.bidirectionalEnabled) {
+      processorRef.current.updateConfiguration(configurationRef.current);
+    }
+  }, []);
+
+  /**
+   * Obtener retroalimentación actual del procesador
+   */
+  const getFeedback = useCallback(() => {
+    return {...feedbackRef.current};
+  }, []);
+
+  /**
+   * Reiniciar procesador
+   */
+  const reset = useCallback(() => {
+    if (processorRef.current) {
+      processorRef.current.reset();
+    }
+    setResults(null);
+  }, []);
+
+  /**
+   * Reinicio completo
+   */
+  const fullReset = useCallback(() => {
+    if (processorRef.current) {
+      processorRef.current.fullReset();
+    }
+    setResults(null);
+    
+    // Restaurar configuración predeterminada
+    configurationRef.current = {
+      enabledChannels: ['cardiac', 'blood_pressure', 'spo2', 'glucose', 'hydration'],
+      sensitivityFactors: {
+        cardiac: 1.0,
+        blood_pressure: 1.0,
+        spo2: 1.0,
+        glucose: 1.0,
+        hydration: 1.0
+      },
+      qualityThresholds: {
+        cardiac: 0.6,
+        blood_pressure: 0.7,
+        spo2: 0.65,
+        glucose: 0.75,
+        hydration: 0.7
+      },
+      bidirectionalEnabled: true
+    };
+    
+    feedbackRef.current = {
+      signalQuality: 0,
+      arrhythmiaDetected: false,
+      processingLatency: 0,
+      lastUpdateTimestamp: 0,
+      channelFeedback: {}
+    };
+  }, []);
+
+  /**
+   * Obtener contador de arritmias
+   */
+  const getArrhythmiaCounter = useCallback(() => {
+    if (!processorRef.current) return 0;
+    return processorRef.current.getArrhythmiaCounter();
+  }, []);
+
   return {
-    ...state,
-    startProcessing,
-    stopProcessing,
+    results,
     processValue,
-    setProcessingQuality,
     reset,
     fullReset,
-    arrhythmiaCount: processorRef.current.getArrhythmiaCounter()
+    getArrhythmiaCounter,
+    // Bidireccionalidad
+    getConfiguration,
+    updateConfiguration,
+    getFeedback
   };
 }
