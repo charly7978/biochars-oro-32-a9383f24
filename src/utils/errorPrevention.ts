@@ -1,3 +1,4 @@
+
 /**
  * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
  * 
@@ -493,7 +494,7 @@ export function registerRecoveryActions(
 /**
  * Initialize the error prevention system
  */
-export function initializeErrorPreventionSystem(): (() => void) {
+export function initializeErrorPreventionSystem(): void {
   // Set up interval to periodically apply error decay
   const decayInterval = setInterval(() => {
     applyErrorDecay();

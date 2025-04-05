@@ -1,6 +1,4 @@
 
-import { RRIntervalData } from '@/types/signal';
-
 export class HeartBeatProcessor {
   SAMPLE_RATE = 30;
   WINDOW_SIZE = 60;
@@ -31,24 +29,24 @@ export class HeartBeatProcessor {
   FORCE_IMMEDIATE_BEEP = true; // Nueva bandera para forzar beeps inmediatos
   SKIP_TIMING_VALIDATION = true; // Omitir validaciones que puedan retrasar beeps
 
-  signalBuffer: number[] = [];
-  medianBuffer: number[] = [];
-  movingAverageBuffer: number[] = [];
+  signalBuffer = [];
+  medianBuffer = [];
+  movingAverageBuffer = [];
   smoothedValue = 0;
-  audioContext: AudioContext | null = null;
+  audioContext = null;
   lastBeepTime = 0;
-  lastPeakTime: number | null = null;
-  previousPeakTime: number | null = null;
-  bpmHistory: number[] = [];
+  lastPeakTime = null;
+  previousPeakTime = null;
+  bpmHistory = [];
   baseline = 0;
   lastValue = 0;
-  values: number[] = [];
+  values = [];
   startTime = 0;
-  peakConfirmationBuffer: number[] = [];
+  peakConfirmationBuffer = [];
   lastConfirmedPeak = false;
   smoothBPM = 0;
   BPM_ALPHA = 0.2;
-  peakCandidateIndex: number | null = null;
+  peakCandidateIndex = null;
   peakCandidateValue = 0;
 
   constructor() {
@@ -56,7 +54,7 @@ export class HeartBeatProcessor {
     this.startTime = Date.now();
   }
 
-  async initAudio(): Promise<void> {
+  async initAudio() {
     try {
       // Inicializa o recupera el contexto de audio con baja latencia
       if (!this.audioContext && typeof AudioContext !== 'undefined') {
@@ -76,7 +74,7 @@ export class HeartBeatProcessor {
     }
   }
 
-  async playBeep(volume: number = this.BEEP_VOLUME): Promise<boolean> {
+  async playBeep(volume = this.BEEP_VOLUME) {
     // Si estamos en el período de calentamiento, no reproducir beeps
     if (this.isInWarmup()) return false;
     
@@ -159,11 +157,11 @@ export class HeartBeatProcessor {
     }
   }
 
-  isInWarmup(): boolean {
+  isInWarmup() {
     return Date.now() - this.startTime < this.WARMUP_TIME_MS;
   }
 
-  medianFilter(value: number): number {
+  medianFilter(value) {
     this.medianBuffer.push(value);
     if (this.medianBuffer.length > this.MEDIAN_FILTER_WINDOW) {
       this.medianBuffer.shift();
@@ -172,7 +170,7 @@ export class HeartBeatProcessor {
     return sorted[Math.floor(sorted.length / 2)];
   }
 
-  calculateMovingAverage(value: number): number {
+  calculateMovingAverage(value) {
     this.movingAverageBuffer.push(value);
     if (this.movingAverageBuffer.length > this.MOVING_AVERAGE_WINDOW) {
       this.movingAverageBuffer.shift();
@@ -181,19 +179,13 @@ export class HeartBeatProcessor {
     return sum / this.movingAverageBuffer.length;
   }
 
-  calculateEMA(value: number): number {
+  calculateEMA(value) {
     this.smoothedValue =
       this.EMA_ALPHA * value + (1 - this.EMA_ALPHA) * this.smoothedValue;
     return this.smoothedValue;
   }
 
-  processSignal(value: number): {
-    bpm: number;
-    confidence: number;
-    isPeak: boolean;
-    filteredValue: number;
-    arrhythmiaCount: number;
-  } {
+  processSignal(value) {
     // Aplicar filtros para reducir ruido
     const medVal = this.medianFilter(value);
     const movAvgVal = this.calculateMovingAverage(medVal);
@@ -269,7 +261,7 @@ export class HeartBeatProcessor {
     };
   }
 
-  autoResetIfSignalIsLow(amplitude: number): void {
+  autoResetIfSignalIsLow(amplitude) {
     if (amplitude < this.LOW_SIGNAL_THRESHOLD) {
       this.lowSignalCount++;
       if (this.lowSignalCount >= this.LOW_SIGNAL_FRAMES) {
@@ -280,7 +272,7 @@ export class HeartBeatProcessor {
     }
   }
 
-  resetDetectionStates(): void {
+  resetDetectionStates() {
     this.lastPeakTime = null;
     this.previousPeakTime = null;
     this.lastConfirmedPeak = false;
@@ -291,7 +283,7 @@ export class HeartBeatProcessor {
     console.log("HeartBeatProcessor: auto-reset detection states (low signal).");
   }
 
-  detectPeak(normalizedValue: number, derivative: number): { isPeak: boolean; confidence: number } {
+  detectPeak(normalizedValue, derivative) {
     const now = Date.now();
     
     // Si estamos forzando beeps inmediatos, omitimos verificación de tiempo mínimo
@@ -327,7 +319,7 @@ export class HeartBeatProcessor {
     return { isPeak, confidence };
   }
 
-  confirmPeak(isPeak: boolean, normalizedValue: number, confidence: number): boolean {
+  confirmPeak(isPeak, normalizedValue, confidence) {
     // Añadir valor a buffer de confirmación
     this.peakConfirmationBuffer.push(normalizedValue);
     if (this.peakConfirmationBuffer.length > 5) {
@@ -358,7 +350,7 @@ export class HeartBeatProcessor {
     return false;
   }
 
-  updateBPM(): void {
+  updateBPM() {
     if (!this.lastPeakTime || !this.previousPeakTime) return;
     const interval = this.lastPeakTime - this.previousPeakTime;
     if (interval <= 0) return;
@@ -372,7 +364,7 @@ export class HeartBeatProcessor {
     }
   }
 
-  getSmoothBPM(): number {
+  getSmoothBPM() {
     const rawBPM = this.calculateCurrentBPM();
     if (this.smoothBPM === 0) {
       this.smoothBPM = rawBPM;
@@ -383,7 +375,7 @@ export class HeartBeatProcessor {
     return this.smoothBPM;
   }
 
-  calculateCurrentBPM(): number {
+  calculateCurrentBPM() {
     if (this.bpmHistory.length < 2) {
       return 0;
     }
@@ -394,7 +386,7 @@ export class HeartBeatProcessor {
     return avg;
   }
 
-  getFinalBPM(): number {
+  getFinalBPM() {
     if (this.bpmHistory.length < 5) {
       return 0;
     }
@@ -406,7 +398,7 @@ export class HeartBeatProcessor {
     return Math.round(sum / finalSet.length);
   }
 
-  reset(): void {
+  reset() {
     this.signalBuffer = [];
     this.medianBuffer = [];
     this.movingAverageBuffer = [];
@@ -434,7 +426,7 @@ export class HeartBeatProcessor {
     }
   }
 
-  getRRIntervals(): RRIntervalData {
+  getRRIntervals() {
     return {
       intervals: [...this.bpmHistory],
       lastPeakTime: this.lastPeakTime

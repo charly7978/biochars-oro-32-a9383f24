@@ -1,6 +1,6 @@
 
-import { ProcessedSignal, ProcessingError, SignalProcessor } from '@/types/signal';
-import { SignalAmplifier } from '@/modules/SignalAmplifier';
+import { ProcessedSignal, ProcessingError, SignalProcessor } from '../types/signal';
+import { SignalAmplifier } from '../modules/SignalAmplifier';
 
 class KalmanFilter {
   private R: number = 0.008; // Noise reduction factor
@@ -17,7 +17,7 @@ class KalmanFilter {
     return this.X;
   }
 
-  reset(): void {
+  reset() {
     this.X = 0;
     this.P = 1;
   }
@@ -94,11 +94,6 @@ export class PPGSignalProcessor implements SignalProcessor {
       console.error("PPGSignalProcessor: Error de inicialización", error);
       this.handleError("INIT_ERROR", "Error al inicializar el procesador");
     }
-  }
-
-  async calibrate(): Promise<boolean> {
-    // Implementation required for SignalProcessor interface
-    return true;
   }
 
   start(): void {
