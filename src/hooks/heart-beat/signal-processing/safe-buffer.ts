@@ -1,4 +1,3 @@
-
 /**
  * Buffer seguro con validación de datos y manejo de errores
  * Encapsula el buffer optimizado con protecciones adicionales
@@ -261,6 +260,50 @@ export class SafePPGBuffer<T extends TimestampedPPGData = TimestampedPPGData> {
    */
   public getOptimizedBuffer(): OptimizedPPGBuffer<T> {
     return this.buffer;
+  }
+
+  /**
+   * Get average of last N values with specified property
+   */
+  public getAverageOfLast(count: number, property?: string): number {
+    // Get the values to average
+    const valuesToAverage = this.buffer.slice(-Math.min(count, this.buffer.length));
+    
+    // If the buffer is empty, return 0
+    if (valuesToAverage.length === 0) {
+      return 0;
+    }
+    
+    // Calculate the average
+    let sum = 0;
+    for (let i = 0; i < valuesToAverage.length; i++) {
+      const item = valuesToAverage[i];
+      
+      // Handle different item types
+      if (property) {
+        // Ensure item is an object with the specified property
+        if (item && typeof item === 'object' && property in item) {
+          sum += item[property];
+        } else {
+          // Skip items that don't have the property
+          console.warn(`SafeBuffer: Item doesn't have property ${property}`);
+        }
+      } else if (typeof item === 'number') {
+        sum += item;
+      } else if (item && typeof item === 'object' && 'value' in item) {
+        // Try to use 'value' property if it's an object
+        sum += item.value;
+      } else if (item && typeof item === 'object' && 'time' in item) {
+        // Alternatively, try 'time' property
+        sum += item.time;
+      } else {
+        // Skip items that can't be averaged
+        console.warn('SafeBuffer: Item can\'t be averaged', item);
+      }
+    }
+    
+    // Return the average
+    return sum / valuesToAverage.length;
   }
 }
 
