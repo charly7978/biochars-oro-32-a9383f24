@@ -1,4 +1,3 @@
-
 /**
  * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
  */
@@ -128,10 +127,13 @@ export class VitalSignsProcessor {
    * Process signal directly - no simulation
    * This method is added for compatibility with the new interface
    */
-  public processSignal(value: number, rrData?: RRIntervalData): VitalSignsResult {
+  public processSignal(value: number, rrData?: { intervals: number[], lastPeakTime: number | null }): VitalSignsResult {
     return this.process({
       value,
-      rrData
+      rrData: rrData ? { 
+        intervals: rrData.intervals,
+        lastPeakTime: rrData.lastPeakTime
+      } : undefined
     });
   }
 
