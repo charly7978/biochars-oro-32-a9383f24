@@ -10,6 +10,7 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 import { PrecisionVitalSignsProcessor, PrecisionVitalSignsResult } from '../modules/vital-signs/PrecisionVitalSignsProcessor';
 import { CalibrationReference } from '../modules/vital-signs/calibration/CalibrationManager';
 import { useSignalProcessing } from './useSignalProcessing';
+import type { ProcessedSignal } from '../types/signal';
 
 /**
  * Estado del hook de signos vitales de precisión
@@ -97,20 +98,14 @@ export function usePrecisionVitalSigns() {
   }, [signalProcessing]);
   
   // Procesar señal
-  const processSignal = useCallback((signalValue: number): PrecisionVitalSignsResult | null => {
+  const processSignal = useCallback((signal: ProcessedSignal): PrecisionVitalSignsResult | null => {
     if (!processorRef.current || !state.isProcessing) {
       return null;
     }
     
     try {
-      // Create signal object with required properties
-      const signalObject = {
-        quality: signalProcessing.signalQuality,
-        filteredValue: signalValue
-      };
-      
       // Procesar señal con precisión mejorada
-      const result = processorRef.current.processSignal(signalObject);
+      const result = processorRef.current.processSignal(signal);
       
       // Actualizar estado con el resultado
       setState(prev => ({
@@ -132,7 +127,7 @@ export function usePrecisionVitalSigns() {
       console.error("usePrecisionVitalSigns: Error procesando señal", error);
       return null;
     }
-  }, [state.isProcessing, signalProcessing.signalQuality]);
+  }, [state.isProcessing]);
   
   // Escuchar cambios en la señal procesada
   useEffect(() => {
@@ -140,15 +135,21 @@ export function usePrecisionVitalSigns() {
       return;
     }
     
-    // Process the signal with the current filtered value
-    if (signalProcessing.lastResult) {
-      processSignal(signalProcessing.lastResult.filteredValue);
-    }
+    // Crear objeto de señal procesada
+    const processedSignal: ProcessedSignal = {
+      timestamp: Date.now(),
+      filteredValue: signalProcessing.filteredValue || 0,
+      quality: signalProcessing.signalQuality,
+      fingerDetected: signalProcessing.fingerDetected
+    };
+    
+    // Procesar señal
+    processSignal(processedSignal);
     
   }, [
     state.isProcessing,
+    signalProcessing.filteredValue,
     signalProcessing.fingerDetected,
-    signalProcessing.lastResult,
     signalProcessing.signalQuality,
     processSignal
   ]);
