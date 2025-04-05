@@ -1,39 +1,20 @@
 
-import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
-import { Toaster } from "@/components/ui/toaster";
-import Index from "./src/pages/Index";
-import NotFound from "./src/pages/NotFound";
-import { useEffect } from 'react';
-import './src/App.css';
-import { useMobileOptimizations } from './src/hooks/useMobileOptimizations';
-import ResponsiveContainer from './src/components/ResponsiveContainer';
+import React from 'react';
+import { NavigationContainer } from '@react-navigation/native';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import Index from './src/pages/Index';
+import NotFound from './src/pages/NotFound';
+
+const Stack = createNativeStackNavigator();
 
 const App = () => {
-  // Apply mobile optimizations
-  const { isMobile, isLowPowerMode } = useMobileOptimizations({
-    reducedMotion: true,
-    optimizeRendering: true,
-    reducedImageQuality: true,
-    batteryAwareness: true
-  });
-
-  useEffect(() => {
-    // App initialization code
-    if (isLowPowerMode) {
-      console.log('Running in low power mode');
-    }
-  }, [isLowPowerMode]);
-
   return (
-    <Router>
-      <ResponsiveContainer className="app-container" optimizeForMedicalData={true}>
-        <Routes>
-          <Route path="/" element={<Index />} />
-          <Route path="*" element={<NotFound />} />
-        </Routes>
-        <Toaster />
-      </ResponsiveContainer>
-    </Router>
+    <NavigationContainer>
+      <Stack.Navigator>
+        <Stack.Screen name="Home" component={Index} />
+        <Stack.Screen name="NotFound" component={NotFound} />
+      </Stack.Navigator>
+    </NavigationContainer>
   );
 };
 

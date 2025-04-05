@@ -9,31 +9,32 @@ interface ResponsiveContainerProps {
   fullHeight?: boolean;
   centerContent?: boolean;
   adaptForKeyboard?: boolean;
-  optimizeForMedicalData?: boolean;
 }
 
-const ResponsiveContainer: React.FC<ResponsiveContainerProps> = ({
+/**
+ * Contenedor responsivo mejorado que se adapta automáticamente a dispositivos móviles
+ */
+export const ResponsiveContainer: React.FC<ResponsiveContainerProps> = ({
   children,
   className = "",
   fullHeight = true,
   centerContent = true,
   adaptForKeyboard = true,
-  optimizeForMedicalData = false,
 }) => {
   const isMobile = useIsMobile();
-  const { settings } = useMobileOptimizations();
+  const { config } = useMobileOptimizations();
   const [keyboardOpen, setKeyboardOpen] = useState(false);
   const [viewportHeight, setViewportHeight] = useState<number>(window.innerHeight);
   
-  // Detect changes in window height to adapt to keyboard
+  // Detectar cambios en la altura de la ventana para adaptarse al teclado
   useEffect(() => {
     if (!isMobile || !adaptForKeyboard) return;
     
     const handleResize = () => {
       const newHeight = window.innerHeight;
-      // If height decreases significantly, it's probably the keyboard
+      // Si la altura disminuye significativamente, probablemente es el teclado
       const heightDifference = viewportHeight - newHeight;
-      const keyboardThreshold = viewportHeight * 0.15; // 15% of height
+      const keyboardThreshold = viewportHeight * 0.15; // 15% del alto
       
       setViewportHeight(newHeight);
       
@@ -46,7 +47,7 @@ const ResponsiveContainer: React.FC<ResponsiveContainerProps> = ({
     
     window.addEventListener('resize', handleResize);
     
-    // Set initial height
+    // Configurar altura inicial
     setViewportHeight(window.innerHeight);
     
     return () => {
@@ -54,24 +55,24 @@ const ResponsiveContainer: React.FC<ResponsiveContainerProps> = ({
     };
   }, [isMobile, adaptForKeyboard, viewportHeight]);
   
-  // Prevent scrolling and zooming on mobile
+  // Prevenir el desplazamiento y zoom en móviles
   useEffect(() => {
     if (!isMobile) return;
     
-    // Configure viewport meta
+    // Configurar viewport meta
     const viewportMeta = document.querySelector('meta[name="viewport"]');
     if (viewportMeta) {
       viewportMeta.setAttribute('content', 
         'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no');
     } else {
-      // Create if it doesn't exist
+      // Crear si no existe
       const meta = document.createElement('meta');
       meta.name = 'viewport';
       meta.content = 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no';
       document.head.appendChild(meta);
     }
     
-    // Prevent touch events that can cause zoom
+    // Prevenir eventos táctiles que pueden causar zoom
     const preventZoom = (e: TouchEvent) => {
       if (e.touches.length > 1) {
         e.preventDefault();
@@ -85,28 +86,27 @@ const ResponsiveContainer: React.FC<ResponsiveContainerProps> = ({
     };
   }, [isMobile]);
   
-  // Base styles
+  // Estilos base
   const containerClasses = [
     "responsive-container",
     fullHeight ? "min-h-screen" : "",
     centerContent ? "flex flex-col items-center justify-center" : "",
     keyboardOpen ? "keyboard-open" : "",
     isMobile ? "mobile-view" : "desktop-view",
-    settings.lowPowerMode ? "low-power-mode" : "",
-    optimizeForMedicalData ? "medical-data-optimized" : "",
+    config.lowPowerMode ? "low-power-mode" : "",
     className
   ].filter(Boolean).join(" ");
   
-  // Set performance styles to optimize
+  // Establecer estilos de rendimiento para optimizar
   const containerStyle: React.CSSProperties = {
-    // Performance optimizations
+    // Optimizaciones para rendimiento
     willChange: isMobile ? 'transform' : 'auto',
     transform: 'translateZ(0)',
     backfaceVisibility: 'hidden',
-    // Adjustment for when keyboard is open
+    // Ajuste para cuando el teclado está abierto
     paddingBottom: keyboardOpen ? '40vh' : undefined,
     overflowY: keyboardOpen ? 'auto' : undefined,
-    // Specific height for full screen on mobile
+    // Altura específica para pantalla completa en móvil
     height: isMobile && fullHeight ? `${viewportHeight}px` : undefined
   };
   

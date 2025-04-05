@@ -1,98 +1,99 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useIsMobile } from './use-mobile';
+import { AdaptiveFilters } from '../modules/signal-processing/adaptive-filters';
 
+/**
+ * Configuración de optimizaciones móviles
+ */
 interface MobileOptimizationConfig {
-  reducedMotion?: boolean;
-  optimizeRendering?: boolean;
-  reducedImageQuality?: boolean;
-  batteryAwareness?: boolean;
-  reduceAnimations?: boolean;
-  lowPowerMode?: boolean;
-  optimizeNetworkRequests?: boolean;
-  reduceProcessingLoad?: boolean;
-  useAdaptiveQuality?: boolean;
+  reduceAnimations: boolean;
+  lowPowerMode: boolean;
+  optimizeNetworkRequests: boolean;
+  reduceProcessingLoad: boolean;
+  useAdaptiveQuality: boolean;
 }
 
-export const useMobileOptimizations = (config: MobileOptimizationConfig = {}) => {
+/**
+ * Hook para aplicar optimizaciones específicas para dispositivos móviles
+ */
+export const useMobileOptimizations = () => {
   const isMobile = useIsMobile();
-  const [settings, setSettings] = useState<MobileOptimizationConfig>({
-    reducedMotion: config.reducedMotion || false,
-    optimizeRendering: config.optimizeRendering || false,
-    reducedImageQuality: config.reducedImageQuality || false,
-    batteryAwareness: config.batteryAwareness || false,
-    reduceAnimations: config.reduceAnimations || false,
-    lowPowerMode: config.lowPowerMode || false,
-    optimizeNetworkRequests: config.optimizeNetworkRequests || false,
-    reduceProcessingLoad: config.reduceProcessingLoad || false,
-    useAdaptiveQuality: config.useAdaptiveQuality || true,
+  const [config, setConfig] = useState<MobileOptimizationConfig>({
+    reduceAnimations: false,
+    lowPowerMode: false,
+    optimizeNetworkRequests: false,
+    reduceProcessingLoad: false,
+    useAdaptiveQuality: true,
   });
   
-  // Detect if the device has battery low
+  // Detectar si el dispositivo tiene batería baja
   const [isBatteryLow, setIsBatteryLow] = useState<boolean>(false);
   
-  // Network quality state
+  // Estado para el rendimiento de la red
   const [networkQuality, setNetworkQuality] = useState<'high'|'medium'|'low'>('high');
-  const [isLowPowerMode, setIsLowPowerMode] = useState(false);
   
-  // Configure optimizations based on device type
+  // Configurar optimizaciones basadas en el tipo de dispositivo
   useEffect(() => {
     if (isMobile) {
-      // Default settings for mobile
-      setSettings(prev => ({
-        ...prev,
+      // Configuración predeterminada para móviles
+      setConfig({
         reduceAnimations: true,
         lowPowerMode: isBatteryLow,
         optimizeNetworkRequests: true,
         reduceProcessingLoad: true,
         useAdaptiveQuality: true,
-      }));
+      });
       
-      // Apply CSS classes for mobile optimizations
+      // Configurar filtros adaptativos para móvil
+      AdaptiveFilters.getInstance().optimizeForDevice(true);
+      
+      // Aplicar clases CSS para optimizaciones móviles
       document.body.classList.add('mobile-optimized');
     } else {
-      // Settings for desktop
-      setSettings(prev => ({
-        ...prev,
+      // Configuración para escritorio
+      setConfig({
         reduceAnimations: false,
         lowPowerMode: false,
         optimizeNetworkRequests: false,
         reduceProcessingLoad: false,
-      }));
+        useAdaptiveQuality: true,
+      });
       
-      // Remove CSS classes for mobile optimization
+      // Configurar filtros adaptativos para escritorio
+      AdaptiveFilters.getInstance().optimizeForDevice(false);
+      
+      // Quitar clases CSS de optimización móvil
       document.body.classList.remove('mobile-optimized');
     }
     
-    // Apply document-level optimizations
+    // Aplicar optimizaciones a nivel de documento
     applyDocumentOptimizations();
+    
   }, [isMobile, isBatteryLow]);
   
-  // Detect battery status if available
+  // Detectar estado de batería si está disponible
   useEffect(() => {
     if ('getBattery' in navigator) {
       const checkBattery = async () => {
         try {
-          // @ts-ignore - Battery API not available in all browsers
+          // @ts-ignore - La API de batería no está en todos los navegadores
           const battery = await navigator.getBattery();
           
-          // Update state if battery is below 20%
+          // Actualizar estado si la batería está por debajo del 20%
           setIsBatteryLow(battery.level < 0.2 && !battery.charging);
-          setIsLowPowerMode(battery.level < 0.2 && !battery.charging);
           
-          // Listen to battery level changes
+          // Escuchar cambios en el nivel de batería
           battery.addEventListener('levelchange', () => {
             setIsBatteryLow(battery.level < 0.2 && !battery.charging);
-            setIsLowPowerMode(battery.level < 0.2 && !battery.charging);
           });
           
-          // Listen to charging state changes
+          // Escuchar cambios en el estado de carga
           battery.addEventListener('chargingchange', () => {
             setIsBatteryLow(battery.level < 0.2 && !battery.charging);
-            setIsLowPowerMode(battery.level < 0.2 && !battery.charging);
           });
         } catch (error) {
-          console.error('Error accessing battery API:', error);
+          console.error('Error accediendo a la API de batería:', error);
         }
       };
       
@@ -100,10 +101,10 @@ export const useMobileOptimizations = (config: MobileOptimizationConfig = {}) =>
     }
   }, []);
   
-  // Check network quality
+  // Verificar calidad de la red
   useEffect(() => {
     if ('connection' in navigator) {
-      // @ts-ignore - Connection API not available in all browsers
+      // @ts-ignore - La API de conexión no está en todos los navegadores
       const connection = navigator.connection;
       
       const updateNetworkQuality = () => {
@@ -121,7 +122,7 @@ export const useMobileOptimizations = (config: MobileOptimizationConfig = {}) =>
       
       updateNetworkQuality();
       
-      // Listen for connection changes
+      // Escuchar cambios en la conexión
       // @ts-ignore
       connection.addEventListener('change', updateNetworkQuality);
       
@@ -132,18 +133,18 @@ export const useMobileOptimizations = (config: MobileOptimizationConfig = {}) =>
     }
   }, []);
   
-  // Apply document-level optimizations
+  // Aplicar optimizaciones a nivel de documento
   const applyDocumentOptimizations = useCallback(() => {
     if (isMobile) {
-      // Disable heavy CSS effects
-      document.documentElement.style.setProperty('--enable-animations', settings.reduceAnimations ? '0' : '1');
+      // Desactivar efectos CSS pesados
+      document.documentElement.style.setProperty('--enable-animations', config.reduceAnimations ? '0' : '1');
       
-      // Optimize reflow and repaint
+      // Optimizar el reflow y repaint
       document.body.style.willChange = 'transform';
       document.body.style.backfaceVisibility = 'hidden';
       
-      // Reduce visual complexity in low power mode
-      if (settings.lowPowerMode) {
+      // Reducir complejidad visual si está en modo de bajo consumo
+      if (config.lowPowerMode) {
         document.documentElement.style.setProperty('--enable-shadows', '0');
         document.documentElement.style.setProperty('--enable-blur', '0');
       } else {
@@ -151,29 +152,29 @@ export const useMobileOptimizations = (config: MobileOptimizationConfig = {}) =>
         document.documentElement.style.setProperty('--enable-blur', '1');
       }
     } else {
-      // Restore default values for desktop
+      // Restaurar valores predeterminados para escritorio
       document.documentElement.style.setProperty('--enable-animations', '1');
       document.documentElement.style.setProperty('--enable-shadows', '1');
       document.documentElement.style.setProperty('--enable-blur', '1');
       document.body.style.willChange = 'auto';
       document.body.style.backfaceVisibility = 'visible';
     }
-  }, [isMobile, settings]);
+  }, [isMobile, config]);
   
-  // Update optimization config manually
+  // Ajustar configuración de optimización manual
   const updateOptimizationConfig = useCallback((newConfig: Partial<MobileOptimizationConfig>) => {
-    setSettings(prev => {
+    setConfig(prev => {
       const updated = { ...prev, ...newConfig };
+      // Aplicar optimizaciones actualizadas
       return updated;
     });
   }, []);
   
   return {
     isMobile,
-    isLowPowerMode,
+    config,
     isBatteryLow,
     networkQuality,
-    settings,
     updateOptimizationConfig,
   };
 };
