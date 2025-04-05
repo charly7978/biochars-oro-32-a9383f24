@@ -7,8 +7,10 @@ export enum VitalSignType {
   SPO2 = "spo2",
   BLOOD_PRESSURE = "blood_pressure",
   GLUCOSE = "glucose",
-  HYDRATION = "hydration", // Changed from LIPIDS
-  HEARTBEAT = "heartbeat"
+  HYDRATION = "hydration",
+  HEARTBEAT = "heartbeat",
+  CARDIAC = "cardiac",
+  LIPIDS = "lipids" // Keep for backward compatibility
 }
 
 export interface ProcessedSignal {
@@ -23,6 +25,7 @@ export interface ProcessedSignal {
     width: number;
     height: number;
   };
+  perfusionIndex?: number;
 }
 
 export interface OptimizedSignalChannel {
@@ -39,6 +42,63 @@ export interface ChannelFeedback {
   signalAmplitude: number;
   signalNoise: number;
   quality: number;
+  signalQuality?: number; // Added for backward compatibility
   calibrationStatus: string;
   lastUpdated: number;
+  suggestedAdjustments?: {
+    amplification?: number;
+    filterStrength?: number;
+  };
+}
+
+// PPG Data Point interfaces
+export interface PPGDataPoint {
+  value: number;
+  time?: number;
+}
+
+export interface TimestampedPPGData extends PPGDataPoint {
+  timestamp: number;
+}
+
+// Signal validation interfaces
+export interface SignalValidationResult {
+  isValid: boolean;
+  errorCode?: string;
+  errorMessage?: string;
+}
+
+export interface SignalValidationConfig {
+  minAmplitude: number;
+  minDataPoints: number;
+  maxNoiseRatio?: number;
+}
+
+// Error handling interfaces
+export interface ProcessingError {
+  code: string;
+  message: string;
+  timestamp: number;
+  severity: 'low' | 'medium' | 'high' | 'critical';
+  recoverable: boolean;
+  component?: string;
+  suggestions?: string[];
+  data?: any;
+}
+
+export interface ErrorHandlerConfig {
+  maxRetries: number;
+  retryDelay: number;
+  useFallback: boolean;
+  logErrors: boolean;
+}
+
+// Diagnostics interfaces
+export interface SignalDiagnosticInfo {
+  processingStage: string;
+  validationPassed: boolean;
+  errorCode?: string;
+  errorMessage?: string;
+  processingTimeMs?: number;
+  timestamp?: number;
 }

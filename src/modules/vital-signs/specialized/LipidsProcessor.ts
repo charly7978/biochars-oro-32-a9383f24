@@ -26,7 +26,7 @@ export class LipidsProcessor extends BaseVitalSignProcessor<LipidsResult> {
   private readonly BASELINE_HYDRATION = 65; // % (Changed from triglycerides)
   
   constructor() {
-    super(VitalSignType.LIPIDS);
+    super(VitalSignType.HYDRATION); // Changed from LIPIDS to HYDRATION
   }
   
   /**
@@ -37,7 +37,7 @@ export class LipidsProcessor extends BaseVitalSignProcessor<LipidsResult> {
   protected processValueImpl(value: number): LipidsResult {
     // Skip processing if the value is too small
     if (Math.abs(value) < 0.01) {
-      return { totalCholesterol: 0, hydrationPercentage: 0 };
+      return this.getEmptyResult();
     }
     
     // Calculate lipid values
@@ -74,5 +74,26 @@ export class LipidsProcessor extends BaseVitalSignProcessor<LipidsResult> {
     
     // Ensure result is within physiological range (45-100%)
     return Math.min(100, Math.max(45, hydration));
+  }
+
+  /**
+   * Get an empty result for invalid signals
+   */
+  public getEmptyResult(): LipidsResult {
+    return {
+      totalCholesterol: 0,
+      hydrationPercentage: 0
+    };
+  }
+
+  /**
+   * Calculate hydration from values array
+   */
+  public calculateHydration(values: number[]): LipidsResult {
+    if (!values.length) return this.getEmptyResult();
+    
+    // Use the last value for calculation
+    const lastValue = values[values.length - 1];
+    return this.processValue(lastValue);
   }
 }

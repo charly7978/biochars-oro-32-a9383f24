@@ -104,6 +104,10 @@ export function useVitalSignsProcessor() {
         lipids: {
           totalCholesterol: 0,
           hydrationPercentage: 0
+        },
+        hydration: {
+          totalCholesterol: 0,
+          hydrationPercentage: 0
         }
       };
     }
@@ -127,7 +131,7 @@ export function useVitalSignsProcessor() {
     const startTime = performance.now();
     
     // Procesar señal
-    const result = processorRef.current.processSignal(value, rrData);
+    const result = processorRef.current.processSignal(value);
     
     // Calcular tiempo de procesamiento
     const processingTime = performance.now() - startTime;
@@ -152,7 +156,7 @@ export function useVitalSignsProcessor() {
         arrhythmiaCount: processorRef.current.getArrhythmiaCounter(),
         spo2: result.spo2,
         pressure: result.pressure,
-        hydration: result.lipids.hydrationPercentage
+        hydration: result.hydration.hydrationPercentage
       });
     }
     

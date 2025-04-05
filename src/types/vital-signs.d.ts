@@ -1,3 +1,4 @@
+
 /**
  * Central type definitions for vital signs processing
  * IMPORTANT: All modules should import types from here to prevent duplication
@@ -39,6 +40,9 @@ export interface SignalProcessingOptions {
   filterStrength?: number;
   qualityThreshold?: number;
   fingerDetectionSensitivity?: number;
+  useAdaptiveControl?: boolean;
+  adaptationRate?: number;
+  predictionHorizon?: number;
 }
 
 /**

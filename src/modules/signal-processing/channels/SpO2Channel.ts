@@ -1,181 +1,109 @@
 
 /**
- * Specialized channel for SpO2 signal processing
- * Optimizes the signal specifically for oxygen saturation measurement
- * Focuses on AC/DC ratio and perfusion characteristics
+ * SpO2 specialized channel
  */
 
-import { SpecializedChannel, ChannelConfig } from './SpecializedChannel';
 import { VitalSignType } from '../../../types/signal';
+import { SpecializedChannel } from './SpecializedChannel';
 
 /**
- * SpO2-specific channel
+ * Channel optimized for SpO2 signal extraction
  */
 export class SpO2Channel extends SpecializedChannel {
-  // SpO2-specific parameters
-  private readonly PERFUSION_WEIGHT = 0.65;   // Weight for perfusion components
-  private readonly ABSORPTION_WEIGHT = 0.35;  // Weight for absorption components
-  private readonly AC_EMPHASIS = 1.2;         // Emphasis on AC component
+  private readonly RED_WEIGHT = 0.7;
+  private readonly IR_WEIGHT = 0.3;
+  private readonly AC_EMPHASIS = 1.2;
+  private readonly DC_SUPPRESSION = 0.7;
+  private readonly NOISE_THRESHOLD = 0.05;
   
-  // Calculate AC/DC ratio for SpO2
-  private acComponentBuffer: number[] = [];
-  private dcComponentBuffer: number[] = [];
-  private readonly COMPONENT_BUFFER_SIZE = 50; // Buffer size for AC/DC components
+  private lastValues: number[] = [];
+  private readonly BUFFER_SIZE = 10;
   
-  constructor(config: ChannelConfig) {
-    super(VitalSignType.SPO2, config);
+  /**
+   * Constructor
+   */
+  constructor() {
+    super(VitalSignType.SPO2);
+    this.amplification = 1.2; // Higher amplification for SpO2
+    this.filterStrength = 0.6; // Stronger filtering for SpO2
   }
   
   /**
-   * Apply SpO2-specific optimization to the signal
-   * - Emphasizes AC/DC ratio critical for oxygen saturation
-   * - Enhances perfusion-related components
-   * - Optimizes for absorption characteristics
+   * Process signal with SpO2-specific optimizations
    */
-  protected applyChannelSpecificOptimization(value: number): number {
-    // Extract AC and DC components
-    const { ac, dc } = this.extractACDCComponents(value);
+  protected override specializedProcessing(value: number): number {
+    // Store the value for analysis
+    this.lastValues.push(value);
+    if (this.lastValues.length > this.BUFFER_SIZE) {
+      this.lastValues.shift();
+    }
     
-    // Store components
-    this.updateComponentBuffers(ac, dc);
+    // Not enough values yet for full processing
+    if (this.lastValues.length < 3) {
+      return value;
+    }
     
-    // Enhance perfusion component (related to oxygenated blood flow)
-    const perfusionComponent = this.enhancePerfusionComponent(ac, dc);
+    // Calculate baseline
+    const baseline = this.calculateBaseline();
     
-    // Enhance absorption component (related to different hemoglobin absorption)
-    const absorptionComponent = this.enhanceAbsorptionComponent(value, dc);
+    // Extract AC component (pulsatile)
+    const ac = value - baseline;
     
-    // Combine components with specific weighting for SpO2
-    const optimizedValue = dc + 
-                         (perfusionComponent * this.PERFUSION_WEIGHT) +
-                         (absorptionComponent * this.ABSORPTION_WEIGHT);
+    // Enhance AC component for better SpO2 estimation
+    const enhancedAc = ac * this.AC_EMPHASIS;
     
-    // Apply AC emphasis for better SpO2 correlation
-    return optimizedValue * this.AC_EMPHASIS;
+    // Reduce DC component for better SNR
+    const reducedDc = baseline * this.DC_SUPPRESSION;
+    
+    // Improved SpO2-optimized signal
+    const spo2Signal = reducedDc + enhancedAc;
+    
+    // Noise reduction
+    return this.reduceNoise(spo2Signal);
   }
   
   /**
-   * Extract AC and DC components from the signal
+   * Calculate signal baseline (DC component)
    */
-  private extractACDCComponents(value: number): { ac: number, dc: number } {
-    if (this.recentValues.length < 10) {
-      return { ac: 0, dc: value };
+  private calculateBaseline(): number {
+    if (this.lastValues.length < 3) {
+      return this.lastValues[0] || 0;
     }
     
-    // Calculate DC component as low-pass filtered signal
-    const recentValues = this.recentValues.slice(-10);
-    // Use weighted moving average with more weight on earlier values for DC
-    const weights = recentValues.map((_, i) => 1 - (i / recentValues.length) * 0.5);
-    const weightSum = weights.reduce((sum, w) => sum + w, 0);
-    
-    const dc = recentValues.reduce((sum, val, i) => sum + val * weights[i], 0) / weightSum;
-    
-    // AC is the current value minus DC
-    const ac = value - dc;
-    
-    return { ac, dc };
+    // Simple moving average for baseline
+    return this.lastValues.reduce((sum, val) => sum + val, 0) / this.lastValues.length;
   }
   
   /**
-   * Update buffers for AC and DC components
+   * Reduce noise in the signal
    */
-  private updateComponentBuffers(ac: number, dc: number): void {
-    // Store AC component
-    this.acComponentBuffer.push(ac);
-    if (this.acComponentBuffer.length > this.COMPONENT_BUFFER_SIZE) {
-      this.acComponentBuffer.shift();
+  private reduceNoise(value: number): number {
+    if (this.lastValues.length < 3) {
+      return value;
     }
     
-    // Store DC component
-    this.dcComponentBuffer.push(dc);
-    if (this.dcComponentBuffer.length > this.COMPONENT_BUFFER_SIZE) {
-      this.dcComponentBuffer.shift();
+    // Check for excessive noise
+    const last = this.lastValues[this.lastValues.length - 1] || 0;
+    const secondLast = this.lastValues[this.lastValues.length - 2] || 0;
+    
+    const diff = Math.abs(value - last);
+    const prevDiff = Math.abs(last - secondLast);
+    
+    // If current change is much larger than previous change, it might be noise
+    if (diff > prevDiff * 3 && diff > this.NOISE_THRESHOLD) {
+      // Reduce the influence of the noise spike
+      return last + (value - last) * 0.3;
     }
+    
+    return value;
   }
   
   /**
-   * Enhance perfusion component specifically for SpO2
+   * Apply weighted emphasis on red/IR components
+   * This is specific to SpO2 calculation
    */
-  private enhancePerfusionComponent(ac: number, dc: number): number {
-    // Perfusion index is AC/DC ratio
-    const perfusionIndex = dc !== 0 ? Math.abs(ac / dc) : 0;
-    
-    // Calculate average perfusion index over buffer
-    let avgPerfusionIndex = perfusionIndex;
-    if (this.acComponentBuffer.length > 5 && this.dcComponentBuffer.length > 5) {
-      let sumPerfusion = 0;
-      const count = Math.min(this.acComponentBuffer.length, this.dcComponentBuffer.length);
-      
-      for (let i = 0; i < count; i++) {
-        sumPerfusion += Math.abs(this.acComponentBuffer[i] / Math.max(0.001, this.dcComponentBuffer[i]));
-      }
-      
-      avgPerfusionIndex = sumPerfusion / count;
-    }
-    
-    // Apply non-linear enhancement of perfusion component
-    // Higher perfusion should be weighted more as it correlates with better signal
-    const enhancedPerfusion = ac * (1 + avgPerfusionIndex * 2);
-    
-    return enhancedPerfusion;
-  }
-  
-  /**
-   * Enhance absorption component specifically for SpO2
-   */
-  private enhanceAbsorptionComponent(value: number, dc: number): number {
-    if (this.recentValues.length < 5) {
-      return value - dc;
-    }
-    
-    // For SpO2, the relative absorption is important
-    // In a full implementation this would use red/IR ratios
-    
-    // Calculate absorption variations
-    const recentValues = this.recentValues.slice(-10);
-    const variations = recentValues.map(v => v - dc);
-    
-    // Calculate rate of change in absorption
-    let absorptionRateSum = 0;
-    for (let i = 1; i < variations.length; i++) {
-      absorptionRateSum += Math.abs(variations[i] - variations[i-1]);
-    }
-    
-    const avgAbsorptionRate = absorptionRateSum / (variations.length - 1);
-    
-    // Emphasize absorption rate which correlates with SpO2
-    const enhancementFactor = 1 + avgAbsorptionRate * 2;
-    
-    return (value - dc) * enhancementFactor;
-  }
-  
-  /**
-   * Calculate SpO2-specific signal quality
-   */
-  protected override updateQuality(): void {
-    super.updateQuality();
-    
-    // Add SpO2-specific quality metrics if we have enough data
-    if (this.acComponentBuffer.length > 10 && this.dcComponentBuffer.length > 10) {
-      // Calculate AC/DC ratio stability (important for SpO2)
-      const ratios = [];
-      const count = Math.min(this.acComponentBuffer.length, this.dcComponentBuffer.length);
-      
-      for (let i = 0; i < count; i++) {
-        const ratio = Math.abs(this.acComponentBuffer[i] / Math.max(0.001, this.dcComponentBuffer[i]));
-        ratios.push(ratio);
-      }
-      
-      // Calculate ratio stability
-      const avgRatio = ratios.reduce((sum, r) => sum + r, 0) / ratios.length;
-      const ratioVariations = ratios.map(r => Math.pow(r - avgRatio, 2));
-      const ratioStability = 1 - Math.min(1, Math.sqrt(
-        ratioVariations.reduce((sum, v) => sum + v, 0) / ratios.length
-      ) / avgRatio);
-      
-      // Blend with existing quality metric
-      this.quality = this.quality * 0.6 + ratioStability * 0.4;
-    }
+  public applySpO2Weights(redValue: number, irValue: number): number {
+    return redValue * this.RED_WEIGHT + irValue * this.IR_WEIGHT;
   }
   
   /**
@@ -183,23 +111,23 @@ export class SpO2Channel extends SpecializedChannel {
    */
   public override reset(): void {
     super.reset();
-    this.acComponentBuffer = [];
-    this.dcComponentBuffer = [];
+    this.lastValues = [];
+    this.amplification = 1.2; // Higher amplification for SpO2
+    this.filterStrength = 0.6; // Stronger filtering for SpO2
   }
   
   /**
-   * Get current AC/DC ratio for SpO2 calculation
+   * Update quality calculation with SpO2-specific metrics
    */
-  public getACDCRatio(): number {
-    if (this.acComponentBuffer.length === 0 || this.dcComponentBuffer.length === 0) {
-      return 0;
+  public calculateQuality(redValue: number, irValue: number): number {
+    // Calculate ratio
+    const ratio = irValue !== 0 ? redValue / irValue : 0;
+    
+    // Update quality based on ratio validity
+    if (ratio > 0.3 && ratio < 1.0) {
+      return Math.min(1.0, super.getQuality() + 0.1);
+    } else {
+      return Math.max(0.0, super.getQuality() - 0.1);
     }
-    
-    // Calculate average AC and DC
-    const avgAC = this.acComponentBuffer.reduce((sum, val) => sum + Math.abs(val), 0) / this.acComponentBuffer.length;
-    const avgDC = this.dcComponentBuffer.reduce((sum, val) => sum + Math.abs(val), 0) / this.dcComponentBuffer.length;
-    
-    // Return ratio
-    return avgDC > 0 ? avgAC / avgDC : 0;
   }
 }

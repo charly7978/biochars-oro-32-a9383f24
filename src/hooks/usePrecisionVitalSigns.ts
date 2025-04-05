@@ -138,7 +138,8 @@ export function usePrecisionVitalSigns() {
     // Crear objeto de señal procesada
     const processedSignal: ProcessedSignal = {
       timestamp: Date.now(),
-      filteredValue: signalProcessing.filteredValue || 0,
+      rawValue: signalProcessing.lastResult?.rawValue || 0,
+      filteredValue: signalProcessing.lastResult?.filteredValue || 0,
       quality: signalProcessing.signalQuality,
       fingerDetected: signalProcessing.fingerDetected
     };
@@ -148,7 +149,7 @@ export function usePrecisionVitalSigns() {
     
   }, [
     state.isProcessing,
-    signalProcessing.filteredValue,
+    signalProcessing.lastResult?.filteredValue,
     signalProcessing.fingerDetected,
     signalProcessing.signalQuality,
     processSignal
@@ -199,7 +200,7 @@ export function usePrecisionVitalSigns() {
     if (!processorRef.current) return;
     
     processorRef.current.reset();
-    signalProcessing.reset();
+    signalProcessing.stopProcessing();
     
     setState({
       isProcessing: false,

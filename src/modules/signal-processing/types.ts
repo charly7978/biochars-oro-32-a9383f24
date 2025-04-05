@@ -29,6 +29,9 @@ export interface SignalProcessingOptions {
   filterStrength?: number;
   qualityThreshold?: number;
   fingerDetectionSensitivity?: number;
+  useAdaptiveControl?: boolean;
+  adaptationRate?: number;
+  predictionHorizon?: number;
 }
 
 export interface ISignalProcessor {
