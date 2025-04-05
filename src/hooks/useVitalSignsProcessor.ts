@@ -1,4 +1,3 @@
-
 /**
  * Hook for processing vital signs signals
  * Now with diagnostics channel and prioritization system
@@ -8,9 +7,30 @@ import { VitalSignsProcessor } from '../modules/vital-signs'; // Import from cen
 import { ProcessingPriority } from '../modules/extraction'; // Import priority enum
 import type { VitalSignsResult, RRIntervalData } from '../types/vital-signs';
 import type { ArrhythmiaWindow } from './vital-signs/types';
-import { getDiagnosticsData, clearDiagnosticsData } from '../hooks/heart-beat/signal-processing/peak-detection';
 
-// Interfaz para datos de diagnóstico integral
+// Diagnostics data for vital signs processing
+const diagnosticsData: Array<{
+  timestamp: number;
+  value: number;
+  processTime: number;
+  processingPriority: string;
+}> = [];
+
+/**
+ * Get diagnostics data for analysis
+ */
+function getDiagnosticsData() {
+  return [...diagnosticsData];
+}
+
+/**
+ * Clear diagnostics data
+ */
+function clearDiagnosticsData() {
+  diagnosticsData.length = 0;
+}
+
+// Interface for comprehensive diagnostics data
 interface DiagnosticsInfo {
   processedSignals: number;
   signalLog: Array<{ timestamp: number, value: number, result: any, priority: ProcessingPriority }>;
