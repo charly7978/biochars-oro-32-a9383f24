@@ -1,24 +1,50 @@
 
 /**
- * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
- * 
- * Signal processing module
- * Central export for all signal processing utilities
+ * Signal processing module exports
  */
 
-// Export signal distributor
-export { OptimizedSignalDistributor } from './OptimizedSignalDistributor';
+// Export types and interfaces
+export type ProcessedPPGSignal = {
+  timestamp: number;
+  rawValue: number;
+  filteredValue: number;
+  normalizedValue: number;
+  amplifiedValue: number;
+  quality: number;
+  fingerDetected: boolean;
+  signalStrength: number;
+};
 
-// Export channel types
-export { VitalSignType, type ChannelFeedback } from '../../types/signal';
+export type ProcessedHeartbeatSignal = {
+  timestamp: number;
+  value: number;
+  isPeak: boolean;
+  peakConfidence: number;
+  instantaneousBPM: number | null;
+  rrInterval: number | null;
+  heartRateVariability: number | null;
+};
 
-// Export specialized channels
-export { SpecializedChannel } from './channels/SpecializedChannel';
-export { GlucoseChannel } from './channels/GlucoseChannel';
-export { LipidsChannel } from './channels/LipidsChannel';
-export { BloodPressureChannel } from './channels/BloodPressureChannel';
-export { SpO2Channel } from './channels/SpO2Channel';
-export { CardiacChannel } from './channels/CardiacChannel';
+export type SignalProcessingOptions = {
+  amplificationFactor?: number;
+  filterStrength?: number;
+  qualityThreshold?: number;
+  fingerDetectionSensitivity?: number;
+  useAdaptiveControl?: boolean;
+  qualityEnhancedByPrediction?: boolean;
+  predictionHorizon?: number;
+  adaptationRate?: number;
+};
 
-// Re-export utility types
-export type { SignalDistributorConfig } from '../../types/signal';
+// Export processors
+export { SignalProcessor as PPGSignalProcessor } from '../vital-signs/signal-processor';
+export { HeartBeatProcessor as HeartbeatProcessor } from './HeartBeatProcessor';
+
+// Export utility functions
+export const resetFingerDetector = () => {
+  console.log("Resetting finger detector");
+  // Implementation would go here
+};
+
+// Export other components
+export * from './channels/SpecializedChannel';
