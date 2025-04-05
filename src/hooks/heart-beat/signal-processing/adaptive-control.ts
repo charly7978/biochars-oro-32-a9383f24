@@ -7,11 +7,11 @@
  */
 import { getAdaptivePredictor, PredictionResult } from '../../../modules/signal-processing/utils/adaptive-predictor';
 import { createDefaultPPGOptimizer } from '../../../modules/signal-processing/utils/bayesian-optimization';
+import { CircularBuffer } from '../../../modules/signal-processing/utils/circular-buffer';
 import { logError, ErrorLevel } from '../../../utils/debugUtils';
 
-// Buffer de valores para el filtro adaptativo
-const valueBuffer: number[] = [];
-const MAX_BUFFER_SIZE = 20;
+// Buffer circular para valores 
+const valueBuffer = new CircularBuffer<number>(20, true, true);
 
 // Estado del controlador adaptativo
 let adaptiveFilterStrength = 0.25;
@@ -52,12 +52,9 @@ function initializeAdaptiveControl() {
 export function applyAdaptiveFilter(value: number, qualityFactor: number = 0.5): number {
   // Añadir valor al buffer
   valueBuffer.push(value);
-  if (valueBuffer.length > MAX_BUFFER_SIZE) {
-    valueBuffer.shift();
-  }
   
   // Si hay pocos valores, devolver el original
-  if (valueBuffer.length < 3) {
+  if (valueBuffer.getSize() < 3) {
     return value;
   }
   
@@ -66,7 +63,8 @@ export function applyAdaptiveFilter(value: number, qualityFactor: number = 0.5):
   const adjustedStrength = adaptiveFilterStrength * (1 + (1 - qualityFactor) * 0.5);
   
   // Calcular valor filtrado con EMA
-  const lastFiltered = valueBuffer[valueBuffer.length - 2];
+  const values = valueBuffer.toArray();
+  const lastFiltered = values.length > 1 ? values[values.length - 2] : value;
   return adjustedStrength * value + (1 - adjustedStrength) * lastFiltered;
 }
 
@@ -220,7 +218,7 @@ function calculateVariance(values: number[]): number {
  * Reinicia el sistema de control adaptativo
  */
 export function resetAdaptiveControl(): void {
-  valueBuffer.length = 0;
+  valueBuffer.clear();
   adaptiveFilterStrength = 0.25;
   qualityWeightFactor = 0.5;
   lastPredictionQuality = 0;
@@ -262,7 +260,7 @@ export function getAdaptiveModelState(): any {
       qualityWeight: qualityWeightFactor,
       predictorState: predictor.getState(),
       lastPredictionQuality,
-      bufferSize: valueBuffer.length
+      bufferState: valueBuffer.getState()
     };
   } catch (error) {
     return {
@@ -383,7 +381,6 @@ export function applyMixedModelPrediction(
     
     // Componente de error (basado en varianza)
     const variance = calculateVariance(recentQuality);
-    const errorComponent = Math.sqrt(variance) * 0.5;
     
     // Combinar componentes con límites razonables
     let predictedQuality = linearPrediction;
