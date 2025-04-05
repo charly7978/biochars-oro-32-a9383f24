@@ -44,7 +44,8 @@ export const useSignalProcessing = () => {
         lipids: {
           totalCholesterol: 0,
           hydrationPercentage: 0
-        }
+        },
+        hydration: 0
       };
     }
     
@@ -60,7 +61,8 @@ export const useSignalProcessing = () => {
         lipids: {
           totalCholesterol: 0,
           hydrationPercentage: 0
-        }
+        },
+        hydration: 0
       };
     }
     

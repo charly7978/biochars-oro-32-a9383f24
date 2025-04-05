@@ -1,3 +1,4 @@
+
 /**
  * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
  */
@@ -19,17 +20,27 @@ export class VitalSignsProcessor {
    * Process a PPG signal with improved false positive detection
    */
   public processSignal(
-    ppgValue: number,
-    rrData?: { intervals: number[]; lastPeakTime: number | null }
+    ppgValue: number | { value: number, rrData?: { intervals: number[]; lastPeakTime: number | null } }
   ): VitalSignsResult {
+    // Extract value and rrData
+    let value: number;
+    let rrData: { intervals: number[]; lastPeakTime: number | null } | undefined;
+    
+    if (typeof ppgValue === 'number') {
+      value = ppgValue;
+    } else {
+      value = ppgValue.value;
+      rrData = ppgValue.rrData;
+    }
+    
     // Add value to history
-    this.signalHistory.push(ppgValue);
+    this.signalHistory.push(value);
     if (this.signalHistory.length > 50) {
       this.signalHistory.shift();
     }
     
     // Basic validation
-    if (Math.abs(ppgValue) < 0.05) {
+    if (Math.abs(value) < 0.05) {
       return this.getEmptyResult();
     }
     
@@ -48,11 +59,11 @@ export class VitalSignsProcessor {
     }
     
     // Calculate basic vital signs based on PPG signal
-    const spo2 = this.calculateSpO2(ppgValue);
-    const pressure = this.calculateBloodPressure(ppgValue, rrData);
-    const glucose = this.calculateGlucose(ppgValue);
-    const lipids = this.calculateLipids(ppgValue);
-    const hydration = this.calculateHydration(ppgValue);
+    const spo2 = this.calculateSpO2(value);
+    const pressure = this.calculateBloodPressure(value, rrData);
+    const glucose = this.calculateGlucose(value);
+    const lipids = this.calculateLipids(value);
+    const hydration = this.calculateHydration(value);
     
     return {
       spo2,

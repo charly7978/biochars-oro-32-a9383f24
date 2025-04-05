@@ -5,7 +5,8 @@
  * Optimized for better performance and memory usage
  */
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { HybridVitalSignsProcessor, HybridProcessingOptions, VitalSignsResult } from '../modules/vital-signs';
+import { HybridVitalSignsProcessor, HybridProcessingOptions } from '../modules/vital-signs/HybridVitalSignsProcessor';
+import { VitalSignsResult } from '../modules/vital-signs/types/vital-signs-result';
 
 /**
  * Configuration for the hook
@@ -74,7 +75,8 @@ export const useHybridVitalSignsProcessor = (options?: UseHybridVitalSignsProces
         lipids: {
           totalCholesterol: 0,
           hydrationPercentage: 0
-        }
+        },
+        hydration: 0
       };
     }
     
@@ -96,7 +98,8 @@ export const useHybridVitalSignsProcessor = (options?: UseHybridVitalSignsProces
         lipids: {
           totalCholesterol: 0,
           hydrationPercentage: 0
-        }
+        },
+        hydration: 0
       };
     }
   }, []);

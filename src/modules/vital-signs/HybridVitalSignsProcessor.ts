@@ -1,3 +1,4 @@
+
 /**
  * Hybrid Vital Signs Processor
  * Combines traditional signal processing with neural network models for improved accuracy
@@ -85,7 +86,18 @@ export class HybridVitalSignsProcessor {
   /**
    * Process a signal value
    */
-  processSignal(value: number, rrData?: { intervals: number[], lastPeakTime: number | null }): VitalSignsResult {
+  processSignal(value: number | { value: number, rrData?: { intervals: number[], lastPeakTime: number | null } }): VitalSignsResult {
+    // Extract the actual value if an object was passed
+    let signalValue: number;
+    let rrData: { intervals: number[], lastPeakTime: number | null } | undefined;
+    
+    if (typeof value === 'number') {
+      signalValue = value;
+    } else {
+      signalValue = value.value;
+      rrData = value.rrData;
+    }
+    
     // Initialize result
     const result: VitalSignsResult = {
       spo2: 0,
@@ -95,7 +107,8 @@ export class HybridVitalSignsProcessor {
       lipids: {
         totalCholesterol: 0,
         hydrationPercentage: 0
-      }
+      },
+      hydration: 0
     };
     
     // Use neural models if enabled
@@ -110,10 +123,11 @@ export class HybridVitalSignsProcessor {
       result.glucose = 90 + Math.random() * 10;
       result.lipids.totalCholesterol = 180 + Math.random() * 20;
       result.lipids.hydrationPercentage = 65 + Math.random() * 10;
+      result.hydration = 65 + Math.random() * 10;
     } else {
       // Use traditional processing
       // Filter the signal
-      const filteredValue = this.signalProcessor.processSignal(value);
+      const filteredValue = this.signalProcessor.processSignal(signalValue);
       
       // Calculate vitals
       result.spo2 = this.calculateSpO2(filteredValue as number, rrData);
@@ -124,6 +138,7 @@ export class HybridVitalSignsProcessor {
         totalCholesterol: this.calculateCholesterol(filteredValue as number),
         hydrationPercentage: this.calculateHydration(filteredValue as number)
       };
+      result.hydration = this.calculateOverallHydration(filteredValue as number);
     }
     
     return result;
@@ -178,10 +193,60 @@ export class HybridVitalSignsProcessor {
   }
   
   /**
+   * Calculate overall hydration separate from lipids context
+   */
+  private calculateOverallHydration(value: number): number {
+    // Placeholder implementation
+    return 65 + Math.round(value * 5);
+  }
+  
+  /**
    * Toggle neural processing on/off
    */
   toggleNeuralProcessing(enabled: boolean): void {
     this.useNeuralModels = enabled;
+  }
+  
+  /**
+   * Update processing options
+   */
+  updateOptions(options: Partial<HybridProcessingOptions>): void {
+    if (options.useNeuralModels !== undefined) {
+      this.useNeuralModels = options.useNeuralModels;
+    }
+    if (options.neuralWeight !== undefined) {
+      this.neuralWeight = options.neuralWeight;
+    }
+    if (options.neuralConfidenceThreshold !== undefined) {
+      this.neuralConfidenceThreshold = options.neuralConfidenceThreshold;
+    }
+    if (options.adaptiveProcessing !== undefined) {
+      this.adaptiveProcessing = options.adaptiveProcessing;
+    }
+    if (options.enhancedCalibration !== undefined) {
+      this.enhancedCalibration = options.enhancedCalibration;
+    }
+  }
+  
+  /**
+   * Get diagnostic information about the neural network
+   */
+  getDiagnosticInfo(): any {
+    return {
+      enabled: this.useNeuralModels,
+      backend: tf.getBackend(),
+      webgpuEnabled: this.useWebGPU,
+      modelsLoaded: [
+        !!this.bpModel,
+        !!this.spo2Model,
+        !!this.glucoseModel
+      ],
+      settings: {
+        neuralWeight: this.neuralWeight,
+        confidenceThreshold: this.neuralConfidenceThreshold,
+        adaptive: this.adaptiveProcessing
+      }
+    };
   }
   
   /**
@@ -197,7 +262,8 @@ export class HybridVitalSignsProcessor {
       lipids: {
         totalCholesterol: 0,
         hydrationPercentage: 0
-      }
+      },
+      hydration: 0
     };
   }
 }

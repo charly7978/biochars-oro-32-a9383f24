@@ -44,104 +44,40 @@ export interface ProcessedHeartbeatSignal {
   instantaneousBPM?: number | null;
   rrInterval?: number | null;
   heartRateVariability?: number | null;
-  value?: number; // For compatibility
 }
 
 /**
  * Signal processing options
  */
 export interface SignalProcessingOptions {
-  amplificationFactor?: number;
   filterStrength?: number;
-  qualityThreshold?: number;
-  fingerDetectionSensitivity?: number;
-  // Additional options
-  useAdaptiveControl?: boolean;
-  qualityEnhancedByPrediction?: boolean;
-  adaptationRate?: number;
-  predictionHorizon?: number;
-  useWebGPU?: boolean;
+  sensitivity?: number;
+  adaptiveThreshold?: boolean;
+  useLowPassFilter?: boolean;
+  useHighPassFilter?: boolean;
+  smoothingFactor?: number;
 }
 
-/**
- * Signal processor interface
- */
-export interface ISignalProcessor<T = any> {
-  processSignal(value: number): T;
+// Export interface for the HeartBeatProcessor for type checking
+export interface IHeartBeatProcessor {
+  options: ProcessorOptions;
+  peaks: number[];
+  confidence: number;
+  MAX_VALUES: number;
+  processSignal(value: number): ProcessedHeartbeatSignal;
   reset(): void;
 }
 
-/**
- * Enhanced signal processor interface with additional methods
- * This interface extends ISignalProcessor to maintain compatibility
- */
-export interface SignalProcessor<T = any> extends ISignalProcessor<T> {
-  processSignal(value: number): T;
+// Common processor options
+export interface ProcessorOptions {
+  sensitivity?: number;
+  adaptiveThreshold?: boolean;
+  smoothingFactor?: number;
+}
+
+// Interface for general signal processor
+export interface ISignalProcessor {
+  processSignal(value: number): number;
   reset(): void;
   configure?(options: SignalProcessingOptions): void;
-  getPPGValues?(): number[];
-  applySMAFilter?(value: number, values?: number[]): number;
-}
-
-/**
- * Channel configuration
- */
-export interface ChannelConfig {
-  name: string;
-  type: ProcessorType;
-  bufferSize?: number;
-  filterStrength?: number;
-  initialAmplification?: number;
-  frequencyBandMin?: number;
-  frequencyBandMax?: number;
-}
-
-/**
- * Neural network model type for signal processing
- */
-export interface NeuralModelSpec {
-  id: string;
-  type: "transformer" | "cnn" | "lstm" | "hybrid";
-  inputSize: number;
-  outputSize: number;
-  quantized: boolean;
-  optimizedForMobile: boolean;
-}
-
-/**
- * Adaptive preprocessing configuration
- */
-export interface AdaptivePreprocessingConfig {
-  normalizeInput: boolean;
-  adaptiveThresholds: boolean;
-  filterType: "sma" | "ema" | "wavelet" | "kalman";
-  baselineRemoval: boolean;
-}
-
-/**
- * Post-processing configuration
- */
-export interface PostProcessingConfig {
-  smoothingFactor: number;
-  outlierRemoval: boolean;
-  confidenceThreshold: number;
-  ensembleResults: boolean;
-}
-
-/**
- * Calibration status
- */
-export enum CalibrationStatus {
-  UNCALIBRATED = "uncalibrated",
-  CALIBRATING = "calibrating",
-  CALIBRATED = "calibrated",
-  INVALID = "invalid"
-}
-
-/**
- * Reset finger detector
- */
-export function resetFingerDetector(): void {
-  // Implementation would depend on actual finger detection logic
-  console.log("Finger detector reset");
 }

@@ -16,6 +16,7 @@ export class VitalSignsProcessor {
   private lastValidSpO2: number = 95;
   private lastValidGlucose: number = 85;
   private lastValidPressure: string = "120/80";
+  private lastValidHydration: number = 65;
   
   // Debug logs
   constructor() {
@@ -99,12 +100,14 @@ export class VitalSignsProcessor {
     const pressure = this.calculateBloodPressure(ppgValue, rrData);
     const glucose = this.calculateGlucose(ppgValue);
     const lipids = this.calculateLipids(ppgValue);
+    const hydration = this.calculateHydration(ppgValue);
     
     // Save last valid values when quality is good
     if (this.signalQuality > 40) {
       this.lastValidSpO2 = spo2;
       this.lastValidGlucose = glucose;
       this.lastValidPressure = pressure;
+      this.lastValidHydration = hydration;
     }
     
     const result: VitalSignsResult = {
@@ -115,6 +118,7 @@ export class VitalSignsProcessor {
         `NORMAL RHYTHM|${this.arrhythmiaCounter}`,
       glucose,
       lipids,
+      hydration,
       lastArrhythmiaData: arrhythmiaDetected ? {
         timestamp: Date.now(),
         rmssd: 0,
@@ -128,7 +132,7 @@ export class VitalSignsProcessor {
         spo2: result.spo2,
         pressure: result.pressure,
         glucose: result.glucose,
-        hydration: result.lipids.hydrationPercentage,
+        hydration: result.hydration,
         cholesterol: result.lipids.totalCholesterol,
         arrhythmia: result.arrhythmiaStatus,
         signalQuality: this.signalQuality
@@ -204,7 +208,8 @@ export class VitalSignsProcessor {
       lipids: {
         totalCholesterol: 0,
         hydrationPercentage: 0
-      }
+      },
+      hydration: 0
     };
   }
   
@@ -343,6 +348,26 @@ export class VitalSignsProcessor {
   }
   
   /**
+   * Calculate overall hydration level
+   * This is a separate calculation from the lipids-context hydration percentage
+   */
+  private calculateHydration(ppgValue: number): number {
+    // Base hydration level (healthy adult)
+    const baseHydration = 65;
+    
+    // Signal characteristics affect hydration estimation
+    const hydrationVar = ppgValue * 15;
+    
+    // Calculate hydration with safeguards
+    let hydration = baseHydration + hydrationVar;
+    
+    // Ensure hydration is in physiological range (45-100%)
+    hydration = Math.min(100, Math.max(45, hydration));
+    
+    return Math.round(hydration);
+  }
+  
+  /**
    * Reset the processor, but return last valid results
    */
   public reset(): VitalSignsResult {
@@ -357,7 +382,8 @@ export class VitalSignsProcessor {
       lipids: {
         totalCholesterol: 180,
         hydrationPercentage: 65
-      }
+      },
+      hydration: this.lastValidHydration || 65
     };
     
     // Reset processing state but keep arrhythmia counter
@@ -381,6 +407,7 @@ export class VitalSignsProcessor {
     this.lastValidSpO2 = 95;
     this.lastValidGlucose = 85;
     this.lastValidPressure = "120/80";
+    this.lastValidHydration = 65;
   }
   
   /**
