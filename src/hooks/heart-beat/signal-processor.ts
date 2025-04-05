@@ -10,11 +10,6 @@ import {
   updateLastValidBpm,
   processLowConfidenceResult
 } from './signal-processing';
-import { 
-  optimizeCardiacSignal,
-  detectPeakRealTime,
-  calculateHeartRateOptimized
-} from './signal-processing/cardiac-processor';
 import { initializeCardiacModel, processCardiacSignal } from '../../services/CardiacMLService';
 import { OptimizedSignalDistributor } from '../../modules/signal-processing/OptimizedSignalDistributor';
 import { VitalSignType } from '../../types/signal';
@@ -25,9 +20,6 @@ export function useSignalProcessor() {
   const lastValidBpmRef = useRef<number>(0);
   const calibrationCounterRef = useRef<number>(0);
   const lastSignalQualityRef = useRef<number>(0);
-  
-  // Buffer for optimized processing with lower latency
-  const signalBufferRef = useRef<number[]>([]);
   
   // Reference to the signal distributor
   const signalDistributorRef = useRef<OptimizedSignalDistributor | null>(null);
@@ -83,12 +75,6 @@ export function useSignalProcessor() {
     try {
       calibrationCounterRef.current++;
       
-      // Store in optimized buffer for low-latency processing
-      signalBufferRef.current.push(value);
-      if (signalBufferRef.current.length > 15) { // Smaller buffer for reduced latency
-        signalBufferRef.current.shift();
-      }
-      
       // Process signal with ML service if available
       let enhancedValue = value;
       let mlConfidence = 0;
@@ -103,12 +89,9 @@ export function useSignalProcessor() {
         mlConfidence = mlResult.confidence;
       }
       
-      // Apply optimized cardiac signal processing for lower latency
-      const optimizedValue = optimizeCardiacSignal(enhancedValue, signalBufferRef.current);
-      
       // Check for weak signal
       const { isWeakSignal, updatedWeakSignalsCount } = checkWeakSignal(
-        optimizedValue, 
+        enhancedValue, 
         consecutiveWeakSignalsRef.current, 
         {
           lowSignalThreshold: WEAK_SIGNAL_THRESHOLD,
@@ -123,7 +106,7 @@ export function useSignalProcessor() {
       }
       
       // Only process signals with sufficient amplitude
-      if (!shouldProcessMeasurement(optimizedValue)) {
+      if (!shouldProcessMeasurement(enhancedValue)) {
         return createWeakSignalResult(processor.getArrhythmiaCounter());
       }
       
@@ -132,13 +115,12 @@ export function useSignalProcessor() {
         const processedSignal = {
           timestamp: Date.now(),
           rawValue: value,
-          // Use optimized value for faster response
-          filteredValue: optimizedValue,
-          normalizedValue: optimizedValue,
-          amplifiedValue: optimizedValue,
+          filteredValue: enhancedValue,
+          normalizedValue: enhancedValue,
+          amplifiedValue: enhancedValue,
           quality: mlConfidence > 0 ? mlConfidence * 100 : 70,
           fingerDetected: true,
-          signalStrength: Math.abs(optimizedValue)
+          signalStrength: Math.abs(enhancedValue)
         };
         
         // Process through distributor and get cardiac channel result
@@ -152,18 +134,6 @@ export function useSignalProcessor() {
           const intervals = (cardiacChannel as any).getRRIntervals();
           if (intervals.length > 0) {
             lastRRIntervalsRef.current = [...intervals];
-            
-            // Use optimized heart rate calculation
-            if (lastRRIntervalsRef.current.length >= 2) {
-              const optimizedBPM = calculateHeartRateOptimized(lastRRIntervalsRef.current);
-              if (optimizedBPM > 0) {
-                // Log improved BPM calculation
-                console.log("SignalProcessor: Optimized BPM calculation", {
-                  optimizedBPM,
-                  intervals: lastRRIntervalsRef.current
-                });
-              }
-            }
           }
           
           // Update arrhythmia status
@@ -173,21 +143,9 @@ export function useSignalProcessor() {
         }
       }
       
-      // Improved low-latency peak detection
-      const isPeakRealTime = detectPeakRealTime(
-        optimizedValue, 
-        signalBufferRef.current, 
-        0.15
-      );
-      
-      // Process real signal with traditional processor but use enhanced peak detection
-      const result = processor.processSignal(optimizedValue);
+      // Process real signal with traditional processor
+      const result = processor.processSignal(enhancedValue);
       const rrData = processor.getRRIntervals();
-      
-      // Override result with real-time peak detection for lower latency response
-      if (isPeakRealTime) {
-        result.isPeak = true;
-      }
       
       if (rrData && rrData.intervals.length > 0) {
         lastRRIntervalsRef.current = [...rrData.intervals];
@@ -199,7 +157,7 @@ export function useSignalProcessor() {
         lastPeakTimeRef, 
         requestImmediateBeep, 
         isMonitoringRef,
-        optimizedValue
+        enhancedValue
       );
       
       // Update last valid BPM if it's reasonable
@@ -255,7 +213,6 @@ export function useSignalProcessor() {
     calibrationCounterRef.current = 0;
     lastSignalQualityRef.current = 0;
     consecutiveWeakSignalsRef.current = 0;
-    signalBufferRef.current = [];
     
     // Reset signal distributor
     if (signalDistributorRef.current) {

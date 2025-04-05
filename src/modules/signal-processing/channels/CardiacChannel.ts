@@ -1,4 +1,3 @@
-
 /**
  * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
  * 
@@ -10,13 +9,12 @@
  */
 
 import { SpecializedChannel } from './SpecializedChannel';
-import { ChannelFeedback, VitalSignType } from '../../../types/signal';
+import { ChannelConfig, ChannelFeedback } from '../../../types/signal';
 import { TensorFlowMLProcessor } from '../../ml/TensorFlowMLProcessor';
 
 /**
  * CardiacChannel
  * Specialized channel optimized for cardiac signal processing
- * Only processes real measured data with no simulation
  */
 export class CardiacChannel extends SpecializedChannel {
   // Keep RR intervals for arrhythmia analysis
@@ -27,43 +25,20 @@ export class CardiacChannel extends SpecializedChannel {
   private latestPeakDetected: boolean = false;
   private peakThreshold: number = 0.2;
   
-  // Buffer for recent values
-  protected buffer: number[] = [];
-  
-  // Frequency range for cardiac signals
-  private frequencyMin: number = 0.5;
-  private frequencyMax: number = 5.0;
-  
   // ML processor for enhanced signal analysis
   private mlProcessor: TensorFlowMLProcessor | null = null;
   private mlEnabled: boolean = false;
   
-  // Arrhythmia detection with auto-reset
+  // Arrhythmia detection
   private isCurrentBeatArrhythmia: boolean = false;
   private arrhythmiaCounter: number = 0;
-  private lastArrhythmiaTime: number = 0;
-  private arrhythmiaAutoResetInterval: number = 3000; // Auto-reset después de 3 segundos sin detectar nueva arritmia
-  
-  // Diagnostic data
-  private diagnosticData: { 
-    timestamp: number;
-    rmssd: number | null;
-    peakAmplitude: number | null;
-    rrVariability: number | null;
-    signalQuality: number;
-    beatConfidence: number;
-  }[] = [];
-  
-  // Enhanced arrhythmia visualization data
-  private currentArrhythmiaWindow: {start: number, end: number} | null = null;
-  private arrhythmiaWindows: {start: number, end: number}[] = [];
   
   /**
    * Constructor
    * @param config Channel configuration
    */
-  constructor(config: any) {
-    super(VitalSignType.CARDIAC, config);
+  constructor(config: ChannelConfig) {
+    super('cardiac-channel', config);
     
     // Initialize ML processor if available
     try {
@@ -76,33 +51,19 @@ export class CardiacChannel extends SpecializedChannel {
     }
     
     // Set cardiac-specific configuration
-    this.setCardiacFrequencyRange(0.5, 5.0); // Target heart rate range (30 - 300 bpm)
+    this.setFrequencyRange(0.5, 5.0); // Target heart rate range (30 - 300 bpm)
     
     console.log("CardiacChannel: Initialized with specialized cardiac parameters");
-  }
-
-  /**
-   * Set frequency range for cardiac processing
-   */
-  private setCardiacFrequencyRange(min: number, max: number): void {
-    this.frequencyMin = min;
-    this.frequencyMax = max;
   }
   
   /**
    * Process a single signal value
-   * @param value Signal value from real measurement
+   * @param value Signal value
    * @returns Processed value
    */
   public processValue(value: number): number {
-    // Store in buffer
-    this.buffer.push(value);
-    if (this.buffer.length > 50) {
-      this.buffer.shift();
-    }
-    
-    // Apply channel-specific optimization
-    const processedValue = this.applyChannelSpecificOptimization(value);
+    // Apply base processing from parent class
+    const processedValue = super.processValue(value);
     
     // Enhanced cardiac processing
     const enhancedValue = this.enhanceCardiacSignal(processedValue);
@@ -119,13 +80,6 @@ export class CardiacChannel extends SpecializedChannel {
     
     // Update latest peak detected flag
     this.latestPeakDetected = isPeak;
-    
-    // Auto-reset arrhythmia status if no new arrythmias detected in the timeout period
-    if (this.isCurrentBeatArrhythmia && 
-        (currentTime - this.lastArrhythmiaTime > this.arrhythmiaAutoResetInterval)) {
-      console.log("CardiacChannel: Auto-resetting arrhythmia status after timeout");
-      this.isCurrentBeatArrhythmia = false;
-    }
     
     // Process peak for RR intervals if detected
     if (isPeak) {
@@ -152,26 +106,11 @@ export class CardiacChannel extends SpecializedChannel {
             this.rrIntervals.shift();
           }
           
-          // Update heart rate estimate with improved accuracy
-          this.updateHeartRateEstimateImproved();
+          // Update heart rate estimate
+          this.updateHeartRateEstimate();
           
           // Check for arrhythmia
-          const isArrhythmia = this.detectArrhythmia();
-          
-          if (isArrhythmia) {
-            this.isCurrentBeatArrhythmia = true;
-            this.lastArrhythmiaTime = currentTime;
-          }
-          
-          // If this is an arrhythmia, start or update the current window
-          this.updateArrhythmiaWindows(this.isCurrentBeatArrhythmia, currentTime);
-          
-          // Store diagnostic data for visualization
-          this.collectDiagnosticData(
-            currentTime, 
-            mlEnhancedValue, 
-            rrInterval
-          );
+          this.isCurrentBeatArrhythmia = this.detectArrhythmia();
           
           // Emit cardiac peak event with appropriate data
           this.emitCardiacPeakEvent();
@@ -186,35 +125,21 @@ export class CardiacChannel extends SpecializedChannel {
   }
   
   /**
-   * Apply channel-specific optimization to the signal
-   * Required implementation from SpecializedChannel
-   */
-  protected applyChannelSpecificOptimization(value: number): number {
-    // Cardiac-specific optimization
-    // - Focus on frequency range of interest for heart rate
-    // - Emphasize cardiac features from real signal
-    
-    // Real signal processing - no simulation
-    return value * 1.2;
-  }
-  
-  /**
    * Enhance the signal for cardiac processing
    * @param value Base processed value
    * @returns Enhanced value for cardiac analysis
    */
   private enhanceCardiacSignal(value: number): number {
     // Apply specific cardiac signal enhancements
-    // - Emphasize peaks from real signal with improved amplitude
-    // - Reduce noise with optimized signal-to-noise ratio
+    // - Emphasize peaks
+    // - Reduce noise
     
-    // Real enhancement: emphasize peaks with better amplification factor
-    // Increased from 1.1 to 1.35 to avoid achatamiento de ondas
-    return value * 1.35;
+    // Simple enhancement: emphasize peaks a bit more
+    return value * 1.1;
   }
   
   /**
-   * Detect peaks in the real signal
+   * Detect peaks in the signal
    * @param value Current signal value
    * @returns True if peak detected
    */
@@ -243,7 +168,7 @@ export class CardiacChannel extends SpecializedChannel {
   }
   
   /**
-   * Adapt peak detection threshold based on recent real signal
+   * Adapt peak detection threshold based on recent signal
    */
   private adaptPeakThreshold(): void {
     if (this.peakValues.length < 3) {
@@ -261,53 +186,25 @@ export class CardiacChannel extends SpecializedChannel {
   }
   
   /**
-   * Update heart rate estimate based on real RR intervals
-   * Improved algorithm for more accurate BPM calculation
+   * Update heart rate estimate based on RR intervals
    */
-  private updateHeartRateEstimateImproved(): void {
+  private updateHeartRateEstimate(): void {
     if (this.rrIntervals.length < 2) {
       return;
     }
     
-    // Sort intervals to filter outliers
-    const sortedIntervals = [...this.rrIntervals].sort((a, b) => a - b);
+    // Average the last few RR intervals
+    const avgRR = this.rrIntervals.reduce((sum, val) => sum + val, 0) / this.rrIntervals.length;
     
-    // Remove potential outliers by taking the middle 60% of values
-    const startIdx = Math.floor(sortedIntervals.length * 0.2);
-    const endIdx = Math.ceil(sortedIntervals.length * 0.8);
-    const filteredIntervals = sortedIntervals.slice(startIdx, endIdx);
-    
-    // If we don't have enough intervals after filtering, use all of them
-    const intervalsToUse = filteredIntervals.length >= 2 ? filteredIntervals : sortedIntervals;
-    
-    // Average the intervals with outlier rejection
-    const avgRR = intervalsToUse.reduce((sum, val) => sum + val, 0) / intervalsToUse.length;
-    
-    // Convert to BPM with more precision: 60,000 ms / RR interval in ms
-    const calculatedBPM = Math.round(60000 / avgRR);
-    
-    // Apply weighted averaging to smooth BPM changes
-    if (this.heartRateEstimate === 0) {
-      this.heartRateEstimate = calculatedBPM;
-    } else {
-      // Use 70% of previous and 30% of new for smoother transitions
-      this.heartRateEstimate = Math.round(this.heartRateEstimate * 0.7 + calculatedBPM * 0.3);
-    }
+    // Convert to BPM: 60,000 ms / RR interval in ms
+    this.heartRateEstimate = Math.round(60000 / avgRR);
     
     // Ensure physiological range
     this.heartRateEstimate = Math.max(30, Math.min(220, this.heartRateEstimate));
-    
-    // Log BPM calculation for debugging
-    console.log("CardiacChannel: Calculated BPM:", {
-      rawBPM: Math.round(60000 / avgRR),
-      filteredBPM: this.heartRateEstimate,
-      intervals: this.rrIntervals,
-      filteredIntervals: intervalsToUse
-    });
   }
   
   /**
-   * Detect arrhythmia based on real RR interval variability
+   * Detect arrhythmia based on RR interval variability
    * @returns True if arrhythmia detected
    */
   private detectArrhythmia(): boolean {
@@ -315,7 +212,7 @@ export class CardiacChannel extends SpecializedChannel {
       return false;
     }
     
-    // Advanced arrhythmia detection (based on real HRV metrics)
+    // Advanced arrhythmia detection (based on HRV metrics)
     // 1. Calculate RR interval variability
     const avgRR = this.rrIntervals.reduce((sum, val) => sum + val, 0) / this.rrIntervals.length;
     const rrVariability = this.rrIntervals.map(rr => Math.abs(rr - avgRR) / avgRR);
@@ -353,97 +250,17 @@ export class CardiacChannel extends SpecializedChannel {
   }
   
   /**
-   * Manage arrhythmia visualization windows
-   */
-  private updateArrhythmiaWindows(isArrhythmia: boolean, currentTime: number): void {
-    if (isArrhythmia) {
-      // Start new window or extend current one
-      if (!this.currentArrhythmiaWindow) {
-        this.currentArrhythmiaWindow = {
-          start: currentTime,
-          end: currentTime + 500 // Initial end (will be extended)
-        };
-      } else {
-        // Extend current window
-        this.currentArrhythmiaWindow.end = currentTime + 500;
-      }
-    } else {
-      // If there's a current window and no longer in arrhythmia, close it
-      if (this.currentArrhythmiaWindow && currentTime > this.currentArrhythmiaWindow.end) {
-        // Only store windows that are long enough to be significant
-        if (this.currentArrhythmiaWindow.end - this.currentArrhythmiaWindow.start > 1000) {
-          this.arrhythmiaWindows.push(this.currentArrhythmiaWindow);
-          
-          // Keep only most recent windows for visualization
-          if (this.arrhythmiaWindows.length > 10) {
-            this.arrhythmiaWindows.shift();
-          }
-          
-          // Dispatch an arrhythmia window event for visualization
-          window.dispatchEvent(new CustomEvent('arrhythmia-window-detected', {
-            detail: this.currentArrhythmiaWindow
-          }));
-        }
-        
-        this.currentArrhythmiaWindow = null;
-      }
-    }
-  }
-  
-  /**
-   * Collect diagnostic data for visualization
-   */
-  private collectDiagnosticData(
-    currentTime: number, 
-    peakValue: number,
-    rrInterval: number
-  ): void {
-    // Calculate RMSSD (root mean square of successive differences)
-    let rmssd = null;
-    if (this.rrIntervals.length > 3) {
-      let sum = 0;
-      for (let i = 1; i < this.rrIntervals.length; i++) {
-        sum += Math.pow(this.rrIntervals[i] - this.rrIntervals[i-1], 2);
-      }
-      rmssd = Math.sqrt(sum / (this.rrIntervals.length - 1));
-    }
-    
-    // Calculate RR variability
-    let rrVariability = null;
-    if (this.rrIntervals.length > 1) {
-      const avgRR = this.rrIntervals.reduce((sum, val) => sum + val, 0) / this.rrIntervals.length;
-      rrVariability = Math.abs(rrInterval - avgRR) / avgRR;
-    }
-    
-    // Store diagnostic point
-    this.diagnosticData.push({
-      timestamp: currentTime,
-      rmssd: rmssd,
-      peakAmplitude: peakValue,
-      rrVariability: rrVariability,
-      signalQuality: this.rrIntervals.length > 5 ? 85 : 60, // Simple estimation
-      beatConfidence: this.rrIntervals.length > 3 ? 0.9 : 0.7 // Simple estimation
-    });
-    
-    // Keep limited history
-    if (this.diagnosticData.length > 100) {
-      this.diagnosticData.shift();
-    }
-  }
-  
-  /**
    * Emit cardiac peak event for audio system
    */
   private emitCardiacPeakEvent(): void {
-    // Create custom event with real cardiac data
+    // Create custom event with cardiac data
     const event = new CustomEvent('cardiac-peak-detected', {
       detail: {
         timestamp: Date.now(),
         heartRate: this.heartRateEstimate,
         isArrhythmia: this.isCurrentBeatArrhythmia,
         arrhythmiaCounter: this.arrhythmiaCounter,
-        source: 'cardiac-channel',
-        diagnosticData: this.diagnosticData[this.diagnosticData.length - 1]
+        source: 'cardiac-channel'
       }
     });
     
@@ -527,31 +344,6 @@ export class CardiacChannel extends SpecializedChannel {
   }
   
   /**
-   * Get arrhythmia windows for visualization
-   * @returns Array of arrhythmia time windows
-   */
-  public getArrhythmiaWindows(): {start: number, end: number}[] {
-    return [...this.arrhythmiaWindows];
-  }
-  
-  /**
-   * Get all diagnostic data
-   * @returns Array of diagnostic data points
-   */
-  public getDiagnosticData() {
-    return [...this.diagnosticData];
-  }
-  
-  /**
-   * Get latest diagnostic data
-   * @returns Latest diagnostic data point or null
-   */
-  public getLatestDiagnosticData() {
-    return this.diagnosticData.length > 0 ? 
-      this.diagnosticData[this.diagnosticData.length - 1] : null;
-  }
-  
-  /**
    * Reset channel
    */
   public reset(): void {
@@ -562,9 +354,6 @@ export class CardiacChannel extends SpecializedChannel {
     this.heartRateEstimate = 0;
     this.latestPeakDetected = false;
     this.isCurrentBeatArrhythmia = false;
-    this.buffer = [];
-    this.currentArrhythmiaWindow = null;
-    this.diagnosticData = [];
     
     // Don't reset arrhythmia counter on normal reset
     // Users typically want to track this across measurement sessions
@@ -578,7 +367,6 @@ export class CardiacChannel extends SpecializedChannel {
   public fullReset(): void {
     this.reset();
     this.arrhythmiaCounter = 0;
-    this.arrhythmiaWindows = [];
     console.log("CardiacChannel: Full reset complete (including arrhythmia counter)");
   }
 }
