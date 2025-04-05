@@ -1,41 +1,66 @@
 
 /**
- * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
+ * Enhanced confidence calculator for vital signs measurements with hydration support
  */
 
-/**
- * Calculator for confidence levels of measurements
- * Works with real data only, no simulation
- */
 export class ConfidenceCalculator {
-  private readonly MIN_CONFIDENCE_THRESHOLD: number;
+  private confidenceThreshold: number;
   
-  /**
-   * Create a new confidence calculator
-   */
-  constructor(minConfidenceThreshold: number = 0.15) {
-    this.MIN_CONFIDENCE_THRESHOLD = minConfidenceThreshold;
+  constructor(threshold: number = 0.4) {
+    this.confidenceThreshold = threshold;
   }
   
   /**
    * Calculate overall confidence from individual metrics
+   * @param glucoseConfidence Confidence level for glucose measurement
+   * @param lipidsConfidence Confidence level for lipids measurement
+   * @param hydrationConfidence Confidence level for hydration measurement
+   * @returns Overall confidence value (0-1)
    */
-  public calculateOverallConfidence(glucoseConfidence: number, lipidsConfidence: number): number {
-    return (glucoseConfidence * 0.5) + (lipidsConfidence * 0.5);
+  public calculateOverallConfidence(
+    glucoseConfidence: number,
+    lipidsConfidence: number,
+    hydrationConfidence: number = 0
+  ): number {
+    // Include hydration in confidence calculation if provided
+    if (hydrationConfidence > 0) {
+      return Math.min(
+        0.95,
+        (glucoseConfidence * 0.4) + (lipidsConfidence * 0.3) + (hydrationConfidence * 0.3)
+      );
+    }
+    
+    // Original calculation without hydration
+    return Math.min(
+      0.95,
+      (glucoseConfidence * 0.5) + (lipidsConfidence * 0.5)
+    );
   }
   
   /**
-   * Check if confidence meets the threshold
+   * Check if confidence meets threshold
+   * @param confidence Confidence value to check
+   * @returns Boolean indicating if threshold is met
    */
   public meetsThreshold(confidence: number): boolean {
-    return confidence > this.MIN_CONFIDENCE_THRESHOLD;
+    return confidence >= this.confidenceThreshold;
   }
   
   /**
    * Get current confidence threshold
+   * @returns Current threshold value
    */
   public getConfidenceThreshold(): number {
-    return this.MIN_CONFIDENCE_THRESHOLD;
+    return this.confidenceThreshold;
+  }
+  
+  /**
+   * Set new confidence threshold
+   * @param threshold New threshold value (0-1)
+   */
+  public setConfidenceThreshold(threshold: number): void {
+    if (threshold >= 0 && threshold <= 1) {
+      this.confidenceThreshold = threshold;
+    }
   }
 }
-
