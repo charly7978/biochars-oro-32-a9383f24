@@ -10,7 +10,8 @@ export enum VitalSignType {
   BLOOD_PRESSURE = 'blood_pressure',
   GLUCOSE = 'glucose',
   HYDRATION = 'hydration',
-  CARDIAC = 'cardiac'
+  CARDIAC = 'cardiac',
+  LIPIDS = 'lipids' // Kept for backward compatibility
 }
 
 /**
