@@ -40,7 +40,6 @@ export function updateLastValidBpm(result: any, lastValidBpmRef: React.MutableRe
 
 /**
  * Handle peak detection
- * Updated to match the actual parameters used in signal-processor.ts
  */
 export function handlePeakDetection(
   result: any, 
