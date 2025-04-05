@@ -40,7 +40,7 @@ export function updateLastValidBpm(result: any, lastValidBpmRef: React.MutableRe
 
 /**
  * Handle peak detection
- * Compatible with both simplified and complete call signatures
+ * Simplified signature to match how it's called in signal-processor.ts
  */
 export function handlePeakDetection(
   result: any, 
@@ -60,4 +60,46 @@ export function handlePeakDetection(
       requestBeepCallback(value || 1);  // Use provided value or default to 1
     }
   }
+}
+
+/**
+ * Enhances visualization data for better graph rendering
+ * @param data Raw signal data
+ * @returns Enhanced data for visualization
+ */
+export function enhanceVisualizationData(data: number[]): number[] {
+  if (!data || data.length === 0) return [];
+  
+  // Calculate average for normalization
+  const sum = data.reduce((acc, val) => acc + val, 0);
+  const avg = sum / data.length;
+  
+  // Enhance signal amplitude for better visualization
+  return data.map(val => {
+    // Center around zero and amplify differences
+    const centered = val - avg;
+    // Apply amplification factor (higher for small values, lower for large values)
+    const amplificationFactor = Math.min(3, 2.5 / (Math.abs(centered) + 0.5));
+    // Return amplified centered value
+    return centered * amplificationFactor;
+  });
+}
+
+/**
+ * Prepares data for PPG graph rendering
+ * @param buffer Signal buffer
+ * @param peaks Peak information array
+ * @returns Formatted data for graph
+ */
+export function prepareGraphData(buffer: number[], peaks: boolean[] = []): any[] {
+  if (!buffer || buffer.length === 0) return [];
+  
+  return buffer.map((value, index) => {
+    const isPeak = index < peaks.length ? peaks[index] : false;
+    return {
+      time: index,
+      value: value,
+      isPeak: isPeak
+    };
+  });
 }
