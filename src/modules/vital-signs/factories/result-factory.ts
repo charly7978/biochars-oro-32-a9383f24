@@ -19,6 +19,10 @@ export class ResultFactory {
       lipids: {
         totalCholesterol: 0,
         hydrationPercentage: 0
+      },
+      hydration: {
+        totalCholesterol: 0,
+        hydrationPercentage: 0
       }
     };
   }
@@ -41,6 +45,10 @@ export class ResultFactory {
       arrhythmiaStatus,
       glucose,
       lipids: {
+        totalCholesterol: hydration.totalCholesterol,
+        hydrationPercentage: hydration.hydrationPercentage
+      },
+      hydration: {
         totalCholesterol: hydration.totalCholesterol,
         hydrationPercentage: hydration.hydrationPercentage
       },

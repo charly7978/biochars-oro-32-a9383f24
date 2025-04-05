@@ -1,4 +1,3 @@
-
 /**
  * Central type definitions for vital signs processing
  * IMPORTANT: All modules should import types from here to prevent duplication
@@ -13,6 +12,10 @@ export interface VitalSignsResult {
   arrhythmiaStatus: string;
   glucose: number;
   lipids: {
+    totalCholesterol: number;
+    hydrationPercentage: number;
+  };
+  hydration: {
     totalCholesterol: number;
     hydrationPercentage: number;
   };
