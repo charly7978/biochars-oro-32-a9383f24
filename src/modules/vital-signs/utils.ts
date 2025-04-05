@@ -1,42 +1,43 @@
 
 /**
- * Utility functions for vital signs processing
+ * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
  */
 
 /**
- * Calculate standard deviation of an array of numbers
+ * Re-export utilities from individual files to maintain compatibility
+ * All functions process only real data without simulation.
  */
-export function calculateStandardDeviation(values: number[]): number {
-  if (values.length < 2) return 0;
-  
-  const mean = values.reduce((sum, val) => sum + val, 0) / values.length;
-  const squaredDiffs = values.map(val => Math.pow(val - mean, 2));
-  const variance = squaredDiffs.reduce((sum, val) => sum + val, 0) / values.length;
-  
-  return Math.sqrt(variance);
-}
 
-/**
- * Apply Simple Moving Average filter
- */
-export function applySMAFilter(values: number[], windowSize: number = 5): number[] {
-  if (values.length < windowSize) return [...values];
-  
-  const result: number[] = [];
-  
-  for (let i = 0; i < values.length; i++) {
-    if (i < windowSize - 1) {
-      // For initial values, use partial window
-      const partialWindow = values.slice(0, i + 1);
-      const sum = partialWindow.reduce((a, b) => a + b, 0);
-      result.push(sum / partialWindow.length);
-    } else {
-      // For remaining values, use full window
-      const window = values.slice(i - windowSize + 1, i + 1);
-      const sum = window.reduce((a, b) => a + b, 0);
-      result.push(sum / windowSize);
-    }
-  }
-  
-  return result;
-}
+// Re-export signal processing utilities
+export {
+  calculateAC,
+  calculateDC,
+  calculateStandardDeviation,
+  calculateEMA,
+  normalizeValue
+} from './utils/signal-processing-utils';
+
+// Re-export peak detection utilities
+export {
+  findPeaksAndValleys,
+  calculateAmplitude
+} from './utils/peak-detection-utils';
+
+// Re-export filter utilities
+export {
+  applySMAFilter,
+  amplifySignal
+} from './utils/filter-utils';
+
+// Re-export perfusion utilities
+export {
+  calculatePerfusionIndex
+} from './utils/perfusion-utils';
+
+// Re-export from core utils
+export {
+  calculateAC as getAC,
+  calculateDC as getDC,
+  calculateStandardDeviation as getStandardDeviation,
+  amplifySignal as getAmplifiedSignal
+} from '../../utils/vitalSignsUtils';

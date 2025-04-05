@@ -7,7 +7,15 @@
  */
 
 import { BaseVitalSignProcessor } from './BaseVitalSignProcessor';
-import { LipidsResult } from '../types/vital-signs-result';
+import { VitalSignType, ChannelFeedback } from '../../../types/signal';
+
+/**
+ * Result interface for lipid measurements
+ */
+export interface LipidsResult {
+  totalCholesterol: number;
+  hydrationPercentage: number; // Changed from triglycerides to hydrationPercentage
+}
 
 /**
  * Lipids processor implementation
@@ -15,10 +23,10 @@ import { LipidsResult } from '../types/vital-signs-result';
 export class LipidsProcessor extends BaseVitalSignProcessor<LipidsResult> {
   // Default values for lipid measurements
   private readonly BASELINE_CHOLESTEROL = 180; // mg/dL
-  private readonly BASELINE_HYDRATION = 65; // %
+  private readonly BASELINE_HYDRATION = 65; // % (Changed from triglycerides)
   
   constructor() {
-    super("lipids");
+    super(VitalSignType.LIPIDS);
   }
   
   /**
@@ -66,27 +74,5 @@ export class LipidsProcessor extends BaseVitalSignProcessor<LipidsResult> {
     
     // Ensure result is within physiological range (45-100%)
     return Math.min(100, Math.max(45, hydration));
-  }
-  
-  /**
-   * Update confidence based on data quality
-   */
-  protected override updateConfidence(): void {
-    if (this.buffer.length < 5) {
-      this.confidence = 0;
-      return;
-    }
-    
-    // Calculate confidence based on buffer size and signal stability
-    const bufferSizeFactor = Math.min(1, this.buffer.length / this.MAX_BUFFER_SIZE);
-    
-    // Calculate signal stability
-    const recentValues = this.buffer.slice(-10);
-    const avg = recentValues.reduce((a, b) => a + b, 0) / recentValues.length;
-    const variance = recentValues.reduce((a, b) => a + Math.pow(b - avg, 2), 0) / recentValues.length;
-    const stabilityFactor = Math.max(0, 1 - variance * 10);
-    
-    // Calculate signal quality
-    this.confidence = bufferSizeFactor * 0.4 + stabilityFactor * 0.6;
   }
 }

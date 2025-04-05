@@ -9,7 +9,6 @@ import { VitalSignsResult } from '../types/vital-signs-result';
 export class ResultFactory {
   /**
    * Create empty results (all zeros)
-   * @returns Empty VitalSignsResult object
    */
   public static createEmptyResults(): VitalSignsResult {
     return {
@@ -20,30 +19,19 @@ export class ResultFactory {
       lipids: {
         totalCholesterol: 0,
         hydrationPercentage: 0
-      },
-      hydration: 0
+      }
     };
   }
   
   /**
    * Create a fully populated result
-   * @param spo2 Blood oxygen level
-   * @param pressure Blood pressure string
-   * @param arrhythmiaStatus Arrhythmia status string
-   * @param glucose Blood glucose level
-   * @param lipids Lipids values object
-   * @param hydration Hydration percentage
-   * @param confidence Optional confidence values
-   * @param lastArrhythmiaData Optional arrhythmia data
-   * @returns Populated VitalSignsResult object
    */
   public static createResult(
     spo2: number,
     pressure: string,
     arrhythmiaStatus: string,
     glucose: number,
-    lipids: { totalCholesterol: number, hydrationPercentage: number },
-    hydration: number,
+    hydration: { totalCholesterol: number, hydrationPercentage: number },
     confidence?: { glucose: number, lipids: number, overall: number },
     lastArrhythmiaData?: { timestamp: number, rmssd: number, rrVariation: number } | null
   ): VitalSignsResult {
@@ -53,60 +41,11 @@ export class ResultFactory {
       arrhythmiaStatus,
       glucose,
       lipids: {
-        totalCholesterol: lipids.totalCholesterol,
-        hydrationPercentage: lipids.hydrationPercentage
+        totalCholesterol: hydration.totalCholesterol,
+        hydrationPercentage: hydration.hydrationPercentage
       },
-      hydration,
       confidence,
       lastArrhythmiaData
-    };
-  }
-  
-  /**
-   * Create a result with validation
-   * Ensures all values are within physiological ranges
-   * @param data Raw measurement data
-   * @returns Validated VitalSignsResult
-   */
-  public static createValidatedResult(data: {
-    spo2: number,
-    pressure: string,
-    arrhythmiaStatus: string,
-    glucose: number,
-    hydration: number,
-    lipids: { totalCholesterol: number, hydrationPercentage: number },
-    confidence?: { glucose: number, lipids: number, overall: number },
-    lastArrhythmiaData?: { timestamp: number, rmssd: number, rrVariation: number } | null
-  }): VitalSignsResult {
-    // Validate SPO2 (normal range: 95-100%)
-    const validSpo2 = data.spo2 >= 0 && data.spo2 <= 100 ? data.spo2 : 0;
-    
-    // Validate glucose (normal range: 70-140 mg/dL)
-    const validGlucose = data.glucose >= 0 && data.glucose <= 500 ? data.glucose : 0;
-    
-    // Validate cholesterol (normal range: <200 mg/dL)
-    const validCholesterol = data.lipids.totalCholesterol >= 0 ? data.lipids.totalCholesterol : 0;
-    
-    // Validate lipid hydration (0-100%)
-    const validHydrationPercentage = data.lipids.hydrationPercentage >= 0 && 
-                                    data.lipids.hydrationPercentage <= 100 ? 
-                                    data.lipids.hydrationPercentage : 0;
-    
-    // Validate overall hydration (0-100%)
-    const validHydration = data.hydration >= 0 && data.hydration <= 100 ? data.hydration : 0;
-    
-    return {
-      spo2: validSpo2,
-      pressure: data.pressure,
-      arrhythmiaStatus: data.arrhythmiaStatus,
-      glucose: validGlucose,
-      lipids: {
-        totalCholesterol: validCholesterol,
-        hydrationPercentage: validHydrationPercentage
-      },
-      hydration: validHydration,
-      confidence: data.confidence,
-      lastArrhythmiaData: data.lastArrhythmiaData
     };
   }
 }

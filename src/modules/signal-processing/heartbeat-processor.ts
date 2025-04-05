@@ -1,15 +1,16 @@
 /**
- * HeartBeat Processor 
- * Processes filtered PPG signals to extract cardiac information
+ * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
+ * 
+ * Procesador avanzado de señal cardíaca
+ * Se encarga del procesamiento especializado de picos/latidos
  */
-import { 
-  ProcessedHeartbeatSignal, 
-  SignalProcessingOptions, 
-  ISignalProcessor
-} from './types';
+import { ProcessedHeartbeatSignal, SignalProcessor, SignalProcessingOptions } from './types';
+import { AdaptivePredictor, getAdaptivePredictor } from './utils/adaptive-predictor';
 
-// Export the class directly
-export class HeartBeatProcessor implements ISignalProcessor<ProcessedHeartbeatSignal> {
+/**
+ * Clase para el procesamiento avanzado de señales cardíacas
+ */
+export class HeartbeatProcessor implements SignalProcessor<ProcessedHeartbeatSignal> {
   // Almacenamiento de valores y picos
   private values: number[] = [];
   private peakTimes: number[] = [];
@@ -26,31 +27,35 @@ export class HeartBeatProcessor implements ISignalProcessor<ProcessedHeartbeatSi
   private dynamicThresholdFactor: number = 0.6;
   
   // Predictive modeling and adaptive control
-  private adaptivePredictor: any;
+  private adaptivePredictor: AdaptivePredictor;
   private useAdaptiveControl: boolean = true;
   private qualityEnhancedByPrediction: boolean = true;
-  private averageBPM: number = 0;
-  private lastRRInterval: number | null = null;
-  private heartRateVariability: number | null = null;
-  private instantBPM: number | null = null;
-  private peakConfidence: number = 0;
-  private isPeak: boolean = false;
   
   constructor() {
-    this.adaptivePredictor = {};
+    this.adaptivePredictor = getAdaptivePredictor();
   }
   
   /**
-   * Process a PPG signal to extract heartbeat information
-   * @param value Filtered PPG signal value
-   * @returns Processed heartbeat information
+   * Procesa un valor y detecta picos cardíacos con algoritmos avanzados
    */
-  processSignal(value: number): ProcessedHeartbeatSignal {
+  public processSignal(value: number): ProcessedHeartbeatSignal {
     const timestamp = Date.now();
     
     // Apply adaptive prediction and control if enabled
     let enhancedValue = value;
     let predictionQuality = 0;
+    
+    if (this.useAdaptiveControl) {
+      // Update the adaptive predictor with the current value
+      this.adaptivePredictor.update(timestamp, value, 1.0);
+      
+      // Get prediction for the current time
+      const prediction = this.adaptivePredictor.predict(timestamp);
+      predictionQuality = prediction.confidence * 100;
+      
+      // Use filtered value from predictor for enhanced peak detection
+      enhancedValue = prediction.predictedValue;
+    }
     
     // Almacenar valor en buffer
     this.values.push(enhancedValue);
@@ -110,17 +115,18 @@ export class HeartBeatProcessor implements ISignalProcessor<ProcessedHeartbeatSi
     const heartRateVariability = this.calculateHRV();
     
     // Enhance confidence with prediction quality if enabled
-    
+    if (this.qualityEnhancedByPrediction && this.useAdaptiveControl) {
+      peakConfidence = 0.7 * peakConfidence + 0.3 * (predictionQuality / 100);
+    }
     
     return {
-      timestamp: Date.now(),
-      bpm: this.averageBPM,
-      confidence: peakConfidence,
+      timestamp,
+      value: enhancedValue,
       isPeak,
-      rrInterval: this.lastRRInterval,
-      heartRateVariability: this.heartRateVariability,
-      instantaneousBPM: instantaneousBPM,
-      peakConfidence: peakConfidence
+      peakConfidence,
+      instantaneousBPM,
+      rrInterval,
+      heartRateVariability
     };
   }
   
@@ -244,7 +250,7 @@ export class HeartBeatProcessor implements ISignalProcessor<ProcessedHeartbeatSi
     }
     
     // Also configure the adaptive predictor
-    
+    this.adaptivePredictor.configure(options);
   }
   
   /**
@@ -259,20 +265,20 @@ export class HeartBeatProcessor implements ISignalProcessor<ProcessedHeartbeatSi
     this.peakThreshold = 0.2;
     
     // Reset adaptive predictor
-    
+    this.adaptivePredictor.reset();
   }
   
   /**
    * Get the state of the adaptive predictor for debugging
    */
   public getAdaptivePredictorState(): any {
-    return {};
+    return this.adaptivePredictor.getState();
   }
 }
 
 /**
  * Crea una nueva instancia del procesador de señal cardíaca
  */
-export function createHeartbeatProcessor(): HeartBeatProcessor {
-  return new HeartBeatProcessor();
+export function createHeartbeatProcessor(): HeartbeatProcessor {
+  return new HeartbeatProcessor();
 }

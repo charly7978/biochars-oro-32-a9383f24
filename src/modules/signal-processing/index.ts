@@ -4,19 +4,41 @@
  */
 
 // Export types and interfaces
-export type {
-  ProcessedPPGSignal,
-  ProcessedHeartbeatSignal,
-  SignalProcessingOptions,
-  ISignalProcessor,
-  ChannelConfig
-} from './types';
+export type ProcessedPPGSignal = {
+  timestamp: number;
+  rawValue: number;
+  filteredValue: number;
+  normalizedValue: number;
+  amplifiedValue: number;
+  quality: number;
+  fingerDetected: boolean;
+  signalStrength: number;
+};
 
-export { ProcessorType } from './types';
+export type ProcessedHeartbeatSignal = {
+  timestamp: number;
+  value: number;
+  isPeak: boolean;
+  peakConfidence: number;
+  instantaneousBPM: number | null;
+  rrInterval: number | null;
+  heartRateVariability: number | null;
+};
+
+export type SignalProcessingOptions = {
+  amplificationFactor?: number;
+  filterStrength?: number;
+  qualityThreshold?: number;
+  fingerDetectionSensitivity?: number;
+  useAdaptiveControl?: boolean;
+  qualityEnhancedByPrediction?: boolean;
+  predictionHorizon?: number;
+  adaptationRate?: number;
+};
 
 // Export processors
-export { SignalProcessor } from '../vital-signs/signal-processor';
-export { HeartBeatProcessor } from './HeartBeatProcessor';
+export { SignalProcessor as PPGSignalProcessor } from '../vital-signs/signal-processor';
+export { HeartBeatProcessor as HeartbeatProcessor } from './HeartBeatProcessor';
 
 // Export utility functions
 export const resetFingerDetector = () => {

@@ -7,7 +7,7 @@ import { useVitalSignsProcessor } from "@/hooks/useVitalSignsProcessor";
 import PPGSignalMeter from "@/components/PPGSignalMeter";
 import MonitorButton from "@/components/MonitorButton";
 import AppTitle from "@/components/AppTitle";
-import { VitalSignsResult } from "@/modules/vital-signs/types/vital-signs-result";
+import { VitalSignsResult } from "@/modules/vital-signs";
 
 const Index = () => {
   const [isMonitoring, setIsMonitoring] = useState(false);
@@ -21,16 +21,14 @@ const Index = () => {
     lipids: {
       totalCholesterol: 0,
       hydrationPercentage: 0
-    },
-    hydration: 0
+    }
   });
   const [heartRate, setHeartRate] = useState(0);
   const [elapsedTime, setElapsedTime] = useState(0);
   const [showResults, setShowResults] = useState(false);
   const measurementTimerRef = useRef<number | null>(null);
-  const isMonitoringRef = useRef<boolean>(false);
   
-  const { startProcessing: startSignalProcessing, stopProcessing: stopSignalProcessing, lastSignal, processFrame } = useSignalProcessor();
+  const { startProcessing, stopProcessing, lastSignal, processFrame } = useSignalProcessor();
   const { 
     processSignal: processHeartBeat, 
     isArrhythmia,
@@ -43,16 +41,8 @@ const Index = () => {
     processSignal: processVitalSigns, 
     reset: resetVitalSigns,
     fullReset: fullResetVitalSigns,
-    startProcessing: startVitalSignsProcessing,
-    stopProcessing: stopVitalSignsProcessing,
-    lastValidResults,
-    initializeProcessor
+    lastValidResults
   } = useVitalSignsProcessor();
-
-  useEffect(() => {
-    isMonitoringRef.current = isMonitoring;
-    console.log("Monitoring state updated:", { isMonitoring, current: isMonitoringRef.current });
-  }, [isMonitoring]);
 
   const enterFullScreen = async () => {
     try {
@@ -82,36 +72,17 @@ const Index = () => {
 
   useEffect(() => {
     if (lastSignal && isMonitoring) {
-      if (elapsedTime % 5 === 0) {
-        console.log("Signal received in Index:", { 
-          quality: lastSignal.quality,
-          isFingerDetected: lastSignal.fingerDetected,
-          filteredValue: lastSignal.filteredValue
-        });
-      }
+      const minQualityThreshold = 40;
       
-      if (lastSignal.fingerDetected && lastSignal.quality >= 30) {
+      if (lastSignal.fingerDetected && lastSignal.quality >= minQualityThreshold) {
         const heartBeatResult = processHeartBeat(lastSignal.filteredValue);
         
-        if (heartBeatResult.confidence > 0.3) {
+        if (heartBeatResult.confidence > 0.4) {
           setHeartRate(heartBeatResult.bpm);
           
-          if (heartBeatResult.bpm > 40 && heartBeatResult.bpm < 200) {
-            const vitals = processVitalSigns(lastSignal.filteredValue, heartBeatResult.rrData);
-            
-            if (elapsedTime % 5 === 0) {
-              console.log("Vital signs update:", {
-                spo2: vitals.spo2,
-                pressure: vitals.pressure,
-                glucose: vitals.glucose,
-                hydration: vitals.hydration,
-                heartRate: heartBeatResult.bpm
-              });
-            }
-            
-            if (vitals.spo2 > 0 && vitals.glucose > 0) {
-              setVitalSigns(vitals);
-            }
+          const vitals = processVitalSigns(lastSignal.filteredValue, heartBeatResult.rrData);
+          if (vitals) {
+            setVitalSigns(vitals);
           }
         }
         
@@ -120,67 +91,46 @@ const Index = () => {
         setSignalQuality(lastSignal.quality);
         
         if (!lastSignal.fingerDetected && heartRate > 0) {
-          console.log("Finger no longer detected, resetting heart rate");
           setHeartRate(0);
         }
       }
     } else if (!isMonitoring) {
       setSignalQuality(0);
     }
-  }, [lastSignal, isMonitoring, processHeartBeat, processVitalSigns, heartRate, elapsedTime]);
+  }, [lastSignal, isMonitoring, processHeartBeat, processVitalSigns, heartRate]);
 
   const startMonitoring = () => {
     if (isMonitoring) {
       finalizeMeasurement();
-      return;
-    }
-    
-    enterFullScreen();
-    setIsMonitoring(true);
-    setIsCameraOn(true);
-    setShowResults(false);
-    setHeartRate(0);
-    
-    setVitalSigns({
-      spo2: 0,
-      pressure: "--/--",
-      arrhythmiaStatus: "--",
-      glucose: 0,
-      lipids: {
-        totalCholesterol: 0,
-        hydrationPercentage: 0
-      },
-      hydration: 0
-    });
-    
-    console.log("Starting all processors");
-    
-    startSignalProcessing();
-    startHeartBeatMonitoring();
-    startVitalSignsProcessing();
-    initializeProcessor();
-    
-    setElapsedTime(0);
-    
-    if (measurementTimerRef.current) {
-      window.clearInterval(measurementTimerRef.current);
-    }
-    
-    measurementTimerRef.current = window.setInterval(() => {
-      setElapsedTime(prev => {
-        const newTime = prev + 1;
-        
-        if (newTime % 5 === 0) {
+    } else {
+      enterFullScreen();
+      setIsMonitoring(true);
+      setIsCameraOn(true);
+      setShowResults(false);
+      setHeartRate(0);
+      
+      startProcessing();
+      startHeartBeatMonitoring();
+      
+      setElapsedTime(0);
+      
+      if (measurementTimerRef.current) {
+        clearInterval(measurementTimerRef.current);
+      }
+      
+      measurementTimerRef.current = window.setInterval(() => {
+        setElapsedTime(prev => {
+          const newTime = prev + 1;
           console.log(`Tiempo transcurrido: ${newTime}s`);
-        }
-        
-        if (newTime >= 30) {
-          finalizeMeasurement();
-          return 30;
-        }
-        return newTime;
-      });
-    }, 1000);
+          
+          if (newTime >= 30) {
+            finalizeMeasurement();
+            return 30;
+          }
+          return newTime;
+        });
+      }, 1000);
+    }
   };
 
   const finalizeMeasurement = () => {
@@ -188,46 +138,40 @@ const Index = () => {
     
     setIsMonitoring(false);
     setIsCameraOn(false);
-    
-    stopSignalProcessing();
+    stopProcessing();
     stopHeartBeatMonitoring();
-    stopVitalSignsProcessing();
     
     if (measurementTimerRef.current) {
-      window.clearInterval(measurementTimerRef.current);
+      clearInterval(measurementTimerRef.current);
       measurementTimerRef.current = null;
     }
     
     const savedResults = resetVitalSigns();
     if (savedResults) {
-      console.log("Final measurement results:", savedResults);
       setVitalSigns(savedResults);
       setShowResults(true);
     }
     
     setElapsedTime(0);
     setSignalQuality(0);
+    setHeartRate(0);
   };
 
   const handleReset = () => {
     console.log("Reseteando completamente la aplicación");
-    
     setIsMonitoring(false);
     setIsCameraOn(false);
     setShowResults(false);
-    
-    stopSignalProcessing();
+    stopProcessing();
     stopHeartBeatMonitoring();
-    stopVitalSignsProcessing();
     resetHeartBeatProcessor();
     
     if (measurementTimerRef.current) {
-      window.clearInterval(measurementTimerRef.current);
+      clearInterval(measurementTimerRef.current);
       measurementTimerRef.current = null;
     }
     
     fullResetVitalSigns();
-    
     setElapsedTime(0);
     setHeartRate(0);
     setVitalSigns({ 
@@ -238,19 +182,13 @@ const Index = () => {
       lipids: {
         totalCholesterol: 0,
         hydrationPercentage: 0
-      },
-      hydration: 0
+      }
     });
     setSignalQuality(0);
   };
 
   const handleStreamReady = (stream: MediaStream) => {
-    if (!isMonitoringRef.current) {
-      console.log("Stream ready but monitoring is not active");
-      return;
-    }
-    
-    console.log("Stream ready, setting up processing");
+    if (!isMonitoring) return;
     
     const videoTrack = stream.getVideoTracks()[0];
     
@@ -280,10 +218,7 @@ const Index = () => {
       let processingFps = 0;
       
       const processImage = async () => {
-        if (!isMonitoringRef.current) {
-          console.log("processImage: Monitoring stopped");
-          return;
-        }
+        if (!isMonitoring) return;
         
         const now = Date.now();
         const timeSinceLastProcess = now - lastProcessTime;
@@ -321,10 +256,8 @@ const Index = () => {
           }
         }
         
-        if (isMonitoringRef.current) {
+        if (isMonitoring) {
           requestAnimationFrame(processImage);
-        } else {
-          console.log("Stopping image processing - monitoring state changed");
         }
       };
 
@@ -421,7 +354,7 @@ const Index = () => {
               />
               <VitalSign 
                 label="HIDRATACIÓN"
-                value={vitalSigns.hydration || "--"}
+                value={vitalSigns.lipids?.hydrationPercentage || "--"}
                 unit="%"
                 highlighted={showResults}
               />

@@ -1,79 +1,86 @@
 
 /**
+ * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
+ * 
  * Central export for vital signs module
- * Optimized and consolidated exports following SOLID principles
  */
 
-// Core processors
+// Export the VitalSignsProcessor
 export { VitalSignsProcessor } from './VitalSignsProcessor';
+
+// Create a type definition for VitalSignsResult
+export interface VitalSignsResult {
+  spo2: number;
+  pressure: string;
+  arrhythmiaStatus: string;
+  glucose: number;
+  lipids: {
+    totalCholesterol: number;
+    hydrationPercentage: number;  // Changed from triglycerides to hydrationPercentage
+  };
+  lastArrhythmiaData?: any;
+  confidence?: {
+    glucose: number;
+    lipids: number;  // Kept as 'lipids' for backward compatibility
+    overall: number;
+  };
+}
+
+// Export the traditional processor
+export { ModularVitalSignsProcessor } from './ModularVitalSignsProcessor';
+
+// Export the precision processor with advanced features
+export { PrecisionVitalSignsProcessor } from './PrecisionVitalSignsProcessor'; 
+export type { PrecisionVitalSignsResult } from './PrecisionVitalSignsProcessor';
+
+// Export hybrid processor with neural network enhancements
 export { HybridVitalSignsProcessor } from './HybridVitalSignsProcessor';
+export type { HybridProcessingOptions } from './HybridVitalSignsProcessor';
 
-// Type definitions
-export type { 
-  VitalSignsResult, 
-  LipidsResult, 
-  VitalSignProcessorInterface,
-  ProcessorFeedback
-} from './types/vital-signs-result';
+// Export calibration module
+export { CalibrationManager } from './calibration/CalibrationManager';
+export type { CalibrationReference, CalibrationFactors } from './calibration/CalibrationManager';
 
-// Calculation utilities
-export { ConfidenceCalculator } from './calculators/confidence-calculator';
-export { ResultFactory } from './factories/result-factory';
+// Export cross-validation module
+export { CrossValidator } from './correlation/CrossValidator';
+export type { MeasurementsToValidate, ValidationResult } from './correlation/CrossValidator';
 
-// Specialized processors
-export { BaseVitalSignProcessor } from './specialized/BaseVitalSignProcessor';
-export { HydrationProcessor } from './specialized/HydrationProcessor';
-export { SignalProcessor } from './signal-processor';
+// Export environmental adjuster
+export { EnvironmentalAdjuster } from './environment/EnvironmentalAdjuster';
+export type { EnvironmentalConditions, AdjustmentFactors } from './environment/EnvironmentalAdjuster';
 
-// Shared utilities
+// Export specialized processors
+export * from './specialized/BaseVitalSignProcessor';
+export * from './specialized/GlucoseProcessor';
+export * from './specialized/HydrationProcessor';  // Export new HydrationProcessor instead of LipidsProcessor
+export * from './specialized/BloodPressureProcessor';
+export * from './specialized/SpO2Processor';
+export * from './specialized/CardiacProcessor';
+
+// Export shared signal utils and arrhythmia types
+export * from './arrhythmia/types';
 export * from './shared-signal-utils';
 
-// Configuration interfaces
-export interface HybridProcessingOptions {
-  useNeuralModels?: boolean;
-  neuralWeight?: number;
-  neuralConfidenceThreshold?: number;
-  adaptiveProcessing?: boolean;
-  enhancedCalibration?: boolean;
-  // TensorFlow optimization options
-  useWebGPU?: boolean;
-  useQuantization?: boolean;
-  optimizeForMobile?: boolean;
-}
+// Export specific utility functions
+export { 
+  // Export signal processing core functions
+  calculateAC,
+  calculateDC,
+  calculateStandardDeviation,
+  calculateEMA,
+  normalizeValue,
+  
+  // Export peak detection functions
+  findPeaksAndValleys,
+  calculateAmplitude,
+  
+  // Export filter functions
+  applySMAFilter,
+  amplifySignal,
+  
+  // Export perfusion functions
+  calculatePerfusionIndex
+} from './utils';
 
-// Re-export signal processing options to ensure compatibility
-export { type SignalProcessingOptions } from '../signal-processing/types';
-
-// Channel feedback interface
-export interface ChannelFeedback {
-  channelId: string;
-  signalQuality: number;
-  suggestedAdjustments: {
-    amplificationFactor?: number;
-    filterStrength?: number;
-    baselineCorrection?: number;
-    frequencyRangeMin?: number;
-    frequencyRangeMax?: number;
-  };
-  timestamp: number;
-  success: boolean;
-}
-
-// Auto-calibration options
-export interface AutoCalibrationOptions {
-  useHistoricalData?: boolean;
-  calibrationPeriod?: number; // in milliseconds
-  minimumSamplesRequired?: number;
-  adaptToBiometrics?: boolean;
-  environmentalAdjustment?: boolean;
-}
-
-// Neural network model configuration
-export interface NeuralModelConfig {
-  modelType: string;
-  inputShape: number[];
-  outputShape: number[];
-  quantized?: boolean;
-  useTransformer?: boolean;
-  useAttention?: boolean;
-}
+// Export the blood pressure processor for direct access
+export { BloodPressureProcessor } from './blood-pressure-processor';

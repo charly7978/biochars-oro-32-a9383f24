@@ -1,3 +1,4 @@
+
 /**
  * Specialized channel for lipids signal processing
  * Optimizes the signal specifically for lipid measurement algorithms
@@ -5,12 +6,12 @@
  */
 
 import { SpecializedChannel, ChannelConfig } from './SpecializedChannel';
-import { ProcessorType } from '../types';
+import { VitalSignType } from '../../../types/signal';
 
 /**
  * Lipids-specific channel implementation
  */
-export class LipidsChannel extends SpecializedChannel<number> {
+export class LipidsChannel extends SpecializedChannel {
   // Lipids-specific parameters
   private readonly WAVEFORM_EMPHASIS = 1.15;  // Emphasis on waveform morphology
   private readonly HARMONIC_WEIGHT = 0.55;    // Weight for harmonic components
@@ -22,14 +23,7 @@ export class LipidsChannel extends SpecializedChannel<number> {
   private harmonicRatios: number[] = [];
   
   constructor(config: ChannelConfig) {
-    super(config);
-  }
-  
-  /**
-   * Process signal for lipids analysis
-   */
-  processSignal(value: number): number {
-    return this.applyChannelSpecificOptimization(value);
+    super(VitalSignType.LIPIDS, config);
   }
   
   /**
@@ -198,7 +192,7 @@ export class LipidsChannel extends SpecializedChannel<number> {
   /**
    * Reset channel state
    */
-  reset(): void {
+  public override reset(): void {
     super.reset();
     this.spectralBuffer = [];
     this.harmonicRatios = [];
@@ -208,7 +202,7 @@ export class LipidsChannel extends SpecializedChannel<number> {
    * Get current harmonic ratios
    * Useful for lipid measurement algorithms
    */
-  getHarmonicRatios(): number[] {
+  public getHarmonicRatios(): number[] {
     return [...this.harmonicRatios];
   }
 }

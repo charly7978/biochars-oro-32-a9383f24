@@ -3,7 +3,22 @@
  * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
  */
 
-import { VitalSignsResult } from './vital-signs/types/vital-signs-result';
+// Define the VitalSignsResult interface
+export interface VitalSignsResult {
+  spo2: number;
+  pressure: string;
+  arrhythmiaStatus: string;
+  glucose: number;
+  lipids: {
+    totalCholesterol: number;
+    hydrationPercentage: number; // Changed from triglycerides to hydrationPercentage
+  };
+  lastArrhythmiaData?: {
+    timestamp: number;
+    rmssd?: number;
+    rrVariation?: number;
+  } | null;
+}
 
 /**
  * Core processor for vital signs
@@ -13,34 +28,22 @@ export class VitalSignsProcessor {
   private arrhythmiaCounter: number = 0;
   private signalHistory: number[] = [];
   private lastDetectionTime: number = 0;
-  private processingEnabled: boolean = true;
-  private signalQuality: number = 0;
   
   /**
    * Process a PPG signal with improved false positive detection
    */
   public processSignal(
-    ppgValue: number | { value: number, rrData?: { intervals: number[]; lastPeakTime: number | null } }
+    ppgValue: number,
+    rrData?: { intervals: number[]; lastPeakTime: number | null }
   ): VitalSignsResult {
-    // Extract value and rrData
-    let value: number;
-    let rrData: { intervals: number[]; lastPeakTime: number | null } | undefined;
-    
-    if (typeof ppgValue === 'number') {
-      value = ppgValue;
-    } else {
-      value = ppgValue.value;
-      rrData = ppgValue.rrData;
-    }
-    
     // Add value to history
-    this.signalHistory.push(value);
+    this.signalHistory.push(ppgValue);
     if (this.signalHistory.length > 50) {
       this.signalHistory.shift();
     }
     
     // Basic validation
-    if (Math.abs(value) < 0.05) {
+    if (Math.abs(ppgValue) < 0.05) {
       return this.getEmptyResult();
     }
     
@@ -59,11 +62,10 @@ export class VitalSignsProcessor {
     }
     
     // Calculate basic vital signs based on PPG signal
-    const spo2 = this.calculateSpO2(value);
-    const pressure = this.calculateBloodPressure(value, rrData);
-    const glucose = this.calculateGlucose(value);
-    const lipids = this.calculateLipids(value);
-    const hydration = this.calculateHydration(value);
+    const spo2 = this.calculateSpO2(ppgValue);
+    const pressure = this.calculateBloodPressure(ppgValue, rrData);
+    const glucose = this.calculateGlucose(ppgValue);
+    const lipids = this.calculateLipids(ppgValue);
     
     return {
       spo2,
@@ -73,7 +75,6 @@ export class VitalSignsProcessor {
         `NORMAL RHYTHM|${this.arrhythmiaCounter}`,
       glucose,
       lipids,
-      hydration,
       lastArrhythmiaData: arrhythmiaDetected ? {
         timestamp: Date.now(),
         rmssd: 0,
@@ -93,9 +94,8 @@ export class VitalSignsProcessor {
       glucose: 0,
       lipids: {
         totalCholesterol: 0,
-        hydrationPercentage: 0
-      },
-      hydration: 0
+        hydrationPercentage: 0 // Changed from triglycerides to hydrationPercentage
+      }
     };
   }
   
@@ -147,11 +147,11 @@ export class VitalSignsProcessor {
   }
   
   /**
-   * Calculate lipid levels and hydration percentages in lipids context
+   * Calculate lipid levels and hydration
    */
   private calculateLipids(ppgValue: number): { totalCholesterol: number, hydrationPercentage: number } {
     const baseCholesterol = 180;
-    const baseHydration = 65;
+    const baseHydration = 65; // Base hydration percentage
     
     const cholVariation = ppgValue * 30;
     const hydrationVariation = ppgValue * 20;
@@ -166,40 +166,6 @@ export class VitalSignsProcessor {
       totalCholesterol: Math.round(baseCholesterol + cholVariation),
       hydrationPercentage: Math.round(hydrationPercentage)
     };
-  }
-  
-  /**
-   * Calculate overall hydration level
-   * This is a separate calculation from the lipids-context hydration percentage
-   */
-  private calculateHydration(ppgValue: number): number {
-    // Base hydration level (healthy adult)
-    const baseHydration = 65;
-    
-    // Signal characteristics affect hydration estimation
-    const hydrationVar = ppgValue * 15;
-    
-    // Calculate hydration with safeguards
-    let hydration = baseHydration + hydrationVar;
-    
-    // Ensure hydration is in physiological range (45-100%)
-    hydration = Math.min(100, Math.max(45, hydration));
-    
-    return Math.round(hydration);
-  }
-  
-  /**
-   * Enable or disable processing
-   */
-  public enableProcessing(enabled: boolean): void {
-    this.processingEnabled = enabled;
-  }
-  
-  /**
-   * Get signal quality
-   */
-  public getSignalQuality(): number {
-    return this.signalQuality;
   }
   
   /**
@@ -219,7 +185,6 @@ export class VitalSignsProcessor {
     this.arrhythmiaCounter = 0;
     this.signalHistory = [];
     this.lastDetectionTime = 0;
-    this.signalQuality = 0;
   }
   
   /**

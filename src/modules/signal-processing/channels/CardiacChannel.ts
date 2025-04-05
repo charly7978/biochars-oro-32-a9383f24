@@ -1,3 +1,4 @@
+
 /**
  * Specialized channel for cardiac signal processing
  * Optimizes the signal specifically for heart rate and arrhythmia detection
@@ -5,12 +6,12 @@
  */
 
 import { SpecializedChannel, ChannelConfig } from './SpecializedChannel';
-import { ProcessorType } from '../types';
+import { VitalSignType } from '../../../types/signal';
 
 /**
  * Cardiac-specific channel
  */
-export class CardiacChannel extends SpecializedChannel<number> {
+export class CardiacChannel extends SpecializedChannel {
   // Cardiac-specific parameters
   private readonly PEAK_EMPHASIS = 1.4;          // Emphasis on cardiac peaks
   private readonly SLOPE_WEIGHT = 0.7;           // Weight for slope components
@@ -22,14 +23,7 @@ export class CardiacChannel extends SpecializedChannel<number> {
   private readonly PEAK_BUFFER_SIZE = 10;
   
   constructor(config: ChannelConfig) {
-    super(config);
-  }
-  
-  /**
-   * Process signal for cardiac analysis
-   */
-  processSignal(value: number): number {
-    return this.applyChannelSpecificOptimization(value);
+    super(VitalSignType.CARDIAC, config);
   }
   
   /**
@@ -175,7 +169,7 @@ export class CardiacChannel extends SpecializedChannel<number> {
   /**
    * Reset channel state
    */
-  reset(): void {
+  public override reset(): void {
     super.reset();
     this.peakBuffer = [];
     this.lastPeakTime = 0;
@@ -184,7 +178,7 @@ export class CardiacChannel extends SpecializedChannel<number> {
   /**
    * Get cardiac rhythm characteristics
    */
-  getRhythmCharacteristics(): {
+  public getRhythmCharacteristics(): {
     heartRate: number;
     beatsPerMinute: number;
     rhythmRegularity: number;

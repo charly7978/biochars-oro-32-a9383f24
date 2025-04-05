@@ -1,45 +1,29 @@
 
 /**
- * Type definitions for vital signs results
+ * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
  */
 
-// Result of vital signs processing
+/**
+ * Interface for vital signs measurement results
+ * Direct measurement only, no simulation
+ */
 export interface VitalSignsResult {
   spo2: number;
   pressure: string;
   arrhythmiaStatus: string;
   glucose: number;
-  lipids: LipidsResult;
-  hydration: number; // Explicit hydration field
+  lipids: {
+    totalCholesterol: number;
+    hydrationPercentage: number;  // Changed from triglycerides to hydrationPercentage
+  };
   confidence?: {
     glucose: number;
-    lipids: number;
+    lipids: number;  // Kept as 'lipids' for backward compatibility
     overall: number;
   };
   lastArrhythmiaData?: {
     timestamp: number;
-    rmssd?: number;
-    rrVariation?: number;
+    rmssd: number;
+    rrVariation: number;
   } | null;
-}
-
-// Lipids result interface
-export interface LipidsResult {
-  totalCholesterol: number;
-  hydrationPercentage: number;
-  triglycerides?: number; // Making triglycerides optional
-}
-
-// Processor interface
-export interface VitalSignProcessorInterface {
-  processSignal(value: number): any;
-  reset(): VitalSignsResult | null;
-}
-
-// Processor feedback
-export interface ProcessorFeedback {
-  quality: number;
-  calibrationStatus: string;
-  lastUpdated: number;
-  diagnosticInfo?: Record<string, any>;
 }

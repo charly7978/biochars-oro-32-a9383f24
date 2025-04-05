@@ -1,6 +1,6 @@
 
 /**
- * Enhanced confidence calculator for vital signs measurements with hydration support
+ * Calculates overall confidence for vital signs measurements
  */
 
 export class ConfidenceCalculator {
@@ -12,10 +12,6 @@ export class ConfidenceCalculator {
   
   /**
    * Calculate overall confidence from individual metrics
-   * @param glucoseConfidence Confidence level for glucose measurement
-   * @param lipidsConfidence Confidence level for lipids measurement
-   * @param hydrationConfidence Confidence level for hydration measurement
-   * @returns Overall confidence value (0-1)
    */
   public calculateOverallConfidence(
     glucoseConfidence: number,
@@ -39,8 +35,6 @@ export class ConfidenceCalculator {
   
   /**
    * Check if confidence meets threshold
-   * @param confidence Confidence value to check
-   * @returns Boolean indicating if threshold is met
    */
   public meetsThreshold(confidence: number): boolean {
     return confidence >= this.confidenceThreshold;
@@ -48,19 +42,8 @@ export class ConfidenceCalculator {
   
   /**
    * Get current confidence threshold
-   * @returns Current threshold value
    */
   public getConfidenceThreshold(): number {
     return this.confidenceThreshold;
-  }
-  
-  /**
-   * Set new confidence threshold
-   * @param threshold New threshold value (0-1)
-   */
-  public setConfidenceThreshold(threshold: number): void {
-    if (threshold >= 0 && threshold <= 1) {
-      this.confidenceThreshold = threshold;
-    }
   }
 }

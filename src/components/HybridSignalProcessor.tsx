@@ -1,3 +1,4 @@
+
 /**
  * Component that demonstrates the hybrid signal processing capabilities
  * Combines traditional algorithms with neural networks

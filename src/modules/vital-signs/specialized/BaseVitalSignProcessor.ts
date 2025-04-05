@@ -1,111 +1,160 @@
 
 /**
- * Base class for vital sign processors
+ * Base class for all specialized vital sign processors
+ * Provides common functionality for all processors
  */
-import { VitalSignProcessorInterface, ProcessorFeedback } from '../types/vital-signs-result';
+import { VitalSignType, ChannelFeedback } from '../../../types/signal';
+import { v4 as uuidv4 } from 'uuid';
 
-export abstract class BaseVitalSignProcessor<T> implements VitalSignProcessorInterface<T> {
-  protected scaleFactor: number = 1.0;
-  protected offsetFactor: number = 0.0;
-  protected processorName: string;
+/**
+ * Abstract base class for specialized vital sign processors
+ */
+export abstract class BaseVitalSignProcessor<T> {
+  protected readonly type: VitalSignType;
+  protected readonly id: string;
   protected confidence: number = 0;
+  protected lastProcessedValue: number = 0;
   protected buffer: number[] = [];
-  protected readonly MAX_BUFFER_SIZE = 50;
+  protected readonly MAX_BUFFER_SIZE: number = 100;
+  protected lastFeedback: ChannelFeedback | null = null;
+  protected isInitialized: boolean = false;
   
-  constructor(processorName: string) {
-    this.processorName = processorName;
-    console.log(`BaseVitalSignProcessor: ${processorName} initialized`);
+  /**
+   * Constructor
+   * @param type Type of vital sign this processor handles
+   */
+  constructor(type: VitalSignType) {
+    this.type = type;
+    this.id = `${type}-processor-${uuidv4().substring(0, 8)}`;
   }
   
   /**
-   * Process a PPG signal value
+   * Initialize the processor
    */
-  processValue(value: number): T {
-    // Maintain buffer for all processors
-    this.addToBuffer(value);
+  public initialize(): void {
+    this.buffer = [];
+    this.confidence = 0;
+    this.lastProcessedValue = 0;
+    this.lastFeedback = null;
+    this.isInitialized = true;
     
-    // Update confidence based on buffer
-    this.updateConfidence();
-    
-    // Delegate actual processing to implementation
-    return this.processValueImpl(value);
+    console.log(`${this.typeToString()} Processor: Initialized`);
   }
-  
-  /**
-   * Implementation method that child classes must override
-   */
-  protected abstract processValueImpl(value: number): T;
   
   /**
    * Reset the processor state
    */
-  reset(): void {
+  public reset(): void {
     this.buffer = [];
     this.confidence = 0;
-    this.scaleFactor = 1.0;
-    this.offsetFactor = 0.0;
+    this.lastProcessedValue = 0;
+    this.lastFeedback = null;
+    
+    console.log(`${this.typeToString()} Processor: Reset`);
   }
   
   /**
-   * Set calibration factors for the processor
+   * Get the processor's confidence in its measurements (0-1)
    */
-  setCalibrationFactors(scale: number, offset: number): void {
-    this.scaleFactor = scale;
-    this.offsetFactor = offset;
-  }
-  
-  /**
-   * Get processor name
-   */
-  getProcessorName(): string {
-    return this.processorName;
-  }
-  
-  /**
-   * Get current confidence level (0-1)
-   */
-  getConfidence(): number {
+  public getConfidence(): number {
     return this.confidence;
   }
   
   /**
-   * Update confidence based on available data
+   * Process a value from the optimized channel
+   * @param value Channel-optimized value
+   * @returns Processed result
    */
-  protected updateConfidence(): void {
-    // Default implementation based on buffer size
-    this.confidence = Math.min(this.buffer.length / this.MAX_BUFFER_SIZE, 1);
-  }
-  
-  /**
-   * Add a value to the internal buffer
-   */
-  protected addToBuffer(value: number): void {
+  public processValue(value: number): T {
+    this.lastProcessedValue = value;
+    
+    // Add to buffer
     this.buffer.push(value);
     if (this.buffer.length > this.MAX_BUFFER_SIZE) {
       this.buffer.shift();
     }
+    
+    // Calculate confidence
+    this.updateConfidence();
+    
+    // Process the value
+    return this.processValueImpl(value);
   }
   
   /**
-   * Get diagnostic feedback about processor state
+   * Get feedback for the channel to optimize for this processor
    */
-  getFeedback(): ProcessorFeedback {
-    const calibrationStatus = this.confidence > 0.7 
-      ? 'calibrated'
-      : this.confidence > 0.2 
-        ? 'calibrating' 
-        : 'uncalibrated';
+  public getFeedback(): ChannelFeedback | null {
+    // Base implementation for feedback
+    // Subclasses can override for specialized feedback
     
-    return {
-      quality: this.confidence * 100,
-      calibrationStatus,
-      lastUpdated: Date.now(),
-      diagnosticInfo: {
-        bufferSize: this.buffer.length,
-        processorName: this.processorName,
-        scaleFactor: this.scaleFactor,
-        offsetFactor: this.offsetFactor
-      }
+    // Skip feedback if we don't have enough data
+    if (this.buffer.length < 10) {
+      return null;
+    }
+    
+    // Create basic feedback
+    const feedback: ChannelFeedback = {
+      channelId: this.id,
+      signalQuality: this.confidence,
+      suggestedAdjustments: {},
+      timestamp: Date.now(),
+      success: this.confidence > 0.3
     };
+    
+    // Suggest amplification adjustment based on recent values
+    const recent = this.buffer.slice(-10);
+    const avg = recent.reduce((sum, val) => sum + val, 0) / recent.length;
+    const maxAbs = Math.max(...recent.map(val => Math.abs(val)));
+    
+    // If values are too small, suggest higher amplification
+    if (maxAbs < 0.1 && this.confidence < 0.5) {
+      feedback.suggestedAdjustments.amplificationFactor = 1.2;
+    }
+    
+    // If values are too large, suggest lower amplification
+    if (maxAbs > 5 && this.confidence < 0.5) {
+      feedback.suggestedAdjustments.amplificationFactor = 0.9;
+    }
+    
+    // Store this feedback
+    this.lastFeedback = feedback;
+    
+    return feedback;
+  }
+  
+  /**
+   * Update confidence based on signal characteristics
+   * Subclasses should override for specific confidence calculation
+   */
+  protected updateConfidence(): void {
+    if (this.buffer.length < 5) {
+      this.confidence = 0;
+      return;
+    }
+    
+    // Base confidence calculation (simple example)
+    const recent = this.buffer.slice(-10);
+    const mean = recent.reduce((sum, val) => sum + val, 0) / recent.length;
+    
+    // Calculate signal-to-noise ratio (simple approximation)
+    const variance = recent.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / recent.length;
+    const snr = mean !== 0 ? Math.abs(mean / Math.sqrt(variance)) : 0;
+    
+    // Base confidence on SNR
+    this.confidence = Math.min(1, snr / 10);
+  }
+  
+  /**
+   * Implementation of value processing
+   * Must be implemented by subclasses
+   */
+  protected abstract processValueImpl(value: number): T;
+  
+  /**
+   * Convert type to readable string
+   */
+  protected typeToString(): string {
+    return this.type.charAt(0).toUpperCase() + this.type.slice(1);
   }
 }

@@ -5,12 +5,12 @@
  */
 
 import { SpecializedChannel, ChannelConfig } from './SpecializedChannel';
-import { ProcessorType } from '../types';
+import { VitalSignType } from '../../../types/signal';
 
 /**
  * Hydration-specific channel implementation
  */
-export class HydrationChannel extends SpecializedChannel<number> {
+export class HydrationChannel extends SpecializedChannel {
   // Hydration-specific parameters
   private readonly AMPLITUDE_EMPHASIS = 1.2;   // Emphasis on amplitude variations
   private readonly LOW_FREQ_WEIGHT = 0.65;     // Higher weight for low frequencies (fluid balance)
@@ -22,18 +22,14 @@ export class HydrationChannel extends SpecializedChannel<number> {
   private amplitudeRatios: number[] = [];
   
   constructor(config: ChannelConfig) {
-    super(config);
-  }
-  
-  /**
-   * Process signal for hydration analysis
-   */
-  processSignal(value: number): number {
-    return this.applyChannelSpecificOptimization(value);
+    super(VitalSignType.HYDRATION, config);
   }
   
   /**
    * Apply hydration-specific optimization to the signal
+   * - Emphasizes amplitude changes related to tissue water content
+   * - Enhances low-frequency components correlated with fluid balance
+   * - Detects subtle changes in pulse wave velocity
    */
   protected applyChannelSpecificOptimization(value: number): number {
     // Update waveform buffer for analysis
@@ -234,9 +230,19 @@ export class HydrationChannel extends SpecializedChannel<number> {
   /**
    * Reset channel state
    */
-  reset(): void {
+  public override reset(): void {
     super.reset();
     this.waveformBuffer = [];
     this.amplitudeRatios = [];
+  }
+  
+  /**
+   * Get average amplitude ratio for hydration assessment
+   */
+  public getAmplitudeRatio(): number {
+    if (this.amplitudeRatios.length === 0) return 0;
+    
+    return this.amplitudeRatios.reduce((sum, r) => sum + r, 0) / 
+           this.amplitudeRatios.length;
   }
 }

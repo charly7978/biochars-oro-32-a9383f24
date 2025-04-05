@@ -1,23 +1,15 @@
 
 /**
- * Hook for processing signals into vital signs
+ * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
  */
+
 import { useRef, useCallback } from 'react';
 import { VitalSignsResult } from '../../modules/vital-signs/types/vital-signs-result';
 import { VitalSignsProcessor } from '../../modules/vital-signs/VitalSignsProcessor';
 
-// Interface for signal input
-interface SignalInput {
-  value: number;
-  rrData?: { 
-    intervals: number[]; 
-    lastPeakTime: number | null;
-  };
-}
-
 /**
  * Hook for processing signal using the VitalSignsProcessor
- * Direct measurement only
+ * Direct measurement only, no simulation
  */
 export const useSignalProcessing = () => {
   // Reference for processor instance
@@ -44,8 +36,7 @@ export const useSignalProcessing = () => {
         lipids: {
           totalCholesterol: 0,
           hydrationPercentage: 0
-        },
-        hydration: 0
+        }
       };
     }
     
@@ -61,8 +52,7 @@ export const useSignalProcessing = () => {
         lipids: {
           totalCholesterol: 0,
           hydrationPercentage: 0
-        },
-        hydration: 0
+        }
       };
     }
     
@@ -76,9 +66,13 @@ export const useSignalProcessing = () => {
         signalNumber: processedSignals.current
       });
     }
-
+    
     // Process signal directly - no simulation
-    const result = processorRef.current.processSignal({ value, rrData });
+    // Fixed: Pass parameters correctly as expected by processSignal method
+    const result = processorRef.current.processSignal({
+      value,
+      rrData
+    });
     
     return result;
   }, []);
@@ -105,10 +99,10 @@ export const useSignalProcessing = () => {
     
     console.log("useVitalSignsProcessor: Reset initiated - DIRECT MEASUREMENT mode only");
     
-    const lastValidResults = processorRef.current.reset();
+    processorRef.current.reset();
     
     console.log("useVitalSignsProcessor: Reset completed - all values at zero for direct measurement");
-    return lastValidResults;
+    return null;
   }, []);
   
   /**
@@ -144,23 +138,6 @@ export const useSignalProcessing = () => {
     };
   }, []);
 
-  /**
-   * Start processing
-   */
-  const startProcessing = useCallback(() => {
-    console.log("useVitalSignsProcessor: Starting processing");
-    if (!processorRef.current) {
-      initializeProcessor();
-    }
-  }, [initializeProcessor]);
-
-  /**
-   * Stop processing
-   */
-  const stopProcessing = useCallback(() => {
-    console.log("useVitalSignsProcessor: Stopping processing");
-  }, []);
-
   return {
     processSignal,
     initializeProcessor,
@@ -168,8 +145,6 @@ export const useSignalProcessing = () => {
     fullReset,
     getArrhythmiaCounter,
     getDebugInfo,
-    startProcessing,
-    stopProcessing,
     processorRef,
     processedSignals,
     signalLog

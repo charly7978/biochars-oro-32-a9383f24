@@ -1,15 +1,16 @@
+
 /**
  * Specialized channel for glucose signal processing
  * Optimizes the signal specifically for glucose measurement algorithms
  */
 
 import { SpecializedChannel, ChannelConfig } from './SpecializedChannel';
-import { ProcessorType } from '../types';
+import { VitalSignType } from '../../../types/signal';
 
 /**
  * Glucose-specific channel configuration
  */
-export class GlucoseChannel extends SpecializedChannel<number> {
+export class GlucoseChannel extends SpecializedChannel {
   // Glucose-specific parameters
   private readonly LOW_FREQUENCY_WEIGHT = 0.6;  // Higher weight for low frequencies
   private readonly HIGH_FREQUENCY_WEIGHT = 0.4; // Lower weight for high frequencies
@@ -18,18 +19,14 @@ export class GlucoseChannel extends SpecializedChannel<number> {
   private readonly AUC_BUFFER_SIZE = 30;
   
   constructor(config: ChannelConfig) {
-    super(config);
-  }
-  
-  /**
-   * Process signal for glucose analysis
-   */
-  processSignal(value: number): number {
-    return this.applyChannelSpecificOptimization(value);
+    super(VitalSignType.GLUCOSE, config);
   }
   
   /**
    * Apply glucose-specific optimization to the signal
+   * - Emphasizes low-frequency components related to blood glucose changes
+   * - Enhances perfusion-related signal characteristics
+   * - Calculates and uses area under the curve for glucose correlation
    */
   protected applyChannelSpecificOptimization(value: number): number {
     // Calculate a baseline from recent values
