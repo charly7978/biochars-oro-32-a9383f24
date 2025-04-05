@@ -1,214 +1,219 @@
-
 /**
- * Functions for adaptive signal control and enhancement
+ * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
+ *
+ * Adaptive Control Functions for Signal Processing
+ * These functions implement adaptive filtering and prediction
+ * based on real signals only
  */
 
-// Initialize state for adaptive signal processing
-let adaptiveData: {
-  history: { time: number, value: number, quality: number }[];
-  calibration: { gain: number, offset: number };
-  lastPrediction: { value: number, confidence: number, time: number };
-} = {
-  history: [],
-  calibration: { gain: 1.0, offset: 0.0 },
-  lastPrediction: { value: 0, confidence: 0, time: 0 }
-};
+// Recent signal history to analyze trends
+let signalHistory: Array<{time: number, value: number}> = [];
+const MAX_HISTORY_SIZE = 200;
 
-const MAX_HISTORY = 30;
-const DEFAULT_ALPHA = 0.2;
+// Adaptive filter parameters
+let alpha = 0.3; // Default filter strength
+let lastFilteredValue = 0;
+let adaptiveFactor = 1.0;
+let anomalyThreshold = 0.5;
 
 /**
- * Apply adaptive filtering to a signal value
+ * Apply an adaptive filter to the signal value
+ * Filter strength adapts based on signal quality
  */
 export function applyAdaptiveFilter(
   value: number, 
   timestamp: number, 
-  quality: number = 1.0,
-  alpha: number = DEFAULT_ALPHA
+  quality: number = 0.5
 ): number {
-  // Apply EMA filter with quality-adjusted alpha
-  const adjustedAlpha = alpha * Math.max(0.5, quality);
+  // Store value in history
+  signalHistory.push({time: timestamp, value});
   
-  // Get previous value
-  const previousValue = adaptiveData.history.length > 0
-    ? adaptiveData.history[adaptiveData.history.length - 1].value
-    : value;
-  
-  // Apply filter
-  const filteredValue = adjustedAlpha * value + (1 - adjustedAlpha) * previousValue;
-  
-  // Store in history
-  adaptiveData.history.push({ time: timestamp, value: filteredValue, quality });
-  if (adaptiveData.history.length > MAX_HISTORY) {
-    adaptiveData.history.shift();
+  // Trim history to prevent memory growth
+  if (signalHistory.length > MAX_HISTORY_SIZE) {
+    signalHistory.shift();
   }
+  
+  // Adjust filter strength based on signal quality
+  // Lower quality = stronger filtering
+  const adaptiveAlpha = quality < 0.3 ? 
+    alpha * 0.6 : // Stronger filtering for low quality
+    quality > 0.8 ? 
+      alpha * 1.4 : // Lighter filtering for high quality
+      alpha;
+  
+  // Apply exponential filter
+  if (lastFilteredValue === 0) {
+    lastFilteredValue = value;
+    return value;
+  }
+  
+  // Exponential filter formula
+  const filteredValue = adaptiveAlpha * value + (1 - adaptiveAlpha) * lastFilteredValue;
+  
+  // Update last filtered value
+  lastFilteredValue = filteredValue;
   
   return filteredValue;
 }
 
 /**
- * Predict the next signal value
+ * Predict the next signal value using simple forecasting
  */
-export function predictNextValue(
-  futureTimestamp: number
-): { prediction: number; confidence: number } {
-  if (adaptiveData.history.length < 5) {
+export function predictNextValue(futureTime: number): {prediction: number, confidence: number} {
+  if (signalHistory.length < 3) {
     return { prediction: 0, confidence: 0 };
   }
   
-  // Simple linear prediction
-  const latest = adaptiveData.history.slice(-5);
-  const timeDeltas = latest.map(p => p.time).map((t, i, arr) => i > 0 ? t - arr[i - 1] : 0).slice(1);
-  const valueDeltas = latest.map(p => p.value).map((v, i, arr) => i > 0 ? v - arr[i - 1] : 0).slice(1);
+  // Use recent values for prediction
+  const recentValues = signalHistory.slice(-5);
   
-  // Average rate of change
-  const avgTimeDelta = timeDeltas.reduce((a, b) => a + b, 0) / timeDeltas.length;
-  const avgValueDelta = valueDeltas.reduce((a, b) => a + b, 0) / valueDeltas.length;
+  // Simple linear extrapolation
+  const x1 = recentValues[recentValues.length - 2].time;
+  const y1 = recentValues[recentValues.length - 2].value;
+  const x2 = recentValues[recentValues.length - 1].time;
+  const y2 = recentValues[recentValues.length - 1].value;
   
-  if (avgTimeDelta === 0) {
-    return { prediction: latest[latest.length - 1].value, confidence: 0.5 };
+  // Avoid division by zero
+  if (x2 === x1) {
+    return { prediction: y2, confidence: 0.5 };
   }
   
-  // Rate of change per millisecond
-  const rateOfChange = avgValueDelta / avgTimeDelta;
+  // Calculate slope
+  const slope = (y2 - y1) / (x2 - x1);
   
   // Predict future value
-  const latestPoint = latest[latest.length - 1];
-  const timeToFuture = futureTimestamp - latestPoint.time;
-  const prediction = latestPoint.value + rateOfChange * timeToFuture;
+  const timeDiff = futureTime - x2;
+  const prediction = y2 + (slope * timeDiff);
   
-  // Calculate confidence based on quality and consistency
-  const avgQuality = latest.reduce((sum, p) => sum + p.quality, 0) / latest.length;
-  const valueVariance = calculateVariance(latest.map(p => p.value));
+  // Calculate prediction confidence based on history consistency
+  let confidence = 0.5;
   
-  // Low variance means more consistent readings = higher confidence
-  const consistencyFactor = Math.exp(-valueVariance * 5);
-  const confidence = avgQuality * 0.7 + consistencyFactor * 0.3;
-  
-  // Store prediction
-  adaptiveData.lastPrediction = {
-    value: prediction,
-    confidence,
-    time: futureTimestamp
-  };
+  if (signalHistory.length > 10) {
+    // More data = potentially higher confidence
+    const values = signalHistory.slice(-10).map(p => p.value);
+    const mean = values.reduce((sum, val) => sum + val, 0) / values.length;
+    const variance = values.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / values.length;
+    
+    // Lower variance = higher confidence
+    confidence = Math.min(0.9, Math.max(0.1, 1 - (variance * 5)));
+  }
   
   return { prediction, confidence };
 }
 
 /**
- * Calculate variance of a set of numbers
- */
-function calculateVariance(values: number[]): number {
-  if (values.length < 2) return 0;
-  
-  const mean = values.reduce((a, b) => a + b, 0) / values.length;
-  return values.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / values.length;
-}
-
-/**
- * Correct anomalies in the signal
+ * Detect and correct anomalies in the signal
  */
 export function correctSignalAnomalies(
-  value: number,
-  timestamp: number,
-  quality: number = 1.0
+  value: number, 
+  timestamp: number, 
+  quality: number
 ): { correctedValue: number, anomalyDetected: boolean } {
-  if (adaptiveData.history.length < 3) {
+  if (signalHistory.length < 5) {
     return { correctedValue: value, anomalyDetected: false };
   }
   
-  // Get recent values
-  const recent = adaptiveData.history.slice(-3);
-  const mean = recent.reduce((sum, p) => sum + p.value, 0) / recent.length;
-  const stdDev = Math.sqrt(calculateVariance(recent.map(p => p.value)));
+  // Calculate recent statistics
+  const recentValues = signalHistory.slice(-10).map(p => p.value);
+  const mean = recentValues.reduce((sum, val) => sum + val, 0) / recentValues.length;
+  const stdDev = Math.sqrt(
+    recentValues.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / recentValues.length
+  );
   
-  // Check if current value is an outlier
-  const zScore = Math.abs(value - mean) / (stdDev > 0 ? stdDev : 1);
-  const isOutlier = zScore > 2.5; // Z-score of 2.5 = 99% confidence
+  // Adjust anomaly threshold based on signal quality
+  const adjustedThreshold = anomalyThreshold * (1 + (1 - quality));
   
-  // Calculate corrected value
-  let correctedValue = value;
-  if (isOutlier) {
-    // Use a weighted average of the value and mean based on quality
-    correctedValue = value * (1 - quality) + mean * quality;
+  // Check if value is an anomaly
+  const zScore = Math.abs((value - mean) / (stdDev || 1));
+  const isAnomaly = zScore > adjustedThreshold && Math.abs(value - mean) > 0.3;
+  
+  if (isAnomaly) {
+    // Replace with predicted value
+    const { prediction } = predictNextValue(timestamp);
+    
+    // Blend anomalous value with prediction (don't completely discard real data)
+    const correctedValue = (prediction * 0.7) + (value * 0.3);
+    
+    return { correctedValue, anomalyDetected: true };
   }
   
-  return { correctedValue, anomalyDetected: isOutlier };
+  return { correctedValue: value, anomalyDetected: false };
 }
 
 /**
- * Update signal quality using prediction
+ * Update the quality estimate using prediction accuracy
  */
 export function updateQualityWithPrediction(
-  value: number,
-  timestamp: number,
+  actual: number, 
   currentQuality: number
 ): number {
-  // If we don't have a recent prediction, return current quality
-  if (adaptiveData.lastPrediction.time === 0 || 
-      timestamp - adaptiveData.lastPrediction.time > 200) {
+  if (signalHistory.length < 5) {
     return currentQuality;
   }
   
-  // Compare actual value to prediction
-  const prediction = adaptiveData.lastPrediction.value;
-  const predictionQuality = adaptiveData.lastPrediction.confidence;
+  // Get the last prediction we made
+  const lastTime = signalHistory[signalHistory.length - 2].time;
+  const { prediction } = predictNextValue(lastTime);
   
-  // Calculate difference as percentage of prediction
-  const diff = Math.abs(value - prediction);
-  const diffPercent = prediction !== 0 ? diff / Math.abs(prediction) : 1;
+  // Compare prediction with actual value
+  const delta = Math.abs(prediction - actual);
+  const predictionQuality = 1 - Math.min(1, delta * 2);
   
-  // If prediction was good, boost quality; otherwise, reduce it
-  let newQuality = currentQuality;
-  if (diffPercent < 0.2) {
-    // Good prediction, boost quality
-    newQuality = currentQuality * 0.8 + 0.2 * Math.min(1.0, 1.0 - diffPercent);
-  } else if (diffPercent > 0.5) {
-    // Bad prediction, reduce quality
-    newQuality = currentQuality * 0.8;
-  }
-  
-  // Scale by prediction confidence
-  newQuality = newQuality * 0.7 + currentQuality * 0.3 * predictionQuality;
-  
-  return Math.min(1.0, Math.max(0.0, newQuality));
+  // Blend current quality with prediction quality
+  return currentQuality * 0.8 + predictionQuality * 0.2;
 }
 
 /**
- * Reset adaptive control state
+ * Reset all adaptive control parameters
  */
 export function resetAdaptiveControl(): void {
-  adaptiveData = {
-    history: [],
-    calibration: { gain: 1.0, offset: 0.0 },
-    lastPrediction: { value: 0, confidence: 0, time: 0 }
+  signalHistory = [];
+  alpha = 0.3;
+  lastFilteredValue = 0;
+  adaptiveFactor = 1.0;
+  anomalyThreshold = 0.5;
+}
+
+/**
+ * Get current state of adaptive model for diagnostics
+ */
+export function getAdaptiveModelState(): {
+  historySize: number;
+  alpha: number;
+  adaptiveFactor: number;
+  anomalyThreshold: number;
+} {
+  return {
+    historySize: signalHistory.length,
+    alpha,
+    adaptiveFactor,
+    anomalyThreshold
   };
 }
 
 /**
- * Get the current state of the adaptive model
+ * Apply Bayesian optimization to parameters (placeholder)
  */
-export function getAdaptiveModelState(): any {
-  return { ...adaptiveData };
+export function applyBayesianOptimization(): boolean {
+  // This would normally optimize parameters based on results
+  // For now, just return true to indicate success
+  return true;
 }
 
 /**
- * Apply Bayesian optimization (stub function for compatibility)
+ * Apply Gaussian process modeling (placeholder)
  */
-export function applyBayesianOptimization(value: number): number {
-  return value; // Placeholder implementation
+export function applyGaussianProcessModeling(data: number[]): number[] {
+  // This would normally apply Gaussian process
+  // For now, just return the data
+  return data;
 }
 
 /**
- * Apply Gaussian process modeling (stub function for compatibility)
- */
-export function applyGaussianProcessModeling(value: number): number {
-  return value; // Placeholder implementation
-}
-
-/**
- * Apply mixed model prediction (stub function for compatibility)
+ * Apply mixed model prediction (placeholder)
  */
 export function applyMixedModelPrediction(value: number): number {
-  return value; // Placeholder implementation
+  // This would normally apply a mixed model
+  // For now, just return the value
+  return value;
 }

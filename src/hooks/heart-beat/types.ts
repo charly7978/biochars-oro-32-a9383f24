@@ -6,24 +6,14 @@ export interface RRIntervalData {
   lastPeakTime: number | null;
 }
 
-export interface RRIntervalItem {
-  time: number;
-  rrInterval: number;
-  isValid: boolean;
-}
-
 export interface HeartBeatResult {
   bpm: number;
   confidence: number;
   isPeak: boolean;
+  filteredValue?: number;
   arrhythmiaCount: number;
-  cardiacPeakCount?: number;  // Added for compatibility
-  cardiacArrhythmiaCount?: number; // Added for compatibility
-  isArrhythmia?: boolean; // Added for compatibility
-  rrData: {
-    intervals: number[];
-    lastPeakTime: number | null;
-  };
+  isArrhythmia?: boolean;
+  rrData?: RRIntervalData;
 }
 
 export interface UseHeartBeatReturn {

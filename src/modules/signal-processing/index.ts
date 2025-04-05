@@ -1,33 +1,24 @@
 
-/**
- * Signal Processing Module
- * Central export point for all signal processing utilities
- */
-
-// Export unified types
-export * from './types-unified';
-
-// Export core processors
+// Export all signal processing utilities
+export * from './types';
 export * from './ppg-processor';
 
-// Export utilities
-export * from '../utils/signal-normalizer';
+export * from './utils/signal-normalizer';
 export * from './utils/finger-detector';
 export * from './utils/quality-detector';
 export * from './utils/mixed-model';
 
-// Export validation and error handling
 export * from './signal-validator';
 export * from './error-handler';
 export * from './diagnostics';
-
-// Export channels
 export * from './channels/SpecializedChannel';
 
-// Export specific reset functions
-export { resetFingerDetector } from './utils/finger-detector';
-export { resetFingerDetectorFunc } from './types-unified';
+// Export specific types for external use
+export type {
+  ProcessedPPGSignal,
+  SignalProcessor,
+  SignalProcessingOptions
+} from './types';
 
-// Re-export the OptimizedSignalChannel for convenience
+// Re-export from channels
 export { OptimizedSignalChannel } from './channels/SpecializedChannel';
-

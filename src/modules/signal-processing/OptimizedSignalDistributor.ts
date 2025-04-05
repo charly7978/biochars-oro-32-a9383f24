@@ -1,163 +1,157 @@
 
-import { OptimizedChannel, SignalProcessingOptions, ChannelConfig } from './types';
-import { VitalSignType, ChannelFeedback } from '../../types/signal';
+/**
+ * Signal Distributor
+ * Distributes incoming signals to specialized processing channels
+ */
+
+import { ChannelConfig, OptimizedSignalChannel } from './channels/SpecializedChannel';
 import { CardiacChannel } from './channels/CardiacChannel';
 import { SpO2Channel } from './channels/SpO2Channel';
 import { BloodPressureChannel } from './channels/BloodPressureChannel';
 import { GlucoseChannel } from './channels/GlucoseChannel';
 import { LipidsChannel } from './channels/LipidsChannel';
-import { OptimizedSignalChannel } from './channels/SpecializedChannel';
+import { VitalSignType } from '../../types/signal';
 
+/**
+ * Result from signal distribution
+ */
+export interface DistributedSignalResult {
+  cardiac: number;
+  spo2: number;
+  bloodPressure: number;
+  glucose: number;
+  lipids: number;
+  timestamp: number;
+  rawValue: number;
+}
+
+/**
+ * Distributor class for optimized signal processing
+ * Takes a raw signal and distributes it to specialized channels
+ */
 export class OptimizedSignalDistributor {
-  private channels: Map<string, OptimizedChannel>;
-  private isProcessing: boolean = false;
-  private lastProcessedValue: number = 0;
-  private processingOptions: SignalProcessingOptions;
+  private channels: Map<VitalSignType, OptimizedSignalChannel> = new Map();
+  private enabled: boolean = true;
+  private signalCount: number = 0;
   
-  constructor() {
-    this.channels = new Map();
-    this.processingOptions = {
-      amplificationFactor: 1.5,
-      filterStrength: 0.7,
-      qualityThreshold: 0.6,
-      fingerDetectionSensitivity: 0.5,
-      useAdaptiveControl: true,
-      qualityEnhancedByPrediction: true
-    };
+  constructor(config: ChannelConfig = {}) {
+    this.initializeChannels(config);
+  }
+  
+  /**
+   * Initialize all specialized channels
+   */
+  private initializeChannels(config: ChannelConfig): void {
+    // Create cardiac channel
+    this.addChannel(new CardiacChannel(config) as unknown as OptimizedSignalChannel);
     
-    this.initializeDefaultChannels();
-  }
-  
-  private initializeDefaultChannels(): void {
-    // Create a default config
-    const defaultConfig: ChannelConfig = {
-      amplificationFactor: this.processingOptions.amplificationFactor || 1.5,
-      filterStrength: this.processingOptions.filterStrength || 0.7,
-      qualityThreshold: this.processingOptions.qualityThreshold || 0.6
-    };
+    // Create SpO2 channel
+    this.addChannel(new SpO2Channel(config) as unknown as OptimizedSignalChannel);
     
-    // Initialize standard channels
-    this.addChannel(VitalSignType.CARDIAC, new CardiacChannel(defaultConfig));
-    this.addChannel(VitalSignType.SPO2, new SpO2Channel(defaultConfig));
-    this.addChannel(VitalSignType.BLOOD_PRESSURE, new BloodPressureChannel(defaultConfig));
-    this.addChannel(VitalSignType.GLUCOSE, new GlucoseChannel(defaultConfig));
-    this.addChannel(VitalSignType.LIPIDS, new LipidsChannel(defaultConfig));
+    // Create blood pressure channel
+    this.addChannel(new BloodPressureChannel(config) as unknown as OptimizedSignalChannel);
+    
+    // Create glucose channel
+    this.addChannel(new GlucoseChannel(config) as unknown as OptimizedSignalChannel);
+    
+    // Create lipids channel
+    this.addChannel(new LipidsChannel(config) as unknown as OptimizedSignalChannel);
   }
   
-  addChannel(type: string, channel: OptimizedChannel): void {
-    this.channels.set(type, channel);
+  /**
+   * Add a channel to the distributor
+   */
+  private addChannel(channel: OptimizedSignalChannel): void {
+    this.channels.set(channel.type, channel);
   }
   
-  removeChannel(type: string): boolean {
-    return this.channels.delete(type);
-  }
-  
-  getChannel(type: string): OptimizedChannel | undefined {
-    return this.channels.get(type);
-  }
-  
-  getAllChannels(): Map<string, OptimizedChannel> {
-    return this.channels;
-  }
-  
-  processValue(value: number): Map<string, number> {
-    if (!this.isProcessing) {
-      return new Map();
+  /**
+   * Process a signal value and distribute to all channels
+   */
+  public processSignal(value: number): DistributedSignalResult {
+    if (!this.enabled) {
+      return this.createEmptyResult(value);
     }
     
-    this.lastProcessedValue = value;
+    this.signalCount++;
+    const timestamp = Date.now();
     
-    const results = new Map<string, number>();
+    // Process the raw signal through each channel
+    const cardiacValue = this.processChannel(VitalSignType.CARDIAC, value);
+    const spo2Value = this.processChannel(VitalSignType.SPO2, value);
+    const bloodPressureValue = this.processChannel(VitalSignType.BLOOD_PRESSURE, value);
+    const glucoseValue = this.processChannel(VitalSignType.GLUCOSE, value);
+    const lipidsValue = this.processChannel(VitalSignType.LIPIDS, value);
     
-    this.channels.forEach((channel, type) => {
-      try {
-        // Use helper method for safety
-        const processedValue = this.safelyProcessValue(channel, value);
-        results.set(type, processedValue);
-      } catch (error) {
-        console.error(`Error processing value in channel ${type}:`, error);
-        results.set(type, 0);
-      }
-    });
-    
-    return results;
-  }
-  
-  private safelyProcessValue(channel: OptimizedChannel, value: number): number {
-    if (typeof channel.processValue === 'function') {
-      return channel.processValue(value);
-    }
-    return value; // Fallback if method doesn't exist
-  }
-  
-  configure(options: SignalProcessingOptions): void {
-    this.processingOptions = {
-      ...this.processingOptions,
-      ...options
+    // Return combined result
+    return {
+      cardiac: cardiacValue,
+      spo2: spo2Value,
+      bloodPressure: bloodPressureValue,
+      glucose: glucoseValue,
+      lipids: lipidsValue,
+      timestamp,
+      rawValue: value
     };
+  }
+  
+  /**
+   * Process a value through a specific channel
+   */
+  private processChannel(type: VitalSignType, value: number): number {
+    const channel = this.channels.get(type);
+    if (!channel) {
+      return value;
+    }
     
-    // Update all channels with new configuration
+    return channel.processValue(value);
+  }
+  
+  /**
+   * Create an empty result when the distributor is disabled
+   */
+  private createEmptyResult(value: number): DistributedSignalResult {
+    return {
+      cardiac: value,
+      spo2: value,
+      bloodPressure: value,
+      glucose: value,
+      lipids: value,
+      timestamp: Date.now(),
+      rawValue: value
+    };
+  }
+  
+  /**
+   * Enable or disable the distributor
+   */
+  public setEnabled(enabled: boolean): void {
+    this.enabled = enabled;
+  }
+  
+  /**
+   * Reset all channels
+   */
+  public reset(): void {
     this.channels.forEach(channel => {
-      if (typeof channel.configure === 'function') {
-        channel.configure({
-          amplificationFactor: this.processingOptions.amplificationFactor,
-          filterStrength: this.processingOptions.filterStrength,
-          qualityThreshold: this.processingOptions.qualityThreshold
-        });
-      }
+      channel.reset();
     });
+    this.signalCount = 0;
   }
   
-  reset(): void {
+  /**
+   * Configure all channels
+   */
+  public configure(config: ChannelConfig): void {
     this.channels.forEach(channel => {
-      if (typeof channel.reset === 'function') {
-        channel.reset();
-      }
+      channel.configure(config);
     });
-    
-    this.lastProcessedValue = 0;
   }
   
-  // Add required methods
-  start(): void {
-    this.isProcessing = true;
-  }
-  
-  stop(): void {
-    this.isProcessing = false;
-  }
-  
-  applyFeedback(feedback: ChannelFeedback, channelType: string): void {
-    const channel = this.getChannel(channelType);
-    if (channel && typeof channel.configure === 'function') {
-      // Apply feedback to channel configuration
-      channel.configure({
-        amplificationFactor: this.processingOptions.amplificationFactor,
-        filterStrength: this.processingOptions.filterStrength,
-        qualityThreshold: this.processingOptions.qualityThreshold,
-        // Add feedback-specific adjustments if needed
-      });
-    }
-  }
-  
-  getDiagnostics(): any {
-    // Return diagnostic info from all channels
-    const diagnostics: any = {
-      distributorInfo: {
-        channelCount: this.channels.size,
-        isProcessing: this.isProcessing,
-        lastProcessedValue: this.lastProcessedValue
-      },
-      channelDiagnostics: {}
-    };
-    
-    this.channels.forEach((channel, type) => {
-      diagnostics.channelDiagnostics[type] = {
-        channelType: type,
-        // Add channel-specific diagnostics if available
-      };
-    });
-    
-    return diagnostics;
+  /**
+   * Get the number of signals processed
+   */
+  public getSignalCount(): number {
+    return this.signalCount;
   }
 }

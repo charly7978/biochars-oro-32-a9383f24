@@ -1,114 +1,168 @@
-import { OptimizedChannel, ChannelConfig } from '../types';
+
+/**
+ * Specialized channel for cardiac signal processing
+ * Optimizes the signal specifically for heart rate and arrhythmia detection
+ * Focuses on QRS complex and beat-to-beat characteristics
+ */
+
+import { SpecializedChannel, ChannelConfig } from './SpecializedChannel';
 import { VitalSignType } from '../../../types/signal';
 
-export class CardiacChannel implements OptimizedChannel {
-  private amplificationFactor: number;
-  private filterStrength: number;
-  private qualityThreshold: number;
-  private lastValue: number = 0;
-  private lastTimestamp: number = 0;
-  private recentValues: number[] = [];
+/**
+ * Cardiac-specific channel
+ */
+export class CardiacChannel extends SpecializedChannel {
+  // Cardiac-specific parameters
+  private readonly PEAK_EMPHASIS = 1.4;          // Emphasis on cardiac peaks
+  private readonly SLOPE_WEIGHT = 0.7;           // Weight for slope components
+  private readonly RHYTHM_WEIGHT = 0.3;          // Weight for rhythm components
   
-  constructor(config: ChannelConfig = {
-    amplificationFactor: 2.0,
-    filterStrength: 0.5,
-    qualityThreshold: 0.6
-  }) {
-    this.amplificationFactor = config.amplificationFactor;
-    this.filterStrength = config.filterStrength;
-    this.qualityThreshold = config.qualityThreshold;
-    this.recentValues = [];
+  // Peak-related tracking
+  private peakBuffer: Array<{value: number, interval: number}> = [];
+  private lastPeakTime: number = 0;
+  private readonly PEAK_BUFFER_SIZE = 10;
+  
+  constructor(config: ChannelConfig) {
+    super(VitalSignType.CARDIAC, config);
   }
   
-  processValue(value: number): number {
-    // Store the raw value in recent values array
-    this.recentValues.push(value);
+  /**
+   * Apply cardiac-specific optimization to the signal
+   * - Emphasizes QRS complex for beat detection
+   * - Enhances beat-to-beat variability for arrhythmia
+   * - Preserves slope characteristics for feature extraction
+   */
+  protected applyChannelSpecificOptimization(value: number): number {
+    // Extract baseline
+    const baseline = this.calculateBaseline();
     
-    // Keep only the last 50 values
-    if (this.recentValues.length > 50) {
-      this.recentValues.shift();
-    }
+    // Detect and track peaks
+    this.detectPeak(value, baseline);
     
-    // Calculate the filtered value
-    const filteredValue = this.applyFilter(value);
+    // Enhance peak components (equivalent to QRS complex)
+    const peakComponent = this.enhancePeakComponent(value, baseline);
     
-    // Apply amplification
-    const amplifiedValue = filteredValue * this.amplificationFactor;
+    // Enhance rhythm components (for arrhythmia detection)
+    const rhythmComponent = this.enhanceRhythmComponent(value, baseline);
     
-    // Store the processed value
-    this.lastValue = amplifiedValue;
-    this.lastTimestamp = Date.now();
+    // Combine components with cardiac-specific weighting
+    const combinedValue = baseline + 
+                         (peakComponent * this.SLOPE_WEIGHT) +
+                         (rhythmComponent * this.RHYTHM_WEIGHT);
     
-    return amplifiedValue;
+    // Apply cardiac-specific emphasis
+    return combinedValue * this.PEAK_EMPHASIS;
   }
   
-  private applyFilter(value: number): number {
-    if (this.recentValues.length < 3) {
-      return value;
-    }
-    
-    // Calculate a simple weighted moving average
-    const alpha = this.filterStrength; // Smoothing factor
-    const recentMean = this.calculateMean(this.recentValues.slice(-3));
-    
-    return (alpha * value) + ((1 - alpha) * recentMean);
-  }
-  
-  private calculateMean(values: number[]): number {
-    if (values.length === 0) return 0;
-    const sum = values.reduce((acc, val) => acc + val, 0);
-    return sum / values.length;
-  }
-  
-  getLastValue(): number {
-    return this.lastValue;
-  }
-  
-  getLastTimestamp(): number {
-    return this.lastTimestamp;
-  }
-  
-  calculateQuality(): number {
+  /**
+   * Calculate baseline specific to cardiac signal
+   */
+  private calculateBaseline(): number {
     if (this.recentValues.length < 5) {
       return 0;
     }
     
-    // Calculate signal variance as a quality metric
-    const mean = this.calculateMean(this.recentValues);
-    const variance = this.recentValues.reduce((acc, val) => {
-      const diff = val - mean;
-      return acc + (diff * diff);
-    }, 0) / this.recentValues.length;
+    // For cardiac signals, baseline should adapt more quickly
+    // Use a more responsive baseline calculation
     
-    // Normalize variance to a 0-1 quality score
-    // Higher variance (more movement) means lower quality
-    const qualityScore = Math.max(0, Math.min(1, 1 - (variance / 10000)));
-    
-    return qualityScore;
+    // Sort values and pick median as baseline
+    const sorted = [...this.recentValues].sort((a, b) => a - b);
+    return sorted[Math.floor(sorted.length / 2)];
   }
   
-  reset(): void {
-    this.lastValue = 0;
-    this.lastTimestamp = 0;
-    this.recentValues = [];
-  }
-  
-  configure(config: Partial<ChannelConfig>): void {
-    if (config.amplificationFactor !== undefined) {
-      this.amplificationFactor = config.amplificationFactor;
+  /**
+   * Detect and track cardiac peaks
+   */
+  private detectPeak(value: number, baseline: number): void {
+    if (this.recentValues.length < 5) {
+      return;
     }
     
-    if (config.filterStrength !== undefined) {
-      this.filterStrength = config.filterStrength;
-    }
+    const recentValues = this.recentValues.slice(-3);
     
-    if (config.qualityThreshold !== undefined) {
-      this.qualityThreshold = config.qualityThreshold;
+    // Check for peak (middle value higher than neighbors)
+    if (recentValues.length >= 3 && 
+        recentValues[1] > recentValues[0] &&
+        recentValues[1] > recentValues[2] &&
+        recentValues[1] > baseline + 0.1) {
+      
+      const now = Date.now();
+      const interval = this.lastPeakTime > 0 ? now - this.lastPeakTime : 0;
+      
+      // Only accept physiologically plausible intervals
+      if (interval === 0 || (interval > 300 && interval < 2000)) {
+        // Record this peak
+        this.peakBuffer.push({
+          value: recentValues[1],
+          interval: interval
+        });
+        
+        // Update last peak time
+        this.lastPeakTime = now;
+        
+        // Trim buffer if needed
+        if (this.peakBuffer.length > this.PEAK_BUFFER_SIZE) {
+          this.peakBuffer.shift();
+        }
+      }
     }
   }
   
-  // Add a type property for compatibility
-  get type(): string {
-    return VitalSignType.CARDIAC;
+  /**
+   * Enhance peak components for better QRS detection
+   */
+  private enhancePeakComponent(value: number, baseline: number): number {
+    if (this.recentValues.length < 5) {
+      return value - baseline;
+    }
+    
+    // Calculate slope (first derivative)
+    const recentValues = this.recentValues.slice(-3);
+    const slopes: number[] = [];
+    
+    for (let i = 1; i < recentValues.length; i++) {
+      slopes.push(recentValues[i] - recentValues[i-1]);
+    }
+    
+    // Enhance positive slopes (upslope of QRS)
+    const currentSlope = slopes[slopes.length - 1];
+    const prevSlope = slopes.length > 1 ? slopes[slopes.length - 2] : 0;
+    
+    // Emphasize sharp transition points (high slope followed by slope change)
+    let slopeEmphasis = 1.0;
+    if (Math.abs(currentSlope) > 0.05 && Math.sign(currentSlope) !== Math.sign(prevSlope)) {
+      slopeEmphasis = 1.5;
+    }
+    
+    // Apply peak enhancement based on slope characteristics
+    return (value - baseline) * (1 + Math.abs(currentSlope) * 3) * slopeEmphasis;
+  }
+  
+  /**
+   * Enhance rhythm components for arrhythmia detection
+   */
+  private enhanceRhythmComponent(value: number, baseline: number): number {
+    if (this.peakBuffer.length < 2) {
+      return value - baseline;
+    }
+    
+    // Calculate rhythm regularity
+    const intervals = this.peakBuffer.map(peak => peak.interval).filter(i => i > 0);
+    
+    if (intervals.length < 2) {
+      return value - baseline;
+    }
+    
+    // Calculate variability metrics
+    const meanInterval = intervals.reduce((sum, i) => sum + i, 0) / intervals.length;
+    
+    // Calculate interval variation coefficient
+    const intervalVariation = intervals.reduce((sum, i) => sum + Math.abs(i - meanInterval), 0) / intervals.length;
+    
+    // Normalize variation to 0-1 range (0 = completely regular, 1 = highly irregular)
+    const normalizedVariation = Math.min(1, intervalVariation / (meanInterval * 0.5));
+    
+    // Enhance signal based on rhythm characteristics
+    return (value - baseline) * (1 + normalizedVariation);
   }
 }
