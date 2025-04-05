@@ -40,14 +40,14 @@ export function updateLastValidBpm(result: any, lastValidBpmRef: React.MutableRe
 
 /**
  * Handle peak detection
- * Compatible with both simplified and complete call signatures
+ * Updated to match the actual parameters used in signal-processor.ts
  */
 export function handlePeakDetection(
   result: any, 
   lastPeakTimeRef: React.MutableRefObject<number | null>,
   requestBeepCallback: (value: number) => boolean,
-  isMonitoringRef?: React.MutableRefObject<boolean>,
-  value?: number
+  isMonitoringRef: React.MutableRefObject<boolean>,
+  value: number
 ): void {
   const now = Date.now();
   
@@ -55,9 +55,8 @@ export function handlePeakDetection(
   if (result.isPeak && result.confidence > 0.4) {
     lastPeakTimeRef.current = now;
     
-    // If monitoring is active and confidence is high enough, trigger beep
-    if ((!isMonitoringRef || isMonitoringRef.current) && result.confidence > 0.5) {
-      requestBeepCallback(value || 1);  // Use provided value or default to 1
+    if (isMonitoringRef.current && result.confidence > 0.5) {
+      requestBeepCallback(value);
     }
   }
 }
