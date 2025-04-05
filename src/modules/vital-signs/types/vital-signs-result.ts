@@ -10,6 +10,7 @@ export interface VitalSignsResult {
   arrhythmiaStatus: string;
   glucose: number;
   lipids: LipidsResult;
+  hydration: number; // Explicit hydration field
   confidence?: {
     glucose: number;
     lipids: number;
@@ -20,7 +21,6 @@ export interface VitalSignsResult {
     rmssd?: number;
     rrVariation?: number;
   } | null;
-  hydration: number; // Explicit hydration field
 }
 
 // Lipids result interface

@@ -37,6 +37,18 @@ export const useVitalSignsProcessor = () => {
   }, []);
   
   /**
+   * Initialize processor explicitly
+   */
+  const initializeProcessor = useCallback((): void => {
+    console.log("Explicitly initializing vital signs processor");
+    if (processorRef.current) {
+      processorRef.current.fullReset();
+    } else {
+      processorRef.current = new VitalSignsProcessor();
+    }
+  }, []);
+  
+  /**
    * Process a PPG signal to calculate vital signs
    * @param value PPG signal value 
    * @param rrData Optional RR interval data
@@ -225,6 +237,7 @@ export const useVitalSignsProcessor = () => {
     reset,
     fullReset,
     getArrhythmiaCounter,
-    processor: processorRef.current
+    processor: processorRef.current,
+    initializeProcessor
   };
 };

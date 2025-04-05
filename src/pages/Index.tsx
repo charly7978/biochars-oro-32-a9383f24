@@ -21,7 +21,8 @@ const Index = () => {
     lipids: {
       totalCholesterol: 0,
       hydrationPercentage: 0
-    }
+    },
+    hydration: 0
   });
   const [heartRate, setHeartRate] = useState(0);
   const [elapsedTime, setElapsedTime] = useState(0);
@@ -103,7 +104,7 @@ const Index = () => {
                 spo2: vitals.spo2,
                 pressure: vitals.pressure,
                 glucose: vitals.glucose,
-                hydration: vitals.lipids.hydrationPercentage,
+                hydration: vitals.hydration,
                 heartRate: heartBeatResult.bpm
               });
             }
@@ -148,7 +149,8 @@ const Index = () => {
       lipids: {
         totalCholesterol: 0,
         hydrationPercentage: 0
-      }
+      },
+      hydration: 0
     });
     
     console.log("Starting all processors");
@@ -156,7 +158,7 @@ const Index = () => {
     startSignalProcessing();
     startHeartBeatMonitoring();
     startVitalSignsProcessing();
-    initVitalSignsProcessor();
+    initializeProcessor();
     
     setElapsedTime(0);
     
@@ -236,7 +238,8 @@ const Index = () => {
       lipids: {
         totalCholesterol: 0,
         hydrationPercentage: 0
-      }
+      },
+      hydration: 0
     });
     setSignalQuality(0);
   };
@@ -418,7 +421,7 @@ const Index = () => {
               />
               <VitalSign 
                 label="HIDRATACIÓN"
-                value={vitalSigns.lipids?.hydrationPercentage || "--"}
+                value={vitalSigns.hydration || "--"}
                 unit="%"
                 highlighted={showResults}
               />
