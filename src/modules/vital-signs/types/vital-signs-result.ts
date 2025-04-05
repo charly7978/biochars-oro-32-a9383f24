@@ -27,7 +27,7 @@ export interface VitalSignsResult {
 export interface LipidsResult {
   totalCholesterol: number;
   hydrationPercentage: number;
-  triglycerides?: number;
+  triglycerides?: number; // Making triglycerides optional
 }
 
 // Processor interface

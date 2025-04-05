@@ -46,7 +46,7 @@ const Index = () => {
     startProcessing: startVitalSignsProcessing,
     stopProcessing: stopVitalSignsProcessing,
     lastValidResults,
-    initializeProcessor: initVitalSignsProcessor
+    initializeProcessor
   } = useVitalSignsProcessor();
 
   useEffect(() => {

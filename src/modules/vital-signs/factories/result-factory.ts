@@ -20,7 +20,8 @@ export class ResultFactory {
       lipids: {
         totalCholesterol: 0,
         hydrationPercentage: 0
-      }
+      },
+      hydration: 0
     };
   }
   
@@ -30,7 +31,8 @@ export class ResultFactory {
    * @param pressure Blood pressure string
    * @param arrhythmiaStatus Arrhythmia status string
    * @param glucose Blood glucose level
-   * @param hydration Hydration values object
+   * @param lipids Lipids values object
+   * @param hydration Hydration percentage
    * @param confidence Optional confidence values
    * @param lastArrhythmiaData Optional arrhythmia data
    * @returns Populated VitalSignsResult object
@@ -40,7 +42,8 @@ export class ResultFactory {
     pressure: string,
     arrhythmiaStatus: string,
     glucose: number,
-    hydration: { totalCholesterol: number, hydrationPercentage: number },
+    lipids: { totalCholesterol: number, hydrationPercentage: number },
+    hydration: number,
     confidence?: { glucose: number, lipids: number, overall: number },
     lastArrhythmiaData?: { timestamp: number, rmssd: number, rrVariation: number } | null
   ): VitalSignsResult {
@@ -50,9 +53,10 @@ export class ResultFactory {
       arrhythmiaStatus,
       glucose,
       lipids: {
-        totalCholesterol: hydration.totalCholesterol,
-        hydrationPercentage: hydration.hydrationPercentage
+        totalCholesterol: lipids.totalCholesterol,
+        hydrationPercentage: lipids.hydrationPercentage
       },
+      hydration,
       confidence,
       lastArrhythmiaData
     };
@@ -69,7 +73,8 @@ export class ResultFactory {
     pressure: string,
     arrhythmiaStatus: string,
     glucose: number,
-    hydration: { totalCholesterol: number, hydrationPercentage: number },
+    hydration: number,
+    lipids: { totalCholesterol: number, hydrationPercentage: number },
     confidence?: { glucose: number, lipids: number, overall: number },
     lastArrhythmiaData?: { timestamp: number, rmssd: number, rrVariation: number } | null
   }): VitalSignsResult {
@@ -80,12 +85,15 @@ export class ResultFactory {
     const validGlucose = data.glucose >= 0 && data.glucose <= 500 ? data.glucose : 0;
     
     // Validate cholesterol (normal range: <200 mg/dL)
-    const validCholesterol = data.hydration.totalCholesterol >= 0 ? data.hydration.totalCholesterol : 0;
+    const validCholesterol = data.lipids.totalCholesterol >= 0 ? data.lipids.totalCholesterol : 0;
     
-    // Validate hydration (0-100%)
-    const validHydration = data.hydration.hydrationPercentage >= 0 && 
-                          data.hydration.hydrationPercentage <= 100 ? 
-                          data.hydration.hydrationPercentage : 0;
+    // Validate lipid hydration (0-100%)
+    const validHydrationPercentage = data.lipids.hydrationPercentage >= 0 && 
+                                    data.lipids.hydrationPercentage <= 100 ? 
+                                    data.lipids.hydrationPercentage : 0;
+    
+    // Validate overall hydration (0-100%)
+    const validHydration = data.hydration >= 0 && data.hydration <= 100 ? data.hydration : 0;
     
     return {
       spo2: validSpo2,
@@ -94,8 +102,9 @@ export class ResultFactory {
       glucose: validGlucose,
       lipids: {
         totalCholesterol: validCholesterol,
-        hydrationPercentage: validHydration
+        hydrationPercentage: validHydrationPercentage
       },
+      hydration: validHydration,
       confidence: data.confidence,
       lastArrhythmiaData: data.lastArrhythmiaData
     };
