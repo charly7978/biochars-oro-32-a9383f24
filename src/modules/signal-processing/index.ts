@@ -25,4 +25,3 @@ export const resetFingerDetector = () => {
 
 // Export other components
 export * from './channels/SpecializedChannel';
-

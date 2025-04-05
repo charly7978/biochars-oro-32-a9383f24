@@ -1,125 +1,70 @@
 
 /**
- * Standardized definitions of types for signal processing
+ * Signal processing types
  */
 
 /**
- * Options for configuring signal processors
+ * Processor type enum
  */
-export interface SignalProcessingOptions {
-  // Factor of amplification of signal
-  amplificationFactor?: number;
-  
-  // Strength of filtering
-  filterStrength?: number;
-  
-  // Signal quality threshold
-  qualityThreshold?: number;
-  
-  // Finger detection sensitivity
-  fingerDetectionSensitivity?: number;
-  
-  // Parameters for adaptive control
-  useAdaptiveControl?: boolean;
-  
-  // Use prediction to improve quality
-  qualityEnhancedByPrediction?: boolean;
-  
-  // Prediction horizon
-  predictionHorizon?: number;
-  
-  // Adaptation rate
-  adaptationRate?: number;
+export enum ProcessorType {
+  PPG = "ppg",
+  HEARTBEAT = "heartbeat",
+  SPO2 = "spo2",
+  PRESSURE = "pressure",
+  GLUCOSE = "glucose",
+  LIPIDS = "lipids",
+  HYDRATION = "hydration"
 }
 
 /**
- * Common interface for all signal processors
- */
-export interface ISignalProcessor<T> {
-  // Process a signal value and return a result
-  processSignal(value: number): T;
-  
-  // Configure the processor
-  configure(options: SignalProcessingOptions): void;
-  
-  // Reset the processor
-  reset(): void;
-}
-
-/**
- * Result of PPG signal processing
+ * Processed PPG signal
  */
 export interface ProcessedPPGSignal {
-  // Signal timestamp
   timestamp: number;
-  
-  // Raw value
   rawValue: number;
-  
-  // Filtered value
   filteredValue: number;
-  
-  // Normalized value
   normalizedValue: number;
-  
-  // Amplified value
   amplifiedValue: number;
-  
-  // Signal quality (0-100)
   quality: number;
-  
-  // Finger detection indicator
   fingerDetected: boolean;
-  
-  // Signal strength
   signalStrength: number;
 }
 
 /**
- * Result of heartbeat signal processing
+ * Processed heartbeat signal
  */
 export interface ProcessedHeartbeatSignal {
-  // Signal timestamp
   timestamp: number;
-  
-  // Signal value
-  value: number;
-  
-  // Peak detection indicator
+  bpm: number;
+  confidence: number;
   isPeak: boolean;
-  
-  // Peak detection confidence (0-1)
-  peakConfidence: number;
-  
-  // Instantaneous BPM (based on RR interval)
-  instantaneousBPM: number | null;
-  
-  // RR interval in ms
-  rrInterval: number | null;
-  
-  // Heart rate variability
-  heartRateVariability: number | null;
+  rr?: number;
 }
 
 /**
- * Available processor types
+ * Signal processing options
  */
-export enum ProcessorType {
-  PPG = 'ppg',
-  HEARTBEAT = 'heartbeat'
+export interface SignalProcessingOptions {
+  amplificationFactor?: number;
+  filterStrength?: number;
+  qualityThreshold?: number;
+  fingerDetectionSensitivity?: number;
 }
 
 /**
- * Options for the complete processing system
+ * Signal processor interface
  */
-export interface ProcessingSystemOptions extends SignalProcessingOptions {
-  // Processor type to use
-  processorType?: ProcessorType;
-  
-  // Target sample rate
-  targetSampleRate?: number;
-  
-  // Callback functions
-  onResultsReady?: (result: ProcessedPPGSignal | ProcessedHeartbeatSignal) => void;
-  onError?: (error: Error) => void;
+export interface ISignalProcessor<T = any> {
+  processSignal(value: number): T;
+  reset(): void;
+}
+
+/**
+ * Channel configuration
+ */
+export interface ChannelConfig {
+  name: string;
+  type: ProcessorType;
+  bufferSize?: number;
+  filterStrength?: number;
 }

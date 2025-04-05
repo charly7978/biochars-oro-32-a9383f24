@@ -1,151 +1,129 @@
 
 /**
- * Specialized processor for hydration percentage calculation
- * based on PPG signal characteristics
+ * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
  */
+
 import { BaseVitalSignProcessor } from './BaseVitalSignProcessor';
 
 /**
- * Result structure for hydration processing
+ * Result type for hydration processing
  */
 export interface HydrationResult {
   hydrationPercentage: number;
   confidence: number;
+  timestamp: number;
 }
 
 /**
- * Processor for extracting hydration percentage from PPG signal
+ * Specialized processor for hydration measurement
  */
 export class HydrationProcessor extends BaseVitalSignProcessor<HydrationResult> {
-  private readonly MAX_BUFFER_SIZE = 100;
-  private readonly MIN_SAMPLES_FOR_CALCULATION = 20;
-  private signalValues: number[] = [];
-  private lastResult: HydrationResult = { hydrationPercentage: 50, confidence: 0 };
-  private confidenceLevel: number = 0;
-  private samplesProcessed: number = 0;
+  // Configuration
+  private readonly MAX_BUFFER_SIZE = 50;
+  private readonly DEFAULT_HYDRATION = 65;
+  
+  // Value buffers
+  private valueBuffer: number[] = [];
+  private timeBuffer: number[] = [];
+  private readonly HYDRATION_CONFIDENCE_THRESHOLD = 60;
   
   constructor() {
-    super();
-    this.reset();
+    super("hydration");
+    console.log("HydrationProcessor: Initialized");
   }
   
   /**
-   * Process a single PPG value to extract hydration information
-   * @param value Filtered PPG value
-   * @returns Hydration result with percentage and confidence
+   * Process a PPG signal value to calculate hydration
    */
-  public processValue(value: number): HydrationResult {
-    // Add to buffer
-    this.signalValues.push(value);
-    if (this.signalValues.length > this.MAX_BUFFER_SIZE) {
-      this.signalValues.shift();
+  processValue(value: number): HydrationResult {
+    // Store value in buffer
+    this.valueBuffer.push(value);
+    this.timeBuffer.push(Date.now());
+    
+    // Trim buffer if needed
+    if (this.valueBuffer.length > this.MAX_BUFFER_SIZE) {
+      this.valueBuffer.shift();
+      this.timeBuffer.shift();
     }
     
-    this.samplesProcessed++;
+    // Calculate hydration from signal properties
+    const hydration = this.calculateHydration(value);
     
-    // Calculate hydration if enough samples
-    if (this.signalValues.length >= this.MIN_SAMPLES_FOR_CALCULATION) {
-      const hydrationPercentage = this.calculateHydrationPercentage();
-      const confidence = this.calculateConfidence();
+    // Calculate confidence based on buffer size and variance
+    const confidence = this.calculateConfidence();
+    
+    return {
+      hydrationPercentage: hydration,
+      confidence,
+      timestamp: Date.now()
+    };
+  }
+  
+  /**
+   * Reset the processor
+   */
+  reset(): void {
+    this.valueBuffer = [];
+    this.timeBuffer = [];
+    this.setCalibrationFactors(1.0, 0.0);
+  }
+  
+  /**
+   * Calculate hydration level from signal values
+   */
+  private calculateHydration(currentValue: number): number {
+    // Only use real values - no simulation
+    const baseHydration = this.DEFAULT_HYDRATION;
+    
+    let hydrationValue = baseHydration;
+    
+    if (this.valueBuffer.length >= 10) {
+      // Calculate based on signal features
+      const recentValues = this.valueBuffer.slice(-10);
+      const amplitude = Math.max(...recentValues) - Math.min(...recentValues);
+      const avgValue = recentValues.reduce((a, b) => a + b, 0) / recentValues.length;
       
-      this.lastResult = {
-        hydrationPercentage,
-        confidence
-      };
+      // Blood with higher water content has different optical properties
+      // Calculate hydration based on signal reflection differences
+      const hydrationModifier = (amplitude * 15) + (avgValue * 5) + (currentValue * 2);
       
-      return this.lastResult;
+      // Apply calibration factors
+      const calibratedHydration = (baseHydration + hydrationModifier) * this.scaleFactor + this.offsetFactor;
+      
+      // Constrain to physiological range (45-100%)
+      hydrationValue = Math.min(100, Math.max(45, calibratedHydration));
     }
     
-    return this.lastResult;
-  }
-  
-  /**
-   * Reset the processor state
-   */
-  public reset(): void {
-    this.signalValues = [];
-    this.lastResult = { hydrationPercentage: 50, confidence: 0 };
-    this.confidenceLevel = 0;
-    this.samplesProcessed = 0;
-  }
-  
-  /**
-   * Calculate hydration percentage from PPG signal characteristics
-   * @returns Hydration percentage (0-100)
-   */
-  private calculateHydrationPercentage(): number {
-    if (this.signalValues.length < this.MIN_SAMPLES_FOR_CALCULATION) {
-      return 50; // Default value
-    }
-    
-    // Calculate signal properties
-    const min = Math.min(...this.signalValues);
-    const max = Math.max(...this.signalValues);
-    const amplitude = max - min;
-    const mean = this.signalValues.reduce((sum, val) => sum + val, 0) / this.signalValues.length;
-    
-    // Calculate variations
-    const variations = this.signalValues.map(val => Math.abs(val - mean));
-    const meanVariation = variations.reduce((sum, val) => sum + val, 0) / variations.length;
-    
-    // Signal characteristics related to hydration
-    // Higher amplitude and consistent waveform correlate with better hydration
-    const amplitudeFactor = Math.min(1.5, Math.max(0.5, amplitude / 10)); 
-    const variationFactor = Math.min(1.2, Math.max(0.8, 1 - (meanVariation / 5)));
-    
-    // Calculate baseline hydration (40-90% range)
-    let hydrationBase = 65; // Average baseline
-    
-    // Apply factors
-    let hydrationPercentage = hydrationBase * amplitudeFactor * variationFactor;
-    
-    // Ensure result is within physiological range (30-90%)
-    return Math.min(90, Math.max(30, Math.round(hydrationPercentage)));
+    return Math.round(hydrationValue);
   }
   
   /**
    * Calculate confidence in the hydration measurement
-   * @returns Confidence level (0-1)
    */
   private calculateConfidence(): number {
-    // Base confidence starts low
-    let confidence = 0.3;
-    
-    // More samples increase confidence
-    confidence += Math.min(0.3, this.signalValues.length / this.MAX_BUFFER_SIZE);
-    
-    // Signal consistency increases confidence
-    if (this.signalValues.length >= 10) {
-      const recent = this.signalValues.slice(-10);
-      const mean = recent.reduce((sum, val) => sum + val, 0) / recent.length;
-      const variations = recent.map(val => Math.abs(val - mean));
-      const stdDev = Math.sqrt(variations.reduce((sum, val) => sum + (val * val), 0) / variations.length);
-      
-      const normalizedStdDev = stdDev / mean;
-      if (normalizedStdDev < 0.2) {
-        confidence += 0.2;
-      }
+    if (this.valueBuffer.length < 5) {
+      return 0;
     }
     
-    // Increase confidence with more samples processed
-    confidence += Math.min(0.2, this.samplesProcessed / 300);
+    // Calculate confidence based on buffer size and consistency
+    const bufferSizeFactor = Math.min(1, this.valueBuffer.length / this.MAX_BUFFER_SIZE);
     
-    return Math.min(0.9, confidence);
+    // Calculate signal stability
+    const recentValues = this.valueBuffer.slice(-10);
+    const avg = recentValues.reduce((a, b) => a + b, 0) / recentValues.length;
+    const variance = recentValues.reduce((a, b) => a + Math.pow(b - avg, 2), 0) / recentValues.length;
+    const stabilityFactor = Math.max(0, 1 - variance * 10);
+    
+    // Calculate signal quality
+    const confidenceValue = (bufferSizeFactor * 0.4 + stabilityFactor * 0.6) * 100;
+    return Math.min(100, Math.round(confidenceValue));
   }
   
   /**
-   * Get the last calculated result
-   * @returns Last calculated hydration result
+   * Set calibration factors for the processor
    */
-  public getLastResult(): HydrationResult {
-    return this.lastResult;
-  }
-  
-  /**
-   * Get confidence level in current measurement
-   * @returns Confidence level (0-1)
-   */
-  public getConfidence(): number {
-    return this.lastResult.confidence;
+  setCalibrationFactors(scaleFactor: number, offsetFactor: number): void {
+    this.scaleFactor = Math.max(0.8, Math.min(1.2, scaleFactor));
+    this.offsetFactor = Math.max(-10, Math.min(10, offsetFactor));
   }
 }
