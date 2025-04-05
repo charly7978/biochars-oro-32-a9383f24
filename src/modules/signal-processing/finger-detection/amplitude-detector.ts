@@ -11,7 +11,6 @@
 import { reportDiagnosticEvent } from './finger-diagnostics';
 import { getCalibrationParameters } from './adaptive-calibration';
 import { updateDetectionSource } from './unified-finger-detector';
-import { DiagnosticEventType, DetectionSource } from './finger-detection-types';
 
 // Contador de señales débiles consecutivas
 let consecutiveWeakSignalsCount = 0;
@@ -63,7 +62,7 @@ export function checkSignalStrength(
   if (fingerDetectionConfirmed && isWeakSignal) {
     // Actualizar estado de detección en detector unificado con confianza reducida
     updateDetectionSource(
-      DetectionSource.SIGNAL_QUALITY_AMPLITUDE,
+      'signal-quality-amplitude',
       consecutiveWeakSignalsCount < finalConfig.maxWeakSignalCount * 1.5,
       Math.max(0.1, 0.6 - (consecutiveWeakSignalsCount / (finalConfig.maxWeakSignalCount * 2)))
     );
@@ -73,8 +72,8 @@ export function checkSignalStrength(
       fingerDetectionConfirmed = false;
       
       reportDiagnosticEvent(
-        DiagnosticEventType.FINGER_LOST,
-        DetectionSource.SIGNAL_QUALITY_AMPLITUDE,
+        'FINGER_LOST',
+        'signal-quality-amplitude',
         false,
         0.8,
         {
@@ -98,8 +97,8 @@ export function checkSignalStrength(
     fingerDetectionConfirmed = true;
     
     reportDiagnosticEvent(
-      DiagnosticEventType.FINGER_DETECTED,
-      DetectionSource.SIGNAL_QUALITY_AMPLITUDE,
+      'FINGER_DETECTED',
+      'signal-quality-amplitude',
       true,
       0.7,
       {
@@ -112,7 +111,7 @@ export function checkSignalStrength(
   
   // Actualizar estado de detección en detector unificado
   updateDetectionSource(
-    DetectionSource.SIGNAL_QUALITY_AMPLITUDE,
+    'signal-quality-amplitude',
     !isWeakSignal,
     isWeakSignal ? 0.3 : 0.7
   );
@@ -168,12 +167,12 @@ export function resetAmplitudeDetector(): void {
   fingerDetectionConfirmed = false;
   
   // Actualizar detector unificado
-  updateDetectionSource(DetectionSource.SIGNAL_QUALITY_AMPLITUDE, false, 0);
+  updateDetectionSource('signal-quality-amplitude', false, 0);
   
   // Reportar evento
   reportDiagnosticEvent(
-    DiagnosticEventType.DETECTOR_RESET,
-    DetectionSource.SIGNAL_QUALITY_AMPLITUDE,
+    'DETECTOR_RESET',
+    'signal-quality-amplitude',
     false,
     1.0,
     { source: 'amplitude-detector-reset' }

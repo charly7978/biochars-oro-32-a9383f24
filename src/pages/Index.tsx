@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect } from "react";
 import VitalSign from "@/components/VitalSign";
 import CameraView from "@/components/CameraView";
@@ -7,7 +8,9 @@ import { useVitalSignsProcessor } from "@/hooks/useVitalSignsProcessor";
 import PPGSignalMeter from "@/components/PPGSignalMeter";
 import MonitorButton from "@/components/MonitorButton";
 import AppTitle from "@/components/AppTitle";
+import MonitoringPanel from "@/components/MonitoringPanel";
 import { VitalSignsResult } from "@/modules/vital-signs";
+import { logError, ErrorLevel } from "@/utils/debugUtils";
 
 const Index = () => {
   const [isMonitoring, setIsMonitoring] = useState(false);
@@ -26,6 +29,7 @@ const Index = () => {
   const [heartRate, setHeartRate] = useState(0);
   const [elapsedTime, setElapsedTime] = useState(0);
   const [showResults, setShowResults] = useState(false);
+  const [showMonitorPanel, setShowMonitorPanel] = useState(false);
   const measurementTimerRef = useRef<number | null>(null);
   
   const { startProcessing, stopProcessing, lastSignal, processFrame } = useSignalProcessor();
@@ -41,14 +45,15 @@ const Index = () => {
     processSignal: processVitalSigns, 
     reset: resetVitalSigns,
     fullReset: fullResetVitalSigns,
-    lastValidResults
+    lastValidResults,
+    getPeakDetectionDiagnostics
   } = useVitalSignsProcessor();
 
   const enterFullScreen = async () => {
     try {
       await document.documentElement.requestFullscreen();
     } catch (err) {
-      console.log('Error al entrar en pantalla completa:', err);
+      logError('Error al entrar en pantalla completa:', ErrorLevel.ERROR, 'UI', err);
     }
   };
 
@@ -75,18 +80,27 @@ const Index = () => {
       const minQualityThreshold = 40;
       
       if (lastSignal.fingerDetected && lastSignal.quality >= minQualityThreshold) {
-        const heartBeatResult = processHeartBeat(lastSignal.filteredValue);
-        
-        if (heartBeatResult.confidence > 0.4) {
-          setHeartRate(heartBeatResult.bpm);
-          
-          const vitals = processVitalSigns(lastSignal.filteredValue, heartBeatResult.rrData);
-          if (vitals) {
-            setVitalSigns(vitals);
-          }
+        // Log processing for debugging
+        if (showMonitorPanel) {
+          logError(`Procesando señal de calidad ${lastSignal.quality}`, ErrorLevel.DEBUG, 'SignalFlow');
         }
         
-        setSignalQuality(lastSignal.quality);
+        try {
+          const heartBeatResult = processHeartBeat(lastSignal.filteredValue);
+          
+          if (heartBeatResult.confidence > 0.4) {
+            setHeartRate(heartBeatResult.bpm);
+            
+            const vitals = processVitalSigns(lastSignal.filteredValue, heartBeatResult.rrData);
+            if (vitals) {
+              setVitalSigns(vitals);
+            }
+          }
+          
+          setSignalQuality(lastSignal.quality);
+        } catch (error) {
+          logError('Error en procesamiento de señal:', ErrorLevel.ERROR, 'SignalProcessing', error);
+        }
       } else {
         setSignalQuality(lastSignal.quality);
         
@@ -97,7 +111,7 @@ const Index = () => {
     } else if (!isMonitoring) {
       setSignalQuality(0);
     }
-  }, [lastSignal, isMonitoring, processHeartBeat, processVitalSigns, heartRate]);
+  }, [lastSignal, isMonitoring, processHeartBeat, processVitalSigns, heartRate, showMonitorPanel]);
 
   const startMonitoring = () => {
     if (isMonitoring) {
@@ -109,8 +123,13 @@ const Index = () => {
       setShowResults(false);
       setHeartRate(0);
       
-      startProcessing();
-      startHeartBeatMonitoring();
+      try {
+        startProcessing();
+        startHeartBeatMonitoring();
+        logError('Iniciando monitoreo de signos vitales', ErrorLevel.INFO, 'Monitoring');
+      } catch (error) {
+        logError('Error al iniciar monitoreo:', ErrorLevel.ERROR, 'Monitoring', error);
+      }
       
       setElapsedTime(0);
       
@@ -134,12 +153,17 @@ const Index = () => {
   };
 
   const finalizeMeasurement = () => {
-    console.log("Finalizando medición");
+    logError("Finalizando medición", ErrorLevel.INFO, 'Monitoring');
     
     setIsMonitoring(false);
     setIsCameraOn(false);
-    stopProcessing();
-    stopHeartBeatMonitoring();
+    
+    try {
+      stopProcessing();
+      stopHeartBeatMonitoring();
+    } catch (error) {
+      logError('Error al detener procesamiento:', ErrorLevel.ERROR, 'Monitoring', error);
+    }
     
     if (measurementTimerRef.current) {
       clearInterval(measurementTimerRef.current);
@@ -158,13 +182,18 @@ const Index = () => {
   };
 
   const handleReset = () => {
-    console.log("Reseteando completamente la aplicación");
+    logError("Reseteando completamente la aplicación", ErrorLevel.INFO, 'System');
     setIsMonitoring(false);
     setIsCameraOn(false);
     setShowResults(false);
-    stopProcessing();
-    stopHeartBeatMonitoring();
-    resetHeartBeatProcessor();
+    
+    try {
+      stopProcessing();
+      stopHeartBeatMonitoring();
+      resetHeartBeatProcessor();
+    } catch (error) {
+      logError('Error al resetear:', ErrorLevel.ERROR, 'System', error);
+    }
     
     if (measurementTimerRef.current) {
       clearInterval(measurementTimerRef.current);
@@ -196,18 +225,19 @@ const Index = () => {
       const imageCapture = new (window as any).ImageCapture(videoTrack);
       
       if (videoTrack.getCapabilities()?.torch) {
-        console.log("Activando linterna para mejorar la señal PPG");
+        logError("Activando linterna para mejorar la señal PPG", ErrorLevel.INFO, 'Camera');
         videoTrack.applyConstraints({
           advanced: [{ torch: true }]
-        }).catch(err => console.error("Error activando linterna:", err));
+        }).catch(err => logError("Error activando linterna:", ErrorLevel.ERROR, 'Camera', err));
       } else {
-        console.warn("Esta cámara no tiene linterna disponible, la medición puede ser menos precisa");
+        logError("Esta cámara no tiene linterna disponible, la medición puede ser menos precisa", 
+          ErrorLevel.WARNING, 'Camera');
       }
       
       const tempCanvas = document.createElement('canvas');
       const tempCtx = tempCanvas.getContext('2d', {willReadFrequently: true});
       if (!tempCtx) {
-        console.error("No se pudo obtener el contexto 2D");
+        logError("No se pudo obtener el contexto 2D", ErrorLevel.ERROR, 'Canvas');
         return;
       }
       
@@ -249,10 +279,13 @@ const Index = () => {
               processingFps = frameCount;
               frameCount = 0;
               lastFpsUpdateTime = now;
-              console.log(`Rendimiento de procesamiento: ${processingFps} FPS`);
+              if (showMonitorPanel) {
+                logError(`Rendimiento de procesamiento: ${processingFps} FPS`, 
+                  ErrorLevel.INFO, 'Performance');
+              }
             }
           } catch (error) {
-            console.error("Error capturando frame:", error);
+            logError("Error capturando frame:", ErrorLevel.ERROR, 'Camera', error);
           }
         }
         
@@ -263,7 +296,7 @@ const Index = () => {
 
       processImage();
     } else {
-      console.error("ImageCapture API is not supported in this browser");
+      logError("ImageCapture API is not supported in this browser", ErrorLevel.ERROR, 'Browser');
     }
   };
 
@@ -273,6 +306,10 @@ const Index = () => {
     } else {
       startMonitoring();
     }
+  };
+  
+  const toggleMonitoringPanel = () => {
+    setShowMonitorPanel(prev => !prev);
   };
 
   return (
@@ -362,22 +399,37 @@ const Index = () => {
           </div>
 
           <div className="absolute inset-x-0 bottom-4 flex gap-4 px-4">
-            <div className="w-1/2">
+            <div className="w-1/3">
               <MonitorButton 
                 isMonitoring={isMonitoring} 
                 onToggle={handleToggleMonitoring} 
                 variant="monitor"
               />
             </div>
-            <div className="w-1/2">
+            <div className="w-1/3">
               <MonitorButton 
                 isMonitoring={isMonitoring} 
                 onToggle={handleReset} 
                 variant="reset"
               />
             </div>
+            <div className="w-1/3">
+              <MonitorButton
+                isMonitoring={showMonitorPanel}
+                onToggle={toggleMonitoringPanel}
+                variant="debug"
+              />
+            </div>
           </div>
         </div>
+        
+        <MonitoringPanel
+          isVisible={showMonitorPanel}
+          lastSignal={lastSignal}
+          heartRate={heartRate}
+          signalQuality={signalQuality}
+          vitalSigns={vitalSigns}
+        />
       </div>
     </div>
   );
