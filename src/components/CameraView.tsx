@@ -1,9 +1,7 @@
-
 import React, { useRef, useEffect, useState } from 'react';
 import { Fingerprint } from 'lucide-react';
 import { logError, ErrorLevel } from '@/utils/debugUtils';
-import { CameraState, setCameraState } from '@/utils/deviceErrorTracker';
-import { unifiedFingerDetector } from '@/modules/signal-processing/utils/unified-finger-detector';
+import { CameraState, setCameraState, trackDeviceError } from '@/utils/deviceErrorTracker';
 
 interface CameraViewProps {
   onStreamReady?: (stream: MediaStream) => void;
@@ -24,42 +22,25 @@ const CameraView: React.FC<CameraViewProps> = ({
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [brightnessSamples, setBrightnessSamples] = useState<number[]>([]);
   const [avgBrightness, setAvgBrightness] = useState<number>(0);
-  const [cameraError, setCameraError] = useState<string | null>(null);
-  const [retryCount, setRetryCount] = useState<number>(0);
   const brightnessSampleLimit = 10;
-  const maxRetryAttempts = 3;
-  const streamErrorRef = useRef<boolean>(false);
 
   const stopCamera = async (): Promise<void> => {
     if (stream) {
-      try {
-        stream.getTracks().forEach(track => {
-          try {
-            track.stop();
-          } catch (err) {
-            logError(`Error al detener track: ${err instanceof Error ? err.message : String(err)}`, 
-              ErrorLevel.WARNING, "CameraView");
-          }
-        });
-        
+      stream.getTracks().forEach(track => {
+        track.stop();
         if (videoRef.current) {
           videoRef.current.srcObject = null;
         }
-        
-        setStream(null);
-        setCameraState(CameraState.INACTIVE);
-        logError("Cámara detenida correctamente", ErrorLevel.INFO, "CameraView");
-      } catch (err) {
-        logError(`Error al detener cámara: ${err instanceof Error ? err.message : String(err)}`, 
-          ErrorLevel.ERROR, "CameraView");
-      }
+      });
+      setStream(null);
+      setCameraState(CameraState.INACTIVE);
+      logError("Cámara detenida", ErrorLevel.INFO, "CameraView");
     }
   };
 
   const startCamera = async (): Promise<void> => {
     try {
       setCameraState(CameraState.REQUESTING);
-      setCameraError(null);
       
       if (!navigator.mediaDevices?.getUserMedia) {
         throw new Error("getUserMedia no está soportado");
@@ -84,14 +65,8 @@ const CameraView: React.FC<CameraViewProps> = ({
         video: baseVideoConstraints
       };
 
-      logError("Intentando obtener acceso a la cámara...", ErrorLevel.INFO, "CameraView");
       const newStream = await navigator.mediaDevices.getUserMedia(constraints);
       const videoTrack = newStream.getVideoTracks()[0];
-
-      // Verificar que el track está realmente activo
-      if (!videoTrack || videoTrack.readyState !== 'live') {
-        throw new Error("Video track no está activo");
-      }
 
       if (videoTrack && isAndroid) {
         try {
@@ -127,39 +102,16 @@ const CameraView: React.FC<CameraViewProps> = ({
         }
       }
 
-      // Configurar video elemento
       if (videoRef.current) {
-        try {
-          videoRef.current.srcObject = newStream;
-          
-          if (isAndroid) {
-            videoRef.current.style.willChange = 'transform';
-            videoRef.current.style.transform = 'translateZ(0)';
-          }
-          
-          // Agregar manejadores de errores para el video
-          videoRef.current.onerror = (e) => {
-            const eventType = e instanceof Event && 'type' in e ? e.type : 'unknown';
-            logError(`Error en elemento video: ${eventType}`, ErrorLevel.ERROR, "CameraView");
-            streamErrorRef.current = true;
-            handleCameraError(eventType);
-          };
-        } catch (err) {
-          throw new Error(`Error al configurar video: ${err instanceof Error ? err.message : String(err)}`);
+        videoRef.current.srcObject = newStream;
+        if (isAndroid) {
+          videoRef.current.style.willChange = 'transform';
+          videoRef.current.style.transform = 'translateZ(0)';
         }
       }
 
-      // Agregar listener para detectar cuando un track termina inesperadamente
-      videoTrack.onended = () => {
-        logError("Video track terminado inesperadamente", ErrorLevel.WARNING, "CameraView");
-        streamErrorRef.current = true;
-        handleCameraError("Video track terminado inesperadamente");
-      };
-
       setStream(newStream);
       setCameraState(CameraState.ACTIVE);
-      setRetryCount(0);
-      streamErrorRef.current = false;
       
       if (onStreamReady) {
         onStreamReady(newStream);
@@ -168,35 +120,12 @@ const CameraView: React.FC<CameraViewProps> = ({
       logError("Cámara iniciada correctamente", ErrorLevel.INFO, "CameraView");
     } catch (err) {
       setCameraState(CameraState.ERROR);
-      handleCameraError(err instanceof Error ? err.message : String(err));
-    }
-  };
-
-  // Función para manejar errores de cámara
-  const handleCameraError = (error: string | Event) => {
-    const errorMessage = typeof error === 'string' 
-      ? error 
-      : (error instanceof Error ? error.message : 'Error desconocido');
-    
-    logError(`Error de cámara: ${errorMessage}`, ErrorLevel.ERROR, "CameraView");
-    
-    setCameraError(errorMessage);
-    
-    // Verificar si debemos reintentar
-    if (retryCount < maxRetryAttempts && isMonitoring) {
-      const nextRetryCount = retryCount + 1;
-      setRetryCount(nextRetryCount);
-      
-      logError(`Reintentando iniciar cámara (${nextRetryCount}/${maxRetryAttempts})...`, 
-        ErrorLevel.WARNING, "CameraView");
-      
-      // Esperar antes de reintentar (tiempo incremental)
-      setTimeout(() => {
-        // Verificar que seguimos necesitando la cámara
-        if (isMonitoring) {
-          startCamera();
-        }
-      }, 1000 * nextRetryCount); // Tiempo incremental: 1s, 2s, 3s...
+      trackDeviceError(err);
+      logError(
+        `Error al iniciar la cámara: ${err instanceof Error ? err.message : String(err)}`,
+        ErrorLevel.ERROR,
+        "CameraView"
+      );
     }
   };
 
@@ -247,64 +176,27 @@ const CameraView: React.FC<CameraViewProps> = ({
                             Math.max(1, brightnessSamples.length);
         setAvgBrightness(avgBrightness);
         
-        // Actualizar detector unificado con información de brillo
-        unifiedFingerDetector.updateSource(
-          'brightness', 
-          avgBrightness < 60, // Oscuro sugiere presencia de dedo
-          Math.min(1.0, Math.max(0.0, (120 - avgBrightness) / 120))
-        );
-        
-        // Verificar si el video sigue reproduciéndose correctamente
-        if (videoRef.current && (videoRef.current.paused || videoRef.current.ended)) {
-          logError("Video pausado o terminado inesperadamente", ErrorLevel.WARNING, "CameraView");
-          streamErrorRef.current = true;
-          handleCameraError("Video pausado o terminado");
-        }
+        console.log("CameraView: Brightness check", { 
+          currentBrightness: brightness,
+          avgBrightness,
+          fingerDetected: isFingerDetected,
+          signalQuality
+        });
       } catch (err) {
-        logError(`Error al verificar brillo: ${err instanceof Error ? err.message : String(err)}`, 
-          ErrorLevel.ERROR, "CameraView");
-        streamErrorRef.current = true;
+        console.error("Error checking brightness:", err);
       }
     };
 
     const interval = setInterval(checkBrightness, 500);
-    
-    // Health check para el stream
-    const healthCheck = setInterval(() => {
-      // Verificar que el stream sigue activo
-      if (stream) {
-        const videoTracks = stream.getVideoTracks();
-        if (videoTracks.length === 0 || videoTracks[0].readyState !== 'live') {
-          logError("Estado de video track no válido", ErrorLevel.WARNING, "CameraView");
-          streamErrorRef.current = true;
-          handleCameraError("Video track no válido");
-        }
-      }
-      
-      // Si hay error de stream pero no se ha reiniciado, intentar reiniciar
-      if (streamErrorRef.current && isMonitoring) {
-        logError("Reiniciando cámara tras error detectado por health check", 
-          ErrorLevel.WARNING, "CameraView");
-        
-        stopCamera().then(() => startCamera());
-        streamErrorRef.current = false;
-      }
-    }, 3000);
-    
-    return () => {
-      clearInterval(interval);
-      clearInterval(healthCheck);
-    };
-  }, [stream, isMonitoring, isFingerDetected, signalQuality, brightnessSamples, retryCount]);
+    return () => clearInterval(interval);
+  }, [stream, isMonitoring, isFingerDetected, signalQuality, brightnessSamples]);
 
-  // Gestión principal de la cámara
   useEffect(() => {
     if (isMonitoring && !stream) {
       startCamera();
     } else if (!isMonitoring && stream) {
       stopCamera();
     }
-    
     return () => {
       logError("CameraView component unmounting, stopping camera", ErrorLevel.INFO, "CameraView");
       stopCamera();
@@ -316,17 +208,6 @@ const CameraView: React.FC<CameraViewProps> = ({
     avgBrightness < 60 || // Dark means finger is likely present
     signalQuality > 50    // Good quality signal confirms finger
   );
-  
-  // Actualizar detector unificado con nuestra conclusión sobre el dedo
-  useEffect(() => {
-    if (isMonitoring) {
-      unifiedFingerDetector.updateSource(
-        'camera-analysis', 
-        actualFingerStatus,
-        signalQuality ? (signalQuality / 100) : 0.5
-      );
-    }
-  }, [actualFingerStatus, signalQuality, isMonitoring]);
 
   return (
     <>
@@ -342,22 +223,6 @@ const CameraView: React.FC<CameraViewProps> = ({
           backfaceVisibility: 'hidden'
         }}
       />
-      
-      {/* Error de cámara */}
-      {cameraError && (
-        <div className="absolute inset-0 bg-black/70 flex items-center justify-center z-30 p-4">
-          <div className="bg-red-900/80 p-4 rounded-lg text-white max-w-md text-center">
-            <h3 className="text-lg font-semibold mb-2">Error de cámara</h3>
-            <p className="mb-4">{cameraError}</p>
-            <p className="text-sm opacity-80">
-              {retryCount < maxRetryAttempts 
-                ? `Reintentando (${retryCount}/${maxRetryAttempts})...` 
-                : "Reintento fallido, compruebe los permisos de la cámara."}
-            </p>
-          </div>
-        </div>
-      )}
-      
       {isMonitoring && buttonPosition && (
         <div className="absolute bottom-24 left-1/2 transform -translate-x-1/2 z-20 flex flex-col items-center">
           <Fingerprint
