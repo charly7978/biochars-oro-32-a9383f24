@@ -1,127 +1,95 @@
 
 /**
- * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
- * 
- * Definiciones de tipos para procesamiento de señal
+ * Tipos para el procesamiento de señales
+ * SOLO PROCESAMIENTO REAL - NO SIMULACIONES
  */
 
-/**
- * Opciones de configuración para procesadores de señal
- */
-export interface SignalProcessingOptions {
-  // Factor de amplificación de señal
-  amplificationFactor?: number;
-  
-  // Fuerza de filtrado
-  filterStrength?: number;
-  
-  // Umbral de calidad de señal
-  qualityThreshold?: number;
-  
-  // Sensibilidad de detección de dedo
-  fingerDetectionSensitivity?: number;
-  
-  // Nuevos parámetros para control adaptativo
-  useAdaptiveControl?: boolean;
-  
-  // Usar predicción para mejorar calidad
-  qualityEnhancedByPrediction?: boolean;
-  
-  // Horizonte de predicción
-  predictionHorizon?: number;
-  
-  // Tasa de adaptación
-  adaptationRate?: number;
+// Configuración del procesador de señales
+export interface SignalProcessorConfig {
+  sampleRate: number;
+  bufferSize: number;
+  adaptiveThreshold: boolean;
+  calibration: {
+    threshold: number;
+    baseline: number;
+    adaptation: number;
+  };
+  filter: {
+    lowPass: boolean;
+    highPass: boolean;
+    notch: boolean;
+    movingAverage: number;
+  };
 }
 
-/**
- * Interfaz común para todos los procesadores de señal
- */
-export interface SignalProcessor<T> {
-  // Procesa un valor de señal y devuelve un resultado
-  processSignal(value: number): T;
-  
-  // Configuración del procesador
-  configure(options: SignalProcessingOptions): void;
-  
-  // Reinicia el procesador
-  reset(): void;
-}
-
-/**
- * Resultado del procesamiento de señal PPG
- */
+// Resultado del procesamiento PPG
 export interface ProcessedPPGSignal {
-  // Marca de tiempo de la señal
   timestamp: number;
-  
-  // Valor sin procesar
   rawValue: number;
-  
-  // Valor filtrado
   filteredValue: number;
-  
-  // Valor normalizado
   normalizedValue: number;
-  
-  // Valor amplificado
   amplifiedValue: number;
-  
-  // Calidad de la señal (0-100)
   quality: number;
-  
-  // Indicador de detección de dedo
   fingerDetected: boolean;
-  
-  // Fuerza de la señal
   signalStrength: number;
 }
 
-/**
- * Resultado del procesamiento de señal cardíaca
- */
+// Resultado del procesamiento de latidos
 export interface ProcessedHeartbeatSignal {
-  // Marca de tiempo de la señal
-  timestamp: number;
-  
-  // Valor de la señal
-  value: number;
-  
-  // Indicador de detección de pico
   isPeak: boolean;
-  
-  // Confianza en la detección del pico (0-1)
   peakConfidence: number;
-  
-  // BPM instantáneo (basado en intervalo RR)
   instantaneousBPM: number | null;
-  
-  // Intervalo RR en ms
   rrInterval: number | null;
-  
-  // Variabilidad del ritmo cardíaco
   heartRateVariability: number | null;
 }
 
-/**
- * Tipos de procesadores disponibles
- */
-export enum ProcessorType {
-  PPG = 'ppg',
-  HEARTBEAT = 'heartbeat'
+// Opciones para configuración del procesamiento de señales
+export interface SignalProcessingOptions {
+  amplificationFactor?: number;
+  adaptationRate?: number;
+  amplitudeThreshold?: number;
+  noiseLevel?: number;
+  motionCompensation?: number;
+  filterStrength?: number;
+  peakThreshold?: number;
+  fingerDetectionSensitivity?: number;
 }
 
-/**
- * Opciones para el sistema de procesamiento completo
- */
-export interface ProcessingSystemOptions extends SignalProcessingOptions {
-  // Tipo de procesador a utilizar
-  processorType?: ProcessorType;
-  
-  // Frecuencia de muestreo objetivo
-  targetSampleRate?: number;
-  
-  // Funciones de callback
-  onResultsReady?: (result: ProcessedPPGSignal | ProcessedHeartbeatSignal) => void;
-  onError?: (error: Error) => void;
+// Configuración para procesamiento en tiempo real
+export interface RealTimeProcessingConfig {
+  sampleRate: number;
+  bufferSize: number;
+  windowSize: number;
+  overlapSize: number;
+  adaptiveThreshold: boolean;
+  neuralProcessing: boolean;
+  tensorBackend: 'webgl' | 'cpu' | 'wasm';
+  priorityMode: 'quality' | 'performance' | 'balanced';
+}
+
+// Tipos para integración de redes neuronales
+export interface NeuralProcessingStats {
+  accuracy: number;
+  precision: number;
+  recall: number;
+  f1Score: number;
+  confusion: number[][];
+  processedSamples: number;
+  averageConfidence: number;
+}
+
+// Configuración para calibración del sistema
+export interface CalibrationSettings {
+  lastCalibrationDate?: Date;
+  perfusionIndex: number;
+  qualityThreshold: number;
+  stabilityThreshold: number;
+  redThresholdMin: number;
+  redThresholdMax: number;
+  referenceValues: {
+    systolic?: number;
+    diastolic?: number;
+    spo2?: number;
+    glucose?: number;
+  };
 }

@@ -4,19 +4,25 @@
  *
  * Functions for checking signal quality and weak signals
  * Improved to reduce false positives and add rhythmic pattern detection
+ * Enhanced with unified finger detector integration
  */
-import { checkSignalQuality, isFingerDetectedByPattern } from '../../../modules/heart-beat/signal-quality';
+import {
+  updateDetectionSource,
+  checkSignalStrength,
+  analyzeSignalForRhythmicPattern,
+  isFingerDetected as unifiedIsFingerDetected
+} from '@/modules/signal-processing/finger-detection/unified-finger-detector';
+import { DetectionSource } from '@/modules/signal-processing/finger-detection/finger-detection-types';
 
 // Signal history for pattern detection
 let signalHistory: Array<{time: number, value: number}> = [];
-let patternDetectionCount = 0;
 let fingDetectionConfirmed = false;
 
 // Track signal statistics to detect non-physiological patterns
 let signalMean = 0;
 let signalVariance = 0;
 let consecutiveStableFrames = 0;
-const REQUIRED_STABLE_FRAMES = 15; // Must have physiologically stable signal for this many frames
+const REQUIRED_STABLE_FRAMES = 12; // Reducido de 15 para detección más rápida
 
 // Track time-based consistency
 let lastProcessTime = 0;
@@ -26,6 +32,7 @@ const MAX_ALLOWED_GAP_MS = 150; // Maximum time gap allowed between processing
  * Checks if the signal is too weak, indicating possible finger removal
  * Now incorporates rhythmic pattern detection for more accurate finger detection
  * Improved with higher thresholds to reduce false positives
+ * Integrated with unified finger detector for coordinated decisions
  */
 export function checkWeakSignal(
   value: number,
@@ -47,7 +54,6 @@ export function checkWeakSignal(
     if (timeDiff > MAX_ALLOWED_GAP_MS) {
       console.log(`Signal quality: Large processing gap detected (${timeDiff}ms) - resetting detection`);
       signalHistory = [];
-      patternDetectionCount = 0;
       fingDetectionConfirmed = false;
       consecutiveStableFrames = 0;
     }
@@ -77,7 +83,6 @@ export function checkWeakSignal(
       if (fingDetectionConfirmed) {
         console.log("Non-physiological signal detected - resetting finger detection", { variance: signalVariance });
         fingDetectionConfirmed = false;
-        patternDetectionCount = 0;
       }
     }
   }
@@ -85,12 +90,10 @@ export function checkWeakSignal(
   // Check for rhythmic patterns only if we have enough stable frames
   // This prevents false detections from random noise
   if (consecutiveStableFrames >= REQUIRED_STABLE_FRAMES && !fingDetectionConfirmed) {
-    const patternResult = isFingerDetectedByPattern(signalHistory, patternDetectionCount);
-    patternDetectionCount = patternResult.patternCount;
+    // Utilizar detector de patrones rítmicos del sistema unificado
+    fingDetectionConfirmed = analyzeSignalForRhythmicPattern(value, 0.6);
     
-    // Only confirm finger if we have consistently detected patterns
-    if (patternResult.isFingerDetected) {
-      fingDetectionConfirmed = true;
+    if (fingDetectionConfirmed) {
       console.log("Finger detected by rhythmic pattern after physiological validation!", {
         time: new Date(now).toISOString(),
         variance: signalVariance,
@@ -104,48 +107,47 @@ export function checkWeakSignal(
     }
   }
   
-  // Use higher thresholds if not specified
-  const finalConfig = {
-    lowSignalThreshold: config.lowSignalThreshold || 0.30, // Increased from 0.25
-    maxWeakSignalCount: config.maxWeakSignalCount || 6    // Increased from 5
-  };
-  
-  // If finger detection was previously confirmed but we have many consecutive weak signals,
-  // we should reset the finger detection status
-  if (fingDetectionConfirmed && consecutiveWeakSignalsCount > finalConfig.maxWeakSignalCount * 2) {
-    fingDetectionConfirmed = false;
-    patternDetectionCount = 0;
-    consecutiveStableFrames = 0;
-    console.log("Finger detection lost due to consecutive weak signals:", consecutiveWeakSignalsCount);
-  }
-  
-  const result = checkSignalQuality(value, consecutiveWeakSignalsCount, finalConfig);
+  // Usar sistema unificado para verificar debilidad de señal
+  const result = checkSignalStrength(value, {
+    lowSignalThreshold: config.lowSignalThreshold, 
+    maxWeakSignalCount: config.maxWeakSignalCount
+  });
   
   // If finger is confirmed but signal is weak, give benefit of doubt for longer
   if (fingDetectionConfirmed && result.isWeakSignal) {
     // Higher tolerance for confirmed finger detection
     return {
-      isWeakSignal: result.updatedWeakSignalsCount >= finalConfig.maxWeakSignalCount * 1.8, // Increased multiplier
+      isWeakSignal: result.updatedWeakSignalsCount >= config.maxWeakSignalCount * 1.8, // Increased multiplier
       updatedWeakSignalsCount: result.updatedWeakSignalsCount
     };
   }
   
-  return result;
+  return {
+    isWeakSignal: result.isWeakSignal,
+    updatedWeakSignalsCount: result.updatedWeakSignalsCount
+  };
 }
 
 /**
  * Reset signal quality detection state
  * Also resets finger pattern detection
+ * Now also updates unified detector
  */
 export function resetSignalQualityState() {
   signalHistory = [];
-  patternDetectionCount = 0;
   fingDetectionConfirmed = false;
   signalMean = 0;
   signalVariance = 0;
   consecutiveStableFrames = 0;
   lastProcessTime = 0;
   console.log("Signal quality state reset, including pattern detection");
+  
+  // Actualizar detector unificado
+  updateDetectionSource(
+    DetectionSource.SIGNAL_QUALITY_STATE,
+    false,
+    0.9 // Alta confianza en el reset
+  );
   
   return {
     consecutiveWeakSignals: 0
@@ -154,24 +156,38 @@ export function resetSignalQualityState() {
 
 /**
  * Check if finger is detected based on rhythmic patterns
+ * Now integrated with unified finger detector
  */
 export function isFingerDetected(): boolean {
-  return fingDetectionConfirmed || (patternDetectionCount >= 3 && consecutiveStableFrames >= REQUIRED_STABLE_FRAMES);
+  // Adjust detection to be more sensitive
+  const localDetection = fingDetectionConfirmed || 
+                        (consecutiveStableFrames >= REQUIRED_STABLE_FRAMES);
+  
+  // Actualizar detector unificado con nuestro estado
+  updateDetectionSource(
+    DetectionSource.SIGNAL_QUALITY_STATE,
+    localDetection,
+    localDetection ? 0.8 : 0.5
+  );
+  
+  // Retornar decisión unificada para consistencia global
+  return unifiedIsFingerDetected();
 }
 
 /**
  * Determines if a measurement should be processed based on signal strength
  * Uses rhythmic pattern detection alongside amplitude thresholds
  * Uses higher threshold to prevent false positives
+ * Integrated with unified finger detector
  */
 export function shouldProcessMeasurement(value: number): boolean {
-  // If finger detection is confirmed by pattern, allow processing even if signal is slightly weak
-  if (fingDetectionConfirmed && consecutiveStableFrames >= REQUIRED_STABLE_FRAMES) {
-    return Math.abs(value) >= 0.18; // Lower threshold for confirmed finger
+  // Si la detección está confirmada, permitir procesamiento con umbral reducido
+  if (unifiedIsFingerDetected() && consecutiveStableFrames >= REQUIRED_STABLE_FRAMES) {
+    return Math.abs(value) >= 0.15; // Reducido de 0.18 para mayor sensibilidad
   }
   
   // Higher threshold to avoid processing weak signals (likely noise)
-  return Math.abs(value) >= 0.30; // Increased from 0.25
+  return Math.abs(value) >= 0.25; // Reducido de 0.30 para mayor sensibilidad
 }
 
 /**
@@ -179,6 +195,13 @@ export function shouldProcessMeasurement(value: number): boolean {
  * Keeps compatibility with existing code
  */
 export function createWeakSignalResult(arrhythmiaCounter: number = 0): any {
+  // Actualizar detector con señal débil
+  updateDetectionSource(
+    DetectionSource.WEAK_SIGNAL_RESULT,
+    false,
+    0.9 // Alta confianza en que no hay dedo
+  );
+  
   return {
     bpm: 0,
     confidence: 0,

@@ -2,7 +2,6 @@ import React, { useEffect, useRef, useCallback, useState, memo } from 'react';
 import { Fingerprint, AlertCircle } from 'lucide-react';
 import { CircularBuffer, PPGDataPoint } from '../utils/CircularBuffer';
 import AppTitle from './AppTitle';
-import { useCardiacSignal } from '../hooks/useCardiacSignal';
 
 interface PPGSignalMeterProps {
   value: number;
@@ -58,20 +57,20 @@ const PPGSignalMeter = memo(({
   const WINDOW_WIDTH_MS = 5500;
   const CANVAS_WIDTH = 1200;
   const CANVAS_HEIGHT = 900;
-  const GRID_SIZE_X = 5;
+  const GRID_SIZE_X = 15;
   const GRID_SIZE_Y = 5;
-  const verticalScale = 35.0;
-  const SMOOTHING_FACTOR = 1.5;
+  const verticalScale = 95.0;
+  const SMOOTHING_FACTOR = 1.3;
   const TARGET_FPS = 60;
   const FRAME_TIME = 1000 / TARGET_FPS;
-  const BUFFER_SIZE = 600;
-  const PEAK_DETECTION_WINDOW = 8;
-  const PEAK_THRESHOLD = 3;
-  const MIN_PEAK_DISTANCE_MS = 250;
+  const BUFFER_SIZE = 400;
+  const PEAK_DETECTION_WINDOW = 7;
+  const PEAK_THRESHOLD = 12;
+  const MIN_PEAK_DISTANCE_MS = 220;
   const IMMEDIATE_RENDERING = true;
-  const MAX_PEAKS_TO_DISPLAY = 25;
-  const QUALITY_HISTORY_SIZE = 9;
-  const REQUIRED_FINGER_FRAMES = 3;
+  const MAX_PEAKS_TO_DISPLAY = 15;
+  const QUALITY_HISTORY_SIZE = 5;
+  const REQUIRED_FINGER_FRAMES = 1;
   const USE_OFFSCREEN_CANVAS = true;
 
   const BEEP_PRIMARY_FREQUENCY = 880;
@@ -79,37 +78,6 @@ const PPGSignalMeter = memo(({
   const BEEP_DURATION = 80;
   const BEEP_VOLUME = 0.9;
   const MIN_BEEP_INTERVAL_MS = 350;
-
-  // Use the CardiacSignal hook with sound enabled
-  const { lastPeak: lastCardiacPeak } = useCardiacSignal({
-    playSound: true,
-    onPeak: (peak) => {
-      // Make sure we have a data buffer
-      if (!dataBufferRef.current) {
-        dataBufferRef.current = new CircularBuffer<PPGDataPointExtended>(BUFFER_SIZE);
-      }
-      
-      // Add detected peak to visualization
-      peaksRef.current.push({
-        time: peak.time,
-        value: peak.value,
-        isArrhythmia: peak.isArrhythmia,
-        beepPlayed: true
-      });
-      
-      // Sort by time and limit the number of peaks to display
-      peaksRef.current.sort((a, b) => a.time - b.time);
-      peaksRef.current = peaksRef.current
-        .filter(p => peak.time - p.time < WINDOW_WIDTH_MS)
-        .slice(-MAX_PEAKS_TO_DISPLAY);
-      
-      // Update arrhythmia counter if needed
-      if (peak.isArrhythmia) {
-        arrhythmiaCountRef.current++;
-        lastArrhythmiaTime.current = peak.time;
-      }
-    }
-  });
 
   useEffect(() => {
     const initAudio = async () => {
@@ -310,17 +278,15 @@ const PPGSignalMeter = memo(({
   }, []);
 
   const drawGrid = useCallback((ctx: CanvasRenderingContext2D) => {
-    // Create a more sophisticated gradient background
     const gradient = ctx.createLinearGradient(0, 0, 0, CANVAS_HEIGHT);
-    gradient.addColorStop(0,'#c1ff82'); // Soft purple (top)
-    gradient.addColorStop(0.3, '#ffbddd'); // Soft peach (upper middle)
-    gradient.addColorStop(0.5, '#afd7ff'); // Soft green (lower middle)
-    gradient.addColorStop(1, '#4d4c6c'); // Soft blue (bottom)
+    gradient.addColorStop(0,'#c1ff82');
+    gradient.addColorStop(0.3, '#ffbddd');
+    gradient.addColorStop(0.5, '#afd7ff');
+    gradient.addColorStop(1, '#4d4c6c');
     
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
     
-    // Add subtle texture pattern
     ctx.globalAlpha = 0.03;
     for (let i = 0; i < CANVAS_WIDTH; i += 20) {
       for (let j = 0; j < CANVAS_HEIGHT; j += 20) {
@@ -330,12 +296,10 @@ const PPGSignalMeter = memo(({
     }
     ctx.globalAlpha = 1.0;
     
-    // Draw improved grid lines
     ctx.beginPath();
-    ctx.strokeStyle = 'rgba(60, 60, 60, 0.2)'; // More subtle grid lines
+    ctx.strokeStyle = 'rgba(60, 60, 60, 0.2)';
     ctx.lineWidth = 0.5;
     
-    // Draw vertical grid lines
     for (let x = 0; x <= CANVAS_WIDTH; x += GRID_SIZE_X) {
       ctx.moveTo(x, 0);
       ctx.lineTo(x, CANVAS_HEIGHT);
@@ -347,7 +311,6 @@ const PPGSignalMeter = memo(({
       }
     }
     
-    // Draw horizontal grid lines
     for (let y = 0; y <= CANVAS_HEIGHT; y += GRID_SIZE_Y) {
       ctx.moveTo(0, y);
       ctx.lineTo(CANVAS_WIDTH, y);
@@ -360,22 +323,19 @@ const PPGSignalMeter = memo(({
     }
     ctx.stroke();
     
-    // Draw center line (baseline) with improved style
     ctx.beginPath();
     ctx.strokeStyle = 'rgba(40, 40, 40, 0.4)';
     ctx.lineWidth = 1.5;
-    ctx.setLineDash([5, 3]); // Dashed line for the center
+    ctx.setLineDash([5, 3]);
     ctx.moveTo(0, CANVAS_HEIGHT / 2);
     ctx.lineTo(CANVAS_WIDTH, CANVAS_HEIGHT / 2);
     ctx.stroke();
-    ctx.setLineDash([]); // Reset to solid line
+    ctx.setLineDash([]);
     
-    // Draw arrhythmia status if present
     if (arrhythmiaStatus) {
       const [status, count] = arrhythmiaStatus.split('|');
       
       if (status.includes("ARRITMIA") && count === "1" && !showArrhythmiaAlert) {
-        // Create a highlight box for the first arrhythmia
         ctx.fillStyle = 'rgba(239, 68, 68, 0.1)';
         ctx.fillRect(30, 70, 350, 40);
         ctx.strokeStyle = 'rgba(239, 68, 68, 0.3)';
@@ -388,7 +348,6 @@ const PPGSignalMeter = memo(({
         ctx.fillText('¡PRIMERA ARRITMIA DETECTADA!', 45, 95);
         setShowArrhythmiaAlert(true);
       } else if (status.includes("ARRITMIA") && Number(count) > 1) {
-        // Create a highlight box for multiple arrhythmias
         ctx.fillStyle = 'rgba(239, 68, 68, 0.1)';
         ctx.fillRect(30, 70, 250, 40);
         ctx.strokeStyle = 'rgba(239, 68, 68, 0.3)';
@@ -420,10 +379,15 @@ const PPGSignalMeter = memo(({
       
       let isPeak = true;
       
+      let greaterThanNeighbors = 0;
+      
       for (let j = i - PEAK_DETECTION_WINDOW; j < i; j++) {
         if (points[j].value >= currentPoint.value) {
           isPeak = false;
           break;
+        }
+        if (currentPoint.value > points[j].value * 1.15) {
+          greaterThanNeighbors++;
         }
       }
       
@@ -433,10 +397,13 @@ const PPGSignalMeter = memo(({
             isPeak = false;
             break;
           }
+          if (j < points.length && currentPoint.value > points[j].value * 1.15) {
+            greaterThanNeighbors++;
+          }
         }
       }
       
-      if (isPeak && Math.abs(currentPoint.value) > PEAK_THRESHOLD) {
+      if (isPeak && (Math.abs(currentPoint.value) > PEAK_THRESHOLD || greaterThanNeighbors >= PEAK_DETECTION_WINDOW)) {
         potentialPeaks.push({
           index: i,
           value: currentPoint.value,
@@ -547,9 +514,11 @@ const PPGSignalMeter = memo(({
     const points = dataBufferRef.current.getPoints();
     detectPeaks(points, now);
     
+    let shouldBeep = false;
+    
     if (points.length > 1) {
       let firstPoint = true;
-      let currentPathColor = '#0EA5E9'; // Default blue color
+      let currentPathColor = '#0EA5E9';
       
       for (let i = 1; i < points.length; i++) {
         const prevPoint = points[i - 1];
@@ -572,25 +541,20 @@ const PPGSignalMeter = memo(({
           currentPathColor = prevPoint.isArrhythmia ? '#DC2626' : '#0EA5E9';
         }
         
-        // If current point has different arrhythmia status than current path
         if ((point.isArrhythmia && currentPathColor === '#0EA5E9') || 
             (!point.isArrhythmia && currentPathColor === '#DC2626')) {
-          // Complete current path
           renderCtx.lineTo(x2, y2);
           renderCtx.stroke();
           
-          // Start new path with different color
           renderCtx.beginPath();
           currentPathColor = point.isArrhythmia ? '#DC2626' : '#0EA5E9';
           renderCtx.strokeStyle = currentPathColor;
           renderCtx.moveTo(x2, y2);
         } else {
-          // Continue current path
           renderCtx.lineTo(x2, y2);
         }
       }
       
-      // Complete the last path if needed
       if (!firstPoint) {
         renderCtx.stroke();
       }
@@ -612,16 +576,21 @@ const PPGSignalMeter = memo(({
             renderCtx.lineWidth = 3;
             renderCtx.stroke();
             
-            renderCtx.font = 'bold 18px Inter'; // Increased from 14px to 18px
+            renderCtx.font = 'bold 18px Inter';
             renderCtx.fillStyle = '#F97316';
             renderCtx.textAlign = 'center';
             renderCtx.fillText('ARRITMIA', x, y - 25);
           }
           
-          renderCtx.font = 'bold 16px Inter'; // Increased from 14px to 16px
+          renderCtx.font = 'bold 16px Inter';
           renderCtx.fillStyle = '#000000';
           renderCtx.textAlign = 'center';
           renderCtx.fillText(Math.abs(peak.value / verticalScale).toFixed(2), x, y - 15);
+          
+          if (!peak.beepPlayed) {
+            shouldBeep = true;
+            peak.beepPlayed = true;
+          }
         }
       });
     }
@@ -633,9 +602,15 @@ const PPGSignalMeter = memo(({
       }
     }
     
+    if (shouldBeep && isFingerDetected && 
+        consecutiveFingerFramesRef.current >= REQUIRED_FINGER_FRAMES) {
+      console.log("PPGSignalMeter: Círculo dibujado, reproduciendo beep (un beep por latido)");
+      playBeep(1.0);
+    }
+    
     lastRenderTimeRef.current = currentTime;
     animationFrameRef.current = requestAnimationFrame(renderSignal);
-  }, [value, quality, isFingerDetected, rawArrhythmiaData, arrhythmiaStatus, drawGrid, detectPeaks, smoothValue, preserveResults, isArrhythmia]);
+  }, [value, quality, isFingerDetected, rawArrhythmiaData, arrhythmiaStatus, drawGrid, detectPeaks, smoothValue, preserveResults, isArrhythmia, playBeep]);
 
   useEffect(() => {
     renderSignal();
