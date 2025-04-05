@@ -1,15 +1,9 @@
 
-/**
- * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
- */
-
 import { useCallback, useRef, useEffect } from 'react';
-import { calculateRMSSD, calculateRRVariation } from '../../modules/vital-signs/arrhythmia/calculations';
-import { ArrhythmiaState, UseArrhythmiaDetectorReturn, RRAnalysisResult } from '../heart-beat/types';
+import { ArrhythmiaState, UseArrhythmiaDetectorReturn, RRAnalysisResult } from './types';
 
 /**
  * Hook for arrhythmia detection based on real RR interval data
- * No simulation or data manipulation is used - direct measurement only
  */
 export function useArrhythmiaDetector(): UseArrhythmiaDetectorReturn {
   const heartRateVariabilityRef = useRef<number[]>([]);
@@ -175,4 +169,31 @@ export function useArrhythmiaDetector(): UseArrhythmiaDetectorReturn {
     currentBeatIsArrhythmiaRef,
     detectArrhythmia
   };
+}
+
+/**
+ * Calculate Root Mean Square of Successive Differences
+ */
+function calculateRMSSD(intervals: number[]): number {
+  if (intervals.length < 2) return 0;
+  
+  let sumSquaredDiff = 0;
+  for (let i = 1; i < intervals.length; i++) {
+    const diff = intervals[i] - intervals[i-1];
+    sumSquaredDiff += diff * diff;
+  }
+  
+  return Math.sqrt(sumSquaredDiff / (intervals.length - 1));
+}
+
+/**
+ * Calculate RR interval variation
+ */
+function calculateRRVariation(intervals: number[]): number {
+  if (intervals.length < 2) return 0;
+  
+  const avg = intervals.reduce((sum, val) => sum + val, 0) / intervals.length;
+  const differences = intervals.map(interval => Math.abs(interval - avg) / avg);
+  
+  return differences.reduce((sum, val) => sum + val, 0) / differences.length;
 }
