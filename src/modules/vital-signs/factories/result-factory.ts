@@ -1,18 +1,14 @@
 
 /**
- * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
+ * Factory for creating VitalSignsResult objects
+ * Ensures consistent result structure across the application
  */
 
 import { VitalSignsResult } from '../types/vital-signs-result';
 
-/**
- * Factory for creating consistent VitalSignsResult objects
- * All methods work with real data only, no simulation
- */
 export class ResultFactory {
   /**
-   * Creates an empty result when there is no valid data
-   * Always returns zeros, no simulation
+   * Create empty results (all zeros)
    */
   public static createEmptyResults(): VitalSignsResult {
     return {
@@ -22,35 +18,32 @@ export class ResultFactory {
       glucose: 0,
       lipids: {
         totalCholesterol: 0,
-        hydrationPercentage: 0  // Changed from triglycerides to hydrationPercentage
-      },
-      confidence: {
-        glucose: 0,
-        lipids: 0,  // Kept as 'lipids' for compatibility
-        overall: 0
+        hydrationPercentage: 0
       }
     };
   }
   
   /**
-   * Creates a result with the given values
-   * Only for direct measurements
+   * Create a fully populated result
    */
   public static createResult(
     spo2: number,
     pressure: string,
     arrhythmiaStatus: string,
     glucose: number,
-    lipids: { totalCholesterol: number; hydrationPercentage: number },  // Changed parameter name
-    confidence: { glucose: number; lipids: number; overall: number },
-    lastArrhythmiaData?: { timestamp: number; rmssd: number; rrVariation: number } | null
+    hydration: { totalCholesterol: number, hydrationPercentage: number },
+    confidence?: { glucose: number, lipids: number, overall: number },
+    lastArrhythmiaData?: { timestamp: number, rmssd: number, rrVariation: number } | null
   ): VitalSignsResult {
     return {
       spo2,
       pressure,
       arrhythmiaStatus,
       glucose,
-      lipids,
+      lipids: {
+        totalCholesterol: hydration.totalCholesterol,
+        hydrationPercentage: hydration.hydrationPercentage
+      },
       confidence,
       lastArrhythmiaData
     };
