@@ -1,0 +1,93 @@
+
+/* Mobile optimization styles */
+.mobile-optimized {
+  /* Hardware acceleration */
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  perspective: 1000px;
+  will-change: transform, opacity;
+  
+  /* Optimize rendering */
+  contain: content;
+  text-rendering: optimizeSpeed;
+}
+
+/* Optimizations for specific components */
+.mobile-optimized .vital-display {
+  font-feature-settings: "tnum";
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+  font-weight: 600;
+  text-rendering: optimizeSpeed;
+}
+
+/* Battery-aware styling for low power mode */
+.low-power-mode .medical-value {
+  animation: none !important;
+  transition: none !important;
+}
+
+.low-power-mode canvas, 
+.low-power-mode svg {
+  image-rendering: optimizeSpeed;
+}
+
+/* Reduce the number of repaints for better performance */
+.rendering-optimized {
+  contain: layout paint style;
+}
+
+/* Container query classes */
+.cq-sm {
+  --spacing: 0.5rem;
+  --font-size: 0.875rem;
+}
+
+.cq-md {
+  --spacing: 0.75rem;
+  --font-size: 1rem;
+}
+
+.cq-lg {
+  --spacing: 1rem;
+  --font-size: 1.125rem;
+}
+
+.cq-xl {
+  --spacing: 1.25rem;
+  --font-size: 1.25rem;
+}
+
+/* Reduced motion for battery saving */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0s !important;
+    transition-duration: 0s !important;
+  }
+}
+
+/* Mobile optimized pagination component */
+.mobile-optimized .pagination-container {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.25rem;
+}
+
+.mobile-optimized .pagination-item {
+  min-width: 2.5rem;
+  height: 2.5rem;
+}
+
+.mobile-optimized .pagination-ellipsis {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2.5rem;
+  height: 2.5rem;
+}
+
+/* Reduced quality images for better performance on lower-end devices */
+.reduced-image-quality img {
+  image-rendering: optimizeSpeed;
+}

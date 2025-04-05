@@ -3,15 +3,24 @@ import { ChevronLeft, ChevronRight, MoreHorizontal } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import { ButtonProps, buttonVariants } from "@/components/ui/button"
+import { useIsMobile } from "@/hooks/use-mobile"
 
-const Pagination = ({ className, ...props }: React.ComponentProps<"nav">) => (
-  <nav
-    role="navigation"
-    aria-label="pagination"
-    className={cn("mx-auto flex w-full justify-center", className)}
-    {...props}
-  />
-)
+const Pagination = ({ className, ...props }: React.ComponentProps<"nav">) => {
+  const isMobile = useIsMobile();
+  
+  return (
+    <nav
+      role="navigation"
+      aria-label="pagination"
+      className={cn(
+        "mx-auto flex w-full justify-center", 
+        isMobile && "pagination-container",
+        className
+      )}
+      {...props}
+    />
+  );
+}
 Pagination.displayName = "Pagination"
 
 const PaginationContent = React.forwardRef<
@@ -29,9 +38,21 @@ PaginationContent.displayName = "PaginationContent"
 const PaginationItem = React.forwardRef<
   HTMLLIElement,
   React.ComponentProps<"li">
->(({ className, ...props }, ref) => (
-  <li ref={ref} className={cn("", className)} {...props} />
-))
+>(({ className, ...props }, ref) => {
+  const isMobile = useIsMobile();
+  
+  return (
+    <li 
+      ref={ref} 
+      className={cn(
+        "", 
+        isMobile && "pagination-item",
+        className
+      )} 
+      {...props} 
+    />
+  );
+})
 PaginationItem.displayName = "PaginationItem"
 
 type PaginationLinkProps = {
@@ -94,16 +115,24 @@ PaginationNext.displayName = "PaginationNext"
 const PaginationEllipsis = ({
   className,
   ...props
-}: React.ComponentProps<"span">) => (
-  <span
-    aria-hidden
-    className={cn("flex h-9 w-9 items-center justify-center", className)}
-    {...props}
-  >
-    <MoreHorizontal className="h-4 w-4" />
-    <span className="sr-only">More pages</span>
-  </span>
-)
+}: React.ComponentProps<"span">) => {
+  const isMobile = useIsMobile();
+  
+  return (
+    <span
+      aria-hidden
+      className={cn(
+        "flex h-9 w-9 items-center justify-center", 
+        isMobile && "pagination-ellipsis",
+        className
+      )}
+      {...props}
+    >
+      <MoreHorizontal className="h-4 w-4" />
+      <span className="sr-only">More pages</span>
+    </span>
+  );
+}
 PaginationEllipsis.displayName = "PaginationEllipsis"
 
 export {
