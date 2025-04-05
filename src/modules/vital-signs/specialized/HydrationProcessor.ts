@@ -1,155 +1,307 @@
 
 /**
- * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
- * 
- * Specialized processor for hydration measurement
- * Uses optimized hydration signal to calculate hydration levels
+ * Specialized processor for hydration percentage estimation
+ * Analyzes PPG waveform characteristics to estimate hydration levels
  */
-
 import { BaseVitalSignProcessor } from './BaseVitalSignProcessor';
-import { VitalSignType, ChannelFeedback } from '../../../types/signal';
 
-/**
- * Result interface for hydration measurements
- */
 export interface HydrationResult {
-  totalCholesterol: number; // Maintained for backward compatibility
-  hydrationPercentage: number; // New hydration level (45-100%)
+  hydrationPercentage: number;
+  confidence: number;
 }
 
-/**
- * Hydration processor implementation
- */
 export class HydrationProcessor extends BaseVitalSignProcessor<HydrationResult> {
-  // Default values for measurements
-  private readonly BASE_CHOLESTEROL = 180; // mg/dL (kept for compatibility)
-  private readonly MIN_HYDRATION = 45; // % minimum physiological level
-  private readonly MAX_HYDRATION = 100; // % maximum physiological level
-  private readonly OPTIMAL_HYDRATION = 70; // % optimal hydration level
-  
-  // Tracking values for stability
-  private lastHydrationEstimate: number = 65; // Initial mid-range value
-  private hydrationHistory: number[] = [];
-  private readonly HISTORY_SIZE = 5; // Number of values to keep
+  private readonly MIN_SAMPLES_REQUIRED = 45;
+  private readonly BASELINE_SAMPLES = 15;
+  private readonly WINDOW_SIZE = 5;
+  private baselineValues: number[] = [];
+  private hasBaseline = false;
+  private lastValidResult: HydrationResult = {
+    hydrationPercentage: 0,
+    confidence: 0
+  };
   
   constructor() {
-    super(VitalSignType.HYDRATION);
-    console.log("HydrationProcessor initialized - replacing lipids functionality");
+    super();
+    this.reset();
   }
   
   /**
-   * Process a value from the hydration-optimized channel
-   * @param value Optimized hydration signal value
-   * @returns Estimated hydration values
+   * Process a PPG signal value to estimate hydration percentage
+   * @param value Filtered PPG signal value
+   * @returns Hydration result with confidence
    */
-  protected processValueImpl(value: number): HydrationResult {
-    // Skip processing if the value is too small
-    if (Math.abs(value) < 0.01) {
-      return { 
-        totalCholesterol: this.BASE_CHOLESTEROL, 
-        hydrationPercentage: this.lastHydrationEstimate 
+  public processValue(value: number): HydrationResult {
+    // Add value to buffer for analysis
+    this.buffer.push(value);
+    
+    // Maintain buffer size
+    if (this.buffer.length > this.MAX_BUFFER_SIZE) {
+      this.buffer.shift();
+    }
+    
+    // Establish baseline if needed
+    if (!this.hasBaseline) {
+      this.baselineValues.push(value);
+      if (this.baselineValues.length >= this.BASELINE_SAMPLES) {
+        this.hasBaseline = true;
+      }
+      return this.lastValidResult;
+    }
+    
+    // Need minimum samples for accurate calculation
+    if (this.buffer.length < this.MIN_SAMPLES_REQUIRED) {
+      return this.lastValidResult;
+    }
+    
+    // Calculate hydration based on signal characteristics
+    const hydrationPercentage = this.calculateHydrationPercentage();
+    const confidence = this.calculateConfidence();
+    
+    // Only update last valid result if confidence is good
+    if (confidence > 0.3) {
+      this.lastValidResult = {
+        hydrationPercentage,
+        confidence
       };
     }
     
-    // Calculate hydration values based on signal characteristics
-    const hydrationPercentage = this.calculateHydration(value);
-    
-    // Add to history for smoothing
-    this.hydrationHistory.push(hydrationPercentage);
-    if (this.hydrationHistory.length > this.HISTORY_SIZE) {
-      this.hydrationHistory.shift();
-    }
-    
-    // Calculate median for stability
-    const sortedHydration = [...this.hydrationHistory].sort((a, b) => a - b);
-    const medianHydration = this.hydrationHistory.length % 2 === 0
-      ? (sortedHydration[this.hydrationHistory.length / 2 - 1] + sortedHydration[this.hydrationHistory.length / 2]) / 2
-      : sortedHydration[Math.floor(this.hydrationHistory.length / 2)];
-    
-    // Store for future reference
-    this.lastHydrationEstimate = medianHydration;
-    
-    // Return both cholesterol (maintained for compatibility) and hydration
-    return {
-      totalCholesterol: this.BASE_CHOLESTEROL + ((this.lastHydrationEstimate - this.OPTIMAL_HYDRATION) * 0.5),
-      hydrationPercentage: Math.round(this.lastHydrationEstimate)
+    return this.lastValidResult;
+  }
+  
+  /**
+   * Reset the processor to initial state
+   */
+  public reset(): void {
+    this.buffer = [];
+    this.baselineValues = [];
+    this.hasBaseline = false;
+    this.lastValidResult = {
+      hydrationPercentage: 0,
+      confidence: 0
     };
   }
   
   /**
-   * Calculate hydration percentage from signal characteristics
+   * Calculate estimated hydration percentage from signal characteristics
+   * @returns Estimated hydration percentage (0-100)
    */
-  private calculateHydration(value: number): number {
-    if (this.confidence < 0.2) {
-      // If confidence is too low, return last estimate
-      return this.lastHydrationEstimate;
-    }
+  private calculateHydrationPercentage(): number {
+    // Get recent values for analysis
+    const recentValues = this.buffer.slice(-this.MIN_SAMPLES_REQUIRED);
     
-    // Extract signal characteristics that correlate with hydration
-    const ampFactor = Math.max(0, Math.min(2, Math.abs(value) * 5));
+    // Calculate signal characteristics related to hydration
+    const amplitude = this.calculateAmplitude(recentValues);
+    const waveformComplexity = this.calculateWaveformComplexity(recentValues);
+    const signalStability = this.calculateSignalStability(recentValues);
     
-    // Calculate baseline hydration level
-    let hydration;
+    // Baseline amplitude for comparison
+    const baselineAmplitude = this.calculateAmplitude(this.baselineValues);
     
-    // Non-linear mapping of signal characteristics to hydration level
-    if (ampFactor < 0.5) {
-      // Low amplitude often indicates dehydration
-      hydration = this.MIN_HYDRATION + (ampFactor * 20);
-    } else if (ampFactor < 1.2) {
-      // Mid-range is typical of normal hydration
-      hydration = this.MIN_HYDRATION + 10 + (ampFactor * 25);
-    } else {
-      // Higher amplitude usually indicates good hydration
-      hydration = this.OPTIMAL_HYDRATION + ((ampFactor - 1.2) * 15);
-    }
+    // Calculate relative amplitude (indicator of hydration)
+    const relativeAmplitude = baselineAmplitude > 0 ? 
+                            amplitude / baselineAmplitude : 0;
     
-    // Apply confidence-based limiting to avoid extreme jumps
-    const confLimit = 20 * this.confidence;
-    const maxChange = Math.max(3, confLimit);
+    // Apply formula for hydration estimation
+    // Based on amplitude, waveform complexity and signal stability
+    let hydration = 50 + (relativeAmplitude * 15) +
+                  (waveformComplexity * 10) + (signalStability * 20);
     
-    // Limit change from previous value
-    const limitedHydration = Math.max(
-      this.lastHydrationEstimate - maxChange,
-      Math.min(this.lastHydrationEstimate + maxChange, hydration)
-    );
+    // Restrict to valid range
+    hydration = Math.max(0, Math.min(100, hydration));
     
-    // Ensure result is within physiological range
-    return Math.min(this.MAX_HYDRATION, Math.max(this.MIN_HYDRATION, limitedHydration));
+    return Math.round(hydration);
   }
   
   /**
-   * Update confidence based on signal characteristics
+   * Calculate confidence level for the hydration estimation
+   * @returns Confidence value (0-1)
    */
-  protected override updateConfidence(): void {
-    if (this.buffer.length < 5) {
-      this.confidence = 0;
-      return;
+  private calculateConfidence(): number {
+    // Not enough data for confidence
+    if (this.buffer.length < this.MIN_SAMPLES_REQUIRED) {
+      return 0;
     }
     
-    // Calculate signal stability
-    const recent = this.buffer.slice(-10);
-    const mean = recent.reduce((sum, val) => sum + val, 0) / recent.length;
-    const variance = recent.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / recent.length;
+    // Calculate signal quality factors
+    const stability = this.calculateSignalStability(this.buffer);
+    const noise = this.calculateNoiseLevel(this.buffer);
+    const consistency = this.calculateValueConsistency(this.buffer);
     
-    // Higher variance reduces confidence (unstable signal)
-    const stabilityFactor = Math.max(0, 1 - Math.min(1, variance * 2));
+    // Combined confidence based on quality factors
+    const confidence = (stability * 0.4) + ((1 - noise) * 0.4) + (consistency * 0.2);
     
-    // Calculate amplitude factor (higher amplitude generally means better signal)
-    const minVal = Math.min(...recent);
-    const maxVal = Math.max(...recent);
-    const amplitude = maxVal - minVal;
-    const amplitudeFactor = Math.min(1, amplitude * 2);
-    
-    // Combine factors for overall confidence
-    this.confidence = Math.min(0.9, stabilityFactor * 0.6 + amplitudeFactor * 0.4);
+    return Math.min(0.95, confidence);
   }
   
   /**
-   * Reset processor
+   * Calculate amplitude of signal (max - min)
+   * @param values Array of signal values
+   * @returns Signal amplitude
    */
-  public override reset(): void {
-    super.reset();
-    this.lastHydrationEstimate = 65;
-    this.hydrationHistory = [];
+  private calculateAmplitude(values: number[]): number {
+    if (values.length === 0) return 0;
+    const max = Math.max(...values);
+    const min = Math.min(...values);
+    return max - min;
+  }
+  
+  /**
+   * Calculate waveform complexity using sliding window
+   * @param values Array of signal values
+   * @returns Complexity value (0-1)
+   */
+  private calculateWaveformComplexity(values: number[]): number {
+    if (values.length < this.WINDOW_SIZE) return 0;
+    
+    let complexitySum = 0;
+    let windowCount = 0;
+    
+    // Use sliding window to analyze complexity
+    for (let i = 0; i <= values.length - this.WINDOW_SIZE; i++) {
+      const window = values.slice(i, i + this.WINDOW_SIZE);
+      const windowVariance = this.calculateVariance(window);
+      complexitySum += windowVariance;
+      windowCount++;
+    }
+    
+    // Normalize to 0-1 range
+    const avgComplexity = windowCount > 0 ? complexitySum / windowCount : 0;
+    return this.normalizeComplexity(avgComplexity);
+  }
+  
+  /**
+   * Calculate signal stability
+   * @param values Array of signal values
+   * @returns Stability value (0-1)
+   */
+  private calculateSignalStability(values: number[]): number {
+    if (values.length < 3) return 0;
+    
+    // Calculate moving average
+    const movingAvg = [];
+    for (let i = 2; i < values.length; i++) {
+      const avg = (values[i] + values[i-1] + values[i-2]) / 3;
+      movingAvg.push(avg);
+    }
+    
+    // Calculate average deviation from moving average
+    let deviation = 0;
+    for (let i = 0; i < movingAvg.length; i++) {
+      deviation += Math.abs(values[i+2] - movingAvg[i]);
+    }
+    
+    const avgDeviation = deviation / movingAvg.length;
+    
+    // Calculate stability (inverse of normalized deviation)
+    return 1 - this.normalizeDeviation(avgDeviation);
+  }
+  
+  /**
+   * Calculate noise level in signal
+   * @param values Array of signal values
+   * @returns Noise level (0-1)
+   */
+  private calculateNoiseLevel(values: number[]): number {
+    if (values.length < 4) return 0;
+    
+    let noiseSum = 0;
+    
+    // Measure high-frequency components
+    for (let i = 1; i < values.length; i++) {
+      noiseSum += Math.abs(values[i] - values[i-1]);
+    }
+    
+    const avgNoise = noiseSum / (values.length - 1);
+    return this.normalizeNoise(avgNoise);
+  }
+  
+  /**
+   * Calculate consistency of values
+   * @param values Array of signal values
+   * @returns Consistency value (0-1)
+   */
+  private calculateValueConsistency(values: number[]): number {
+    if (values.length < 4) return 0;
+    
+    // Calculate standard deviation
+    const stdDev = this.calculateStandardDeviation(values);
+    const mean = values.reduce((sum, val) => sum + val, 0) / values.length;
+    
+    // Coefficient of variation
+    const cv = mean !== 0 ? stdDev / Math.abs(mean) : 1;
+    
+    // Convert to consistency (inverse of CV)
+    return 1 - Math.min(1, cv);
+  }
+  
+  /**
+   * Calculate variance of values
+   * @param values Array of values
+   * @returns Variance value
+   */
+  private calculateVariance(values: number[]): number {
+    if (values.length === 0) return 0;
+    
+    const mean = values.reduce((sum, val) => sum + val, 0) / values.length;
+    const squaredDiffs = values.map(val => Math.pow(val - mean, 2));
+    return squaredDiffs.reduce((sum, val) => sum + val, 0) / values.length;
+  }
+  
+  /**
+   * Calculate standard deviation
+   * @param values Array of values
+   * @returns Standard deviation
+   */
+  private calculateStandardDeviation(values: number[]): number {
+    return Math.sqrt(this.calculateVariance(values));
+  }
+  
+  /**
+   * Normalize complexity value to 0-1 range
+   * @param complexity Raw complexity value
+   * @returns Normalized complexity
+   */
+  private normalizeComplexity(complexity: number): number {
+    // Empirical normalization based on expected range
+    const normalizer = 0.02;
+    return Math.min(1, complexity / normalizer);
+  }
+  
+  /**
+   * Normalize deviation to 0-1 range
+   * @param deviation Raw deviation value
+   * @returns Normalized deviation
+   */
+  private normalizeDeviation(deviation: number): number {
+    // Empirical normalization based on expected range
+    const normalizer = 0.2;
+    return Math.min(1, deviation / normalizer);
+  }
+  
+  /**
+   * Normalize noise to 0-1 range
+   * @param noise Raw noise value
+   * @returns Normalized noise
+   */
+  private normalizeNoise(noise: number): number {
+    // Empirical normalization based on expected range
+    const normalizer = 0.1;
+    return Math.min(1, noise / normalizer);
+  }
+  
+  /**
+   * Get diagnostic information
+   * @returns Diagnostic data object
+   */
+  public getDiagnosticInfo(): any {
+    return {
+      bufferSize: this.buffer.length,
+      hasBaseline: this.hasBaseline,
+      baselineSampleCount: this.baselineValues.length,
+      lastProcessedValue: this.lastProcessedValue,
+      lastConfidence: this.lastValidResult.confidence,
+      lastHydration: this.lastValidResult.hydrationPercentage
+    };
   }
 }

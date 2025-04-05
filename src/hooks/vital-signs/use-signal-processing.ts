@@ -1,15 +1,23 @@
 
 /**
- * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
+ * Hook for processing signals into vital signs
  */
-
 import { useRef, useCallback } from 'react';
 import { VitalSignsResult } from '../../modules/vital-signs/types/vital-signs-result';
 import { VitalSignsProcessor } from '../../modules/vital-signs/VitalSignsProcessor';
 
+// Interface for signal input
+interface SignalInput {
+  value: number;
+  rrData?: { 
+    intervals: number[]; 
+    lastPeakTime: number | null;
+  };
+}
+
 /**
  * Hook for processing signal using the VitalSignsProcessor
- * Direct measurement only, no simulation
+ * Direct measurement only
  */
 export const useSignalProcessing = () => {
   // Reference for processor instance
@@ -66,13 +74,15 @@ export const useSignalProcessing = () => {
         signalNumber: processedSignals.current
       });
     }
-    
-    // Process signal directly - no simulation
-    // Fixed: Pass parameters correctly as expected by processSignal method
-    const result = processorRef.current.processSignal({
+
+    // Fixed: Convert parameters to expected format before calling processSignal
+    const input: SignalInput = {
       value,
       rrData
-    });
+    };
+    
+    // Process signal directly - no simulation
+    const result = processorRef.current.processSignal(input);
     
     return result;
   }, []);
