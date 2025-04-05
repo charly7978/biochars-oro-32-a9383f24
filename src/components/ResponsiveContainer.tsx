@@ -1,93 +1,117 @@
 
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useIsMobile } from '@/hooks/use-mobile';
-import { optimizeElement } from '@/utils/displayOptimizer';
-import { applyHighResolutionOptimizations, optimizeMedicalDataDisplay } from '@/utils/highResolutionOptimizer';
+import { useMobileOptimizations } from '@/hooks/useMobileOptimizations';
 
 interface ResponsiveContainerProps {
   children: React.ReactNode;
   className?: string;
-  optimizeForMedicalData?: boolean;
+  fullHeight?: boolean;
+  centerContent?: boolean;
+  adaptForKeyboard?: boolean;
 }
 
-export const ResponsiveContainer = ({
+/**
+ * Contenedor responsivo mejorado que se adapta automáticamente a dispositivos móviles
+ */
+export const ResponsiveContainer: React.FC<ResponsiveContainerProps> = ({
   children,
-  className = '',
-  optimizeForMedicalData = false,
-}: ResponsiveContainerProps) => {
-  const containerRef = useRef<HTMLDivElement>(null);
+  className = "",
+  fullHeight = true,
+  centerContent = true,
+  adaptForKeyboard = true,
+}) => {
   const isMobile = useIsMobile();
+  const { config } = useMobileOptimizations();
+  const [keyboardOpen, setKeyboardOpen] = useState(false);
+  const [viewportHeight, setViewportHeight] = useState<number>(window.innerHeight);
   
+  // Detectar cambios en la altura de la ventana para adaptarse al teclado
   useEffect(() => {
-    // Apply optimizations when the component mounts
-    if (containerRef.current) {
-      optimizeElement(containerRef.current);
+    if (!isMobile || !adaptForKeyboard) return;
+    
+    const handleResize = () => {
+      const newHeight = window.innerHeight;
+      // Si la altura disminuye significativamente, probablemente es el teclado
+      const heightDifference = viewportHeight - newHeight;
+      const keyboardThreshold = viewportHeight * 0.15; // 15% del alto
       
-      if (optimizeForMedicalData) {
-        optimizeMedicalDataDisplay(containerRef.current);
+      setViewportHeight(newHeight);
+      
+      if (heightDifference > keyboardThreshold) {
+        setKeyboardOpen(true);
+      } else {
+        setKeyboardOpen(false);
       }
-    }
+    };
     
-    // Apply high resolution optimizations
-    applyHighResolutionOptimizations();
+    window.addEventListener('resize', handleResize);
     
-    // Setup container queries for adaptive layouts
-    const cleanup = isMobile ? setupContainerQueries() : () => {};
-    
-    return cleanup;
-  }, [optimizeForMedicalData, isMobile]);
-  
-  // Setup container queries for adaptive layouts
-  const setupContainerQueries = () => {
-    if (typeof window === 'undefined' || !('ResizeObserver' in window) || !containerRef.current) {
-      return () => {};
-    }
-    
-    const container = containerRef.current;
-    container.classList.add('container-query');
-    
-    const resizeObserver = new ResizeObserver(entries => {
-      for (const entry of entries) {
-        const container = entry.target as HTMLElement;
-        const width = entry.contentRect.width;
-        
-        // Remove previous classes
-        container.classList.remove('cq-sm', 'cq-md', 'cq-lg', 'cq-xl');
-        
-        // Apply classes based on container width
-        if (width < 400) {
-          container.classList.add('cq-sm');
-        } else if (width < 600) {
-          container.classList.add('cq-md');
-        } else if (width < 900) {
-          container.classList.add('cq-lg');
-        } else {
-          container.classList.add('cq-xl');
-        }
-      }
-    });
-    
-    resizeObserver.observe(container);
+    // Configurar altura inicial
+    setViewportHeight(window.innerHeight);
     
     return () => {
-      resizeObserver.disconnect();
+      window.removeEventListener('resize', handleResize);
     };
+  }, [isMobile, adaptForKeyboard, viewportHeight]);
+  
+  // Prevenir el desplazamiento y zoom en móviles
+  useEffect(() => {
+    if (!isMobile) return;
+    
+    // Configurar viewport meta
+    const viewportMeta = document.querySelector('meta[name="viewport"]');
+    if (viewportMeta) {
+      viewportMeta.setAttribute('content', 
+        'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no');
+    } else {
+      // Crear si no existe
+      const meta = document.createElement('meta');
+      meta.name = 'viewport';
+      meta.content = 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no';
+      document.head.appendChild(meta);
+    }
+    
+    // Prevenir eventos táctiles que pueden causar zoom
+    const preventZoom = (e: TouchEvent) => {
+      if (e.touches.length > 1) {
+        e.preventDefault();
+      }
+    };
+    
+    document.addEventListener('touchstart', preventZoom, { passive: false });
+    
+    return () => {
+      document.removeEventListener('touchstart', preventZoom);
+    };
+  }, [isMobile]);
+  
+  // Estilos base
+  const containerClasses = [
+    "responsive-container",
+    fullHeight ? "min-h-screen" : "",
+    centerContent ? "flex flex-col items-center justify-center" : "",
+    keyboardOpen ? "keyboard-open" : "",
+    isMobile ? "mobile-view" : "desktop-view",
+    config.lowPowerMode ? "low-power-mode" : "",
+    className
+  ].filter(Boolean).join(" ");
+  
+  // Establecer estilos de rendimiento para optimizar
+  const containerStyle: React.CSSProperties = {
+    // Optimizaciones para rendimiento
+    willChange: isMobile ? 'transform' : 'auto',
+    transform: 'translateZ(0)',
+    backfaceVisibility: 'hidden',
+    // Ajuste para cuando el teclado está abierto
+    paddingBottom: keyboardOpen ? '40vh' : undefined,
+    overflowY: keyboardOpen ? 'auto' : undefined,
+    // Altura específica para pantalla completa en móvil
+    height: isMobile && fullHeight ? `${viewportHeight}px` : undefined
   };
   
-  const mobileClasses = isMobile ? 'mobile-optimized gpu-accelerated' : '';
-  
   return (
-    <div 
-      ref={containerRef} 
-      className={`responsive-container ${mobileClasses} ${className}`}
-      style={{
-        willChange: isMobile ? 'transform' : 'auto',
-        transform: isMobile ? 'translateZ(0)' : 'none',
-        maxWidth: isMobile ? '100vw' : 'auto',
-        overflow: 'hidden',
-        contain: isMobile ? 'content' : 'none'
-      }}
-    >
+    <div className={containerClasses} style={containerStyle}>
       {children}
     </div>
   );

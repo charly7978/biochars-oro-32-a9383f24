@@ -1,112 +1,180 @@
 
-import { useEffect, useRef, useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useIsMobile } from './use-mobile';
+import { AdaptiveFilters } from '../modules/signal-processing/adaptive-filters';
 
-export interface MobileOptimizationOptions {
-  reducedMotion?: boolean;
-  optimizeRendering?: boolean;
-  reducedImageQuality?: boolean;
-  batteryAwareness?: boolean;
+/**
+ * Configuración de optimizaciones móviles
+ */
+interface MobileOptimizationConfig {
+  reduceAnimations: boolean;
+  lowPowerMode: boolean;
+  optimizeNetworkRequests: boolean;
+  reduceProcessingLoad: boolean;
+  useAdaptiveQuality: boolean;
 }
 
-export function useMobileOptimizations(options: MobileOptimizationOptions = {}) {
+/**
+ * Hook para aplicar optimizaciones específicas para dispositivos móviles
+ */
+export const useMobileOptimizations = () => {
   const isMobile = useIsMobile();
-  const [batteryLevel, setBatteryLevel] = useState<number | null>(null);
-  const [isLowPowerMode, setIsLowPowerMode] = useState(false);
-  const optimizationsApplied = useRef(false);
-
-  // Default options
-  const {
-    reducedMotion = true,
-    optimizeRendering = true,
-    reducedImageQuality = true,
-    batteryAwareness = true,
-  } = options;
-
+  const [config, setConfig] = useState<MobileOptimizationConfig>({
+    reduceAnimations: false,
+    lowPowerMode: false,
+    optimizeNetworkRequests: false,
+    reduceProcessingLoad: false,
+    useAdaptiveQuality: true,
+  });
+  
+  // Detectar si el dispositivo tiene batería baja
+  const [isBatteryLow, setIsBatteryLow] = useState<boolean>(false);
+  
+  // Estado para el rendimiento de la red
+  const [networkQuality, setNetworkQuality] = useState<'high'|'medium'|'low'>('high');
+  
+  // Configurar optimizaciones basadas en el tipo de dispositivo
   useEffect(() => {
-    if (!isMobile || optimizationsApplied.current) return;
-
-    // Apply mobile optimizations
-    if (optimizeRendering) {
-      // Add CSS class to html element for global optimizations
-      document.documentElement.classList.add('mobile-optimized');
-      
-      // Find and optimize PPG elements
-      const graphElements = document.querySelectorAll('.ppg-signal-meter, canvas, svg');
-      graphElements.forEach((el) => {
-        if (el instanceof HTMLElement) {
-          el.classList.add('ppg-graph', 'gpu-accelerated', 'rendering-optimized');
-          if (el instanceof HTMLCanvasElement) {
-            const ctx = el.getContext('2d');
-            if (ctx) {
-              ctx.imageSmoothingEnabled = false;
-            }
-          }
-        }
+    if (isMobile) {
+      // Configuración predeterminada para móviles
+      setConfig({
+        reduceAnimations: true,
+        lowPowerMode: isBatteryLow,
+        optimizeNetworkRequests: true,
+        reduceProcessingLoad: true,
+        useAdaptiveQuality: true,
       });
+      
+      // Configurar filtros adaptativos para móvil
+      AdaptiveFilters.getInstance().optimizeForDevice(true);
+      
+      // Aplicar clases CSS para optimizaciones móviles
+      document.body.classList.add('mobile-optimized');
+    } else {
+      // Configuración para escritorio
+      setConfig({
+        reduceAnimations: false,
+        lowPowerMode: false,
+        optimizeNetworkRequests: false,
+        reduceProcessingLoad: false,
+        useAdaptiveQuality: true,
+      });
+      
+      // Configurar filtros adaptativos para escritorio
+      AdaptiveFilters.getInstance().optimizeForDevice(false);
+      
+      // Quitar clases CSS de optimización móvil
+      document.body.classList.remove('mobile-optimized');
     }
-
-    // Add reduced motion if needed
-    if (reducedMotion) {
-      document.documentElement.classList.add('reduced-motion');
-    }
-
-    // Add reduced image quality for better performance
-    if (reducedImageQuality) {
-      document.documentElement.classList.add('reduced-image-quality');
-    }
-
-    // Battery awareness
-    if (batteryAwareness && 'getBattery' in navigator) {
+    
+    // Aplicar optimizaciones a nivel de documento
+    applyDocumentOptimizations();
+    
+  }, [isMobile, isBatteryLow]);
+  
+  // Detectar estado de batería si está disponible
+  useEffect(() => {
+    if ('getBattery' in navigator) {
       const checkBattery = async () => {
         try {
-          const battery = await (navigator as any).getBattery();
-          setBatteryLevel(battery.level);
+          // @ts-ignore - La API de batería no está en todos los navegadores
+          const battery = await navigator.getBattery();
           
-          // If battery below 20% and not charging, enable low power mode
-          setIsLowPowerMode(battery.level < 0.2 && !battery.charging);
+          // Actualizar estado si la batería está por debajo del 20%
+          setIsBatteryLow(battery.level < 0.2 && !battery.charging);
           
-          // Add listener for battery changes
+          // Escuchar cambios en el nivel de batería
           battery.addEventListener('levelchange', () => {
-            setBatteryLevel(battery.level);
-            setIsLowPowerMode(battery.level < 0.2 && !battery.charging);
+            setIsBatteryLow(battery.level < 0.2 && !battery.charging);
           });
           
+          // Escuchar cambios en el estado de carga
           battery.addEventListener('chargingchange', () => {
-            setIsLowPowerMode(battery.level < 0.2 && !battery.charging);
+            setIsBatteryLow(battery.level < 0.2 && !battery.charging);
           });
         } catch (error) {
-          console.warn('Battery status not available:', error);
+          console.error('Error accediendo a la API de batería:', error);
         }
       };
       
       checkBattery();
     }
-
-    optimizationsApplied.current = true;
-  }, [isMobile, reducedMotion, optimizeRendering, reducedImageQuality, batteryAwareness]);
-
-  // If in low power mode, apply more aggressive optimizations
+  }, []);
+  
+  // Verificar calidad de la red
   useEffect(() => {
-    if (isLowPowerMode) {
-      document.documentElement.classList.add('low-power-mode');
+    if ('connection' in navigator) {
+      // @ts-ignore - La API de conexión no está en todos los navegadores
+      const connection = navigator.connection;
       
-      // Find and further optimize all animations
-      const animatedElements = document.querySelectorAll('[class*="animate-"]');
-      animatedElements.forEach((el) => {
-        if (el instanceof HTMLElement) {
-          el.style.animationDuration = '0s';
-          el.style.transition = 'none';
+      const updateNetworkQuality = () => {
+        // @ts-ignore
+        const effectiveType = connection.effectiveType;
+        
+        if (effectiveType === '4g') {
+          setNetworkQuality('high');
+        } else if (effectiveType === '3g') {
+          setNetworkQuality('medium');
+        } else {
+          setNetworkQuality('low');
         }
-      });
-    } else {
-      document.documentElement.classList.remove('low-power-mode');
+      };
+      
+      updateNetworkQuality();
+      
+      // Escuchar cambios en la conexión
+      // @ts-ignore
+      connection.addEventListener('change', updateNetworkQuality);
+      
+      return () => {
+        // @ts-ignore
+        connection.removeEventListener('change', updateNetworkQuality);
+      };
     }
-  }, [isLowPowerMode]);
-
+  }, []);
+  
+  // Aplicar optimizaciones a nivel de documento
+  const applyDocumentOptimizations = useCallback(() => {
+    if (isMobile) {
+      // Desactivar efectos CSS pesados
+      document.documentElement.style.setProperty('--enable-animations', config.reduceAnimations ? '0' : '1');
+      
+      // Optimizar el reflow y repaint
+      document.body.style.willChange = 'transform';
+      document.body.style.backfaceVisibility = 'hidden';
+      
+      // Reducir complejidad visual si está en modo de bajo consumo
+      if (config.lowPowerMode) {
+        document.documentElement.style.setProperty('--enable-shadows', '0');
+        document.documentElement.style.setProperty('--enable-blur', '0');
+      } else {
+        document.documentElement.style.setProperty('--enable-shadows', '1');
+        document.documentElement.style.setProperty('--enable-blur', '1');
+      }
+    } else {
+      // Restaurar valores predeterminados para escritorio
+      document.documentElement.style.setProperty('--enable-animations', '1');
+      document.documentElement.style.setProperty('--enable-shadows', '1');
+      document.documentElement.style.setProperty('--enable-blur', '1');
+      document.body.style.willChange = 'auto';
+      document.body.style.backfaceVisibility = 'visible';
+    }
+  }, [isMobile, config]);
+  
+  // Ajustar configuración de optimización manual
+  const updateOptimizationConfig = useCallback((newConfig: Partial<MobileOptimizationConfig>) => {
+    setConfig(prev => {
+      const updated = { ...prev, ...newConfig };
+      // Aplicar optimizaciones actualizadas
+      return updated;
+    });
+  }, []);
+  
   return {
     isMobile,
-    isLowPowerMode,
-    batteryLevel
+    config,
+    isBatteryLow,
+    networkQuality,
+    updateOptimizationConfig,
   };
-}
+};
