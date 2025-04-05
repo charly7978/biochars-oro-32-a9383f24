@@ -98,24 +98,14 @@ export function usePrecisionVitalSigns() {
   }, [signalProcessing]);
   
   // Procesar señal
-  const processSignal = useCallback((signal: Partial<ProcessedSignal>): PrecisionVitalSignsResult | null => {
+  const processSignal = useCallback((signal: ProcessedSignal): PrecisionVitalSignsResult | null => {
     if (!processorRef.current || !state.isProcessing) {
       return null;
     }
     
     try {
-      // Create a complete ProcessedSignal object
-      const processedSignal: ProcessedSignal = {
-        timestamp: signal.timestamp || Date.now(),
-        rawValue: signal.rawValue || 0,
-        filteredValue: signal.filteredValue || 0,
-        quality: signal.quality || 0,
-        fingerDetected: signal.fingerDetected || false,
-        roi: signal.roi || { x: 0, y: 0, width: 0, height: 0 }
-      };
-      
       // Procesar señal con precisión mejorada
-      const result = processorRef.current.processSignal(processedSignal);
+      const result = processorRef.current.processSignal(signal);
       
       // Actualizar estado con el resultado
       setState(prev => ({
@@ -141,15 +131,14 @@ export function usePrecisionVitalSigns() {
   
   // Escuchar cambios en la señal procesada
   useEffect(() => {
-    if (!state.isProcessing || !signalProcessing.fingerDetected || !signalProcessing.lastResult) {
+    if (!state.isProcessing || !signalProcessing.fingerDetected) {
       return;
     }
     
     // Crear objeto de señal procesada
-    const processedSignal: Partial<ProcessedSignal> = {
+    const processedSignal: ProcessedSignal = {
       timestamp: Date.now(),
-      rawValue: signalProcessing.lastResult.rawValue,
-      filteredValue: signalProcessing.lastResult.filteredValue,
+      filteredValue: signalProcessing.filteredValue || 0,
       quality: signalProcessing.signalQuality,
       fingerDetected: signalProcessing.fingerDetected
     };
@@ -159,7 +148,7 @@ export function usePrecisionVitalSigns() {
     
   }, [
     state.isProcessing,
-    signalProcessing.lastResult,
+    signalProcessing.filteredValue,
     signalProcessing.fingerDetected,
     signalProcessing.signalQuality,
     processSignal
@@ -210,10 +199,7 @@ export function usePrecisionVitalSigns() {
     if (!processorRef.current) return;
     
     processorRef.current.reset();
-    
-    if (signalProcessing && typeof signalProcessing.stopProcessing === 'function') {
-      signalProcessing.stopProcessing();
-    }
+    signalProcessing.reset();
     
     setState({
       isProcessing: false,

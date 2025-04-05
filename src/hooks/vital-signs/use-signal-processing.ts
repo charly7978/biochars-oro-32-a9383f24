@@ -1,171 +1,152 @@
+
 /**
- * Hook for processing vital signs signals
- * Now with diagnostics channel and prioritization system
+ * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
  */
-import { useState, useCallback, useRef, useEffect } from 'react';
-import { VitalSignsProcessor } from '../modules/vital-signs'; // Import from central module
-import { ProcessingPriority } from '../modules/extraction'; // Import priority enum
-import type { VitalSignsResult, RRIntervalData } from '../types/vital-signs';
-import type { ArrhythmiaWindow } from './vital-signs/types';
-import { getDiagnosticsData, clearDiagnosticsData } from '../hooks/heart-beat/signal-processing/peak-detection';
 
-// Interfaz para datos de diagnóstico integral
-export interface DiagnosticsInfo {
-  processedSignals: number;
-  signalLog: Array<{ timestamp: number, value: number, result: any, priority: ProcessingPriority }>;
-  performanceMetrics: {
-    avgProcessTime: number;
-    highPriorityPercentage: number;
-    mediumPriorityPercentage: number;
-    lowPriorityPercentage: number;
-    lowPriorityPercentage: number;
-  };
-}
+import { useRef, useCallback } from 'react';
+import { VitalSignsResult } from '../../modules/vital-signs/types/vital-signs-result';
+import { VitalSignsProcessor } from '../../modules/vital-signs/VitalSignsProcessor';
 
-export function useSignalProcessing() {
-  const [state, setState] = useState({
-    spo2: 0,
-    pressure: '--/--',
-    arrhythmiaStatus: '--',
-    glucose: 0,
-    lipids: {
-      totalCholesterol: 0,
-      hydrationPercentage: 0
-    },
-    confidence: {
-      glucose: 0,
-      lipids: 0,
-      overall: 0
-    }
-  });
-  const [refreshCounter, setRefreshCounter] = useState(0);
-  const [diagnostics, setDiagnostics] = useState<any>(null);
-  const diagnosticsRef = useRef<any>(null);
-  const [isDiagnosticsEnabled, setIsDiagnosticsEnabled] = useState(false);
+/**
+ * Hook for processing signal using the VitalSignsProcessor
+ * Direct measurement only, no simulation
+ */
+export const useSignalProcessing = () => {
+  // Reference for processor instance
+  const processorRef = useRef<VitalSignsProcessor | null>(null);
+  const processedSignals = useRef<number>(0);
+  const signalLog = useRef<{timestamp: number, value: number, result: any}[]>([]);
   
-  // Mocked values for demonstration
-  const spo2Value = 98 + Math.random() * 2;
-  const systolic = 120 + Math.random() * 10;
-  const diastolic = 80 + Math.random() * 5;
-  const glucose = 90 + Math.random() * 15;
-  const cholesterol = 190 + Math.random() * 25;
-  const hydration = 60 + Math.random() * 10;
-  const glucoseConf = 0.8 + Math.random() * 0.2;
-  const lipidsConf = 0.7 + Math.random() * 0.3;
-  const overallConf = 0.75 + Math.random() * 0.25;
-  
-  // Toggle diagnostics
-  const toggleDiagnostics = useCallback(() => {
-    setIsDiagnosticsEnabled(prev => !prev);
-    console.log(`Diagnostics toggled: ${!isDiagnosticsEnabled}`);
-  }, [isDiagnosticsEnabled]);
-  
-  // Get diagnostics data
-  const getDiagnostics = useCallback(() => {
-    return diagnosticsRef.current;
-  }, []);
-  
-  // Refresh state
-  const refreshState = useCallback(() => {
-    setRefreshCounter(prev => prev + 1);
-  }, []);
-  
-  // Process signal data
-  const processSignalData = useCallback((value: number): VitalSignsResult => {
-    // Simulate signal processing
-    const timestamp = Date.now();
-    
-    if (isDiagnosticsEnabled) {
-      diagnosticsRef.current = {
-        timestamp,
-        value,
-        spo2Value,
-        systolic,
-        diastolic,
-        glucose,
-        cholesterol,
-        hydration,
-        glucoseConf,
-        lipidsConf,
-        overallConf
-      };
-      setDiagnostics(diagnosticsRef.current);
-    }
-    
-    // If signal is too weak, return zeros
-    if (Math.abs(value) < 0.01) {
+  /**
+   * Process PPG signal directly
+   * No simulation or reference values
+   */
+  const processSignal = useCallback((
+    value: number, 
+    rrData?: { intervals: number[], lastPeakTime: number | null },
+    isWeakSignal: boolean = false
+  ): VitalSignsResult => {
+    if (!processorRef.current) {
+      console.log("useVitalSignsProcessor: Processor not initialized");
       return {
         spo2: 0,
-        pressure: '--/--',
-        arrhythmiaStatus: '--',
+        pressure: "--/--",
+        arrhythmiaStatus: "--",
         glucose: 0,
         lipids: {
           totalCholesterol: 0,
-          hydrationPercentage: 0  // Changed from triglycerides to hydrationPercentage
-        },
-        confidence: {
-          glucose: 0,
-          lipids: 0,
-          overall: 0
+          triglycerides: 0
         }
       };
     }
     
-    // Simulate signal processing
-    const spo2Value = 98 + Math.random() * 2;
-    const systolic = 120 + Math.random() * 10;
-    const diastolic = 80 + Math.random() * 5;
-    const glucose = 90 + Math.random() * 15;
-    const cholesterol = 190 + Math.random() * 25;
-    const hydration = 60 + Math.random() * 10;
-    const glucoseConf = 0.8 + Math.random() * 0.2;
-    const lipidsConf = 0.7 + Math.random() * 0.3;
-    const overallConf = 0.75 + Math.random() * 0.25;
+    processedSignals.current++;
     
-    // Return processed result
+    // If too many weak signals, return zeros
+    if (isWeakSignal) {
+      return {
+        spo2: 0,
+        pressure: "--/--",
+        arrhythmiaStatus: "--",
+        glucose: 0,
+        lipids: {
+          totalCholesterol: 0,
+          triglycerides: 0
+        }
+      };
+    }
+    
+    // Logging for diagnostics
+    if (processedSignals.current % 45 === 0) {
+      console.log("useVitalSignsProcessor: Processing signal DIRECTLY", {
+        inputValue: value,
+        rrDataPresent: !!rrData,
+        rrIntervals: rrData?.intervals.length || 0,
+        arrhythmiaCount: processorRef.current.getArrhythmiaCounter(),
+        signalNumber: processedSignals.current
+      });
+    }
+    
+    // Process signal directly - no simulation
+    // Fixed: Pass parameters correctly as expected by processSignal method
+    const result = processorRef.current.processSignal({
+      value,
+      rrData
+    });
+    
+    return result;
+  }, []);
+
+  /**
+   * Initialize the processor
+   * Direct measurement only
+   */
+  const initializeProcessor = useCallback(() => {
+    console.log("useVitalSignsProcessor: Initializing processor for DIRECT MEASUREMENT ONLY", {
+      timestamp: new Date().toISOString()
+    });
+    
+    // Create new instances for direct measurement
+    processorRef.current = new VitalSignsProcessor();
+  }, []);
+
+  /**
+   * Reset the processor
+   * No simulations or reference values
+   */
+  const reset = useCallback(() => {
+    if (!processorRef.current) return null;
+    
+    console.log("useVitalSignsProcessor: Reset initiated - DIRECT MEASUREMENT mode only");
+    
+    processorRef.current.reset();
+    
+    console.log("useVitalSignsProcessor: Reset completed - all values at zero for direct measurement");
+    return null;
+  }, []);
+  
+  /**
+   * Perform full reset - clear all data
+   * No simulations or reference values
+   */
+  const fullReset = useCallback(() => {
+    if (!processorRef.current) return;
+    
+    console.log("useVitalSignsProcessor: Full reset initiated - DIRECT MEASUREMENT mode only");
+    
+    processorRef.current.fullReset();
+    processedSignals.current = 0;
+    signalLog.current = [];
+    
+    console.log("useVitalSignsProcessor: Full reset complete - direct measurement mode active");
+  }, []);
+
+  /**
+   * Get the arrhythmia counter
+   */
+  const getArrhythmiaCounter = useCallback(() => {
+    return processorRef.current?.getArrhythmiaCounter() || 0;
+  }, []);
+
+  /**
+   * Get debug information about signal processing
+   */
+  const getDebugInfo = useCallback(() => {
     return {
-      spo2: spo2Value,
-      pressure: `${systolic}/${diastolic}`,
-      arrhythmiaStatus: '',
-      glucose: glucose,
-      lipids: {
-        totalCholesterol: cholesterol,
-        hydrationPercentage: hydration  // Changed from triglycerides to hydrationPercentage
-      },
-      confidence: {
-        glucose: glucoseConf,
-        lipids: lipidsConf,
-        overall: overallConf
-      }
+      processedSignals: processedSignals.current,
+      signalLog: signalLog.current.slice(-10)
     };
-  }, [state, refreshCounter]);
-  
-  // Update state
-  useEffect(() => {
-    setState(prevState => ({
-      ...prevState,
-      spo2: spo2Value,
-      pressure: `${systolic}/${diastolic}`,
-      glucose: glucose,
-      lipids: {
-        totalCholesterol: cholesterol,
-        hydrationPercentage: hydration
-      },
-      confidence: {
-        glucose: glucoseConf,
-        lipids: lipidsConf,
-        overall: overallConf
-      }
-    }));
-  }, [refreshCounter, spo2Value, systolic, diastolic, glucose, cholesterol, hydration, glucoseConf, lipidsConf, overallConf]);
-  
+  }, []);
+
   return {
-    state,
-    refreshState,
-    diagnostics,
-    getDiagnostics,
-    toggleDiagnostics,
-    isDiagnosticsEnabled,
-    processSignalData
+    processSignal,
+    initializeProcessor,
+    reset,
+    fullReset,
+    getArrhythmiaCounter,
+    getDebugInfo,
+    processorRef,
+    processedSignals,
+    signalLog
   };
-}
+};

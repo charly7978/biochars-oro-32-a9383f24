@@ -1,15 +1,15 @@
+
 /**
  * Specialized channel for lipids signal processing
  * Optimizes the signal specifically for lipid measurement algorithms
  * Focuses on waveform morphology and harmonic analysis
  */
 
-import { SpecializedChannel } from './SpecializedChannel';
-import { ChannelFeedback, VitalSignType } from '../../../types/signal';
-import { applyMixedFilter } from '../utils/mixed-model';
+import { SpecializedChannel, ChannelConfig } from './SpecializedChannel';
+import { VitalSignType } from '../../../types/signal';
 
 /**
- * Channel for processing lipids (now hydration) measurements
+ * Lipids-specific channel implementation
  */
 export class LipidsChannel extends SpecializedChannel {
   // Lipids-specific parameters
@@ -22,8 +22,8 @@ export class LipidsChannel extends SpecializedChannel {
   private readonly SPECTRAL_BUFFER_SIZE = 64; // Power of 2 for FFT
   private harmonicRatios: number[] = [];
   
-  constructor() {
-    super(VitalSignType.HYDRATION);
+  constructor(config: ChannelConfig) {
+    super(VitalSignType.LIPIDS, config);
   }
   
   /**
