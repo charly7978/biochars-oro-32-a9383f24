@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { HeartBeatProcessor } from '../modules/HeartBeatProcessor';
 import { toast } from 'sonner';
+import { RRAnalysisResult } from './arrhythmia/types';
 import { useBeepProcessor } from './heart-beat/beep-processor';
 import { useArrhythmiaDetector } from './heart-beat/arrhythmia-detector';
 import { useSignalProcessor } from './heart-beat/signal-processor';
@@ -28,16 +29,14 @@ export const useHeartBeatProcessor = (): UseHeartBeatReturn => {
     cleanup: cleanupBeepProcessor 
   } = useBeepProcessor();
   
-  // Get all necessary refs from useArrhythmiaDetector
   const {
-    processRRIntervals,
-    reset: resetArrhythmiaDetector,
-    getArrhythmiaState,
+    detectArrhythmia,
+    heartRateVariabilityRef,
+    stabilityCounterRef,
     lastRRIntervalsRef,
     lastIsArrhythmiaRef,
     currentBeatIsArrhythmiaRef,
-    heartRateVariabilityRef,
-    stabilityCounterRef
+    reset: resetArrhythmiaDetector
   } = useArrhythmiaDetector();
   
   const {
@@ -120,10 +119,6 @@ export const useHeartBeatProcessor = (): UseHeartBeatReturn => {
       };
     }
 
-    // Ensure these refs exist before accessing them
-    const lastRRIntervals = lastRRIntervalsRef?.current || [];
-    const currentBeatIsArrhythmia = currentBeatIsArrhythmiaRef?.current || false;
-
     const result = processSignalInternal(
       value, 
       currentBPM, 
@@ -131,8 +126,8 @@ export const useHeartBeatProcessor = (): UseHeartBeatReturn => {
       processorRef.current, 
       requestBeep, 
       isMonitoringRef, 
-      { current: lastRRIntervals }, 
-      { current: currentBeatIsArrhythmia }
+      lastRRIntervalsRef, 
+      currentBeatIsArrhythmiaRef
     );
 
     if (result.bpm > 0 && result.confidence > 0.4) {
@@ -140,10 +135,11 @@ export const useHeartBeatProcessor = (): UseHeartBeatReturn => {
       setConfidence(result.confidence);
     }
 
-    // Process arrhythmia detection if we have enough RR intervals
-    if (lastRRIntervals.length >= 3) {
-      const isArrhythmia = processRRIntervals(lastRRIntervals);
-      result.isArrhythmia = isArrhythmia;
+    if (lastRRIntervalsRef.current.length >= 3) {
+      const arrhythmiaResult = detectArrhythmia(lastRRIntervalsRef.current);
+      currentBeatIsArrhythmiaRef.current = arrhythmiaResult.isArrhythmia;
+      
+      result.isArrhythmia = currentBeatIsArrhythmiaRef.current;
     }
 
     return result;
@@ -152,9 +148,7 @@ export const useHeartBeatProcessor = (): UseHeartBeatReturn => {
     confidence, 
     processSignalInternal, 
     requestBeep, 
-    processRRIntervals,
-    lastRRIntervalsRef,
-    currentBeatIsArrhythmiaRef
+    detectArrhythmia
   ]);
 
   const reset = useCallback(() => {
@@ -224,7 +218,7 @@ export const useHeartBeatProcessor = (): UseHeartBeatReturn => {
     confidence,
     processSignal,
     reset,
-    isArrhythmia: currentBeatIsArrhythmiaRef?.current || false,
+    isArrhythmia: currentBeatIsArrhythmiaRef.current,
     requestBeep,
     startMonitoring,
     stopMonitoring

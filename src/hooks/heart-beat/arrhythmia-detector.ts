@@ -1,22 +1,20 @@
+
 /**
  * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
  */
 
 import { useCallback, useRef, useEffect } from 'react';
 import { calculateRMSSD, calculateRRVariation } from '../../modules/vital-signs/arrhythmia/calculations';
-import { ArrhythmiaState, UseArrhythmiaDetectorReturn } from '../heart-beat/types';
+import { ArrhythmiaState } from '../vital-signs/types';
 
 /**
  * Hook for arrhythmia detection based on real RR interval data
  * No simulation or data manipulation is used - direct measurement only
  */
-export function useArrhythmiaDetector(): UseArrhythmiaDetectorReturn {
+export function useArrhythmiaDetector() {
   const heartRateVariabilityRef = useRef<number[]>([]);
   const stabilityCounterRef = useRef<number>(0);
-  const lastRRIntervalsRef = useRef<number[]>([]);
   const lastAnomalyTimeRef = useRef<number>(0);
-  const lastIsArrhythmiaRef = useRef<boolean>(false);
-  const currentBeatIsArrhythmiaRef = useRef<boolean>(false);
   
   // Estado para evitar que las arritmias queden "trabadas"
   const arrhythmiaStateRef = useRef<ArrhythmiaState>({
@@ -45,109 +43,91 @@ export function useArrhythmiaDetector(): UseArrhythmiaDetectorReturn {
     
     return () => clearInterval(intervalId);
   }, []);
-
-  /**
-   * Analyzes RR intervals and returns whether an arrhythmia is detected
-   */
-  const detectArrhythmia = useCallback((intervals: number[]): RRAnalysisResult => {
-    if (intervals.length < 3) {
-      return {
-        rmssd: 0,
-        rrVariation: 0,
-        timestamp: Date.now(),
-        isArrhythmia: false
-      };
-    }
-    
-    // Calculate heart rate variability metrics
-    const rmssd = calculateRMSSD(intervals.slice(-8));
-    const rrVariation = calculateRRVariation(intervals.slice(-8));
-    
-    // Update tracked intervals
-    lastRRIntervalsRef.current = intervals.slice(-8);
-    
-    // Detect arrhythmia based on variability thresholds
-    const isHighVariability = rrVariation > 0.2;
-    const isHighRMSSD = rmssd > 50;
-    const isArrhythmia = isHighVariability && isHighRMSSD;
-    
-    if (isArrhythmia) {
-      lastIsArrhythmiaRef.current = true;
-      currentBeatIsArrhythmiaRef.current = true;
-      lastAnomalyTimeRef.current = Date.now();
-      
-      // Update arrhythmia state
-      arrhythmiaStateRef.current.isActive = true;
-      arrhythmiaStateRef.current.lastDetectionTime = Date.now();
-      
-      // Update visualization window
-      if (arrhythmiaStateRef.current.windows.length === 0 || 
-          Date.now() - arrhythmiaStateRef.current.windows[arrhythmiaStateRef.current.windows.length - 1].end > 1000) {
-        // Create new window
-        arrhythmiaStateRef.current.windows.push({
-          start: Date.now(),
-          end: Date.now() + 1000
-        });
-        
-        // Limit window count
-        if (arrhythmiaStateRef.current.windows.length > 10) {
-          arrhythmiaStateRef.current.windows.shift();
-        }
-      } else {
-        // Extend current window
-        arrhythmiaStateRef.current.windows[arrhythmiaStateRef.current.windows.length - 1].end = Date.now() + 1000;
-      }
-      
-      stabilityCounterRef.current = 0;
-    } else {
-      currentBeatIsArrhythmiaRef.current = false;
-      stabilityCounterRef.current++;
-      
-      // After enough stable beats, reset arrhythmia state,
-      // but don't clear the windows for visualization
-      if (stabilityCounterRef.current > 10) {
-        lastIsArrhythmiaRef.current = false;
-      }
-    }
-    
-    // Update variability history
-    heartRateVariabilityRef.current.push(rrVariation);
-    if (heartRateVariabilityRef.current.length > 10) {
-      heartRateVariabilityRef.current.shift();
-    }
-    
-    return {
-      rmssd,
-      rrVariation,
-      timestamp: Date.now(),
-      isArrhythmia
-    };
-  }, []);
   
   /**
-   * Process RR intervals and detect arrhythmias
+   * Procesa datos de intervalo RR para detección de arritmias
+   * Solo usa datos reales medidos - sin simulaciones
    */
   const processRRIntervals = useCallback((intervals: number[]): boolean => {
     if (!intervals || intervals.length < 3) {
       return false;
     }
     
-    const result = detectArrhythmia(intervals);
-    return result.isArrhythmia;
-  }, [detectArrhythmia]);
+    // Usar solo los últimos 8 intervalos para análisis de tiempo real
+    const recentIntervals = intervals.slice(-8);
+    
+    // Calcular variabilidad y RMSSD con datos reales
+    const rmssd = calculateRMSSD(recentIntervals);
+    const rrVariation = calculateRRVariation(recentIntervals);
+    
+    // Detección de arritmia con estadísticas reales - no simuladas
+    const isHighVariability = rrVariation > 0.2;
+    const isHighRMSSD = rmssd > 50;
+    
+    // Anomalía detectada con datos reales
+    const anomalyDetected = isHighVariability && isHighRMSSD;
+    
+    // Actualizar historial de variabilidad
+    heartRateVariabilityRef.current.push(rrVariation);
+    if (heartRateVariabilityRef.current.length > 10) {
+      heartRateVariabilityRef.current.shift();
+    }
+    
+    // Lógica de detección de arritmia con memoria
+    if (anomalyDetected) {
+      stabilityCounterRef.current = 0;
+      lastAnomalyTimeRef.current = Date.now();
+      
+      // Actualizar estado de arritmia
+      arrhythmiaStateRef.current = {
+        ...arrhythmiaStateRef.current,
+        isActive: true,
+        lastDetectionTime: lastAnomalyTimeRef.current
+      };
+      
+      // Actualizar ventanas de visualización
+      if (arrhythmiaStateRef.current.windows.length === 0 || 
+          Date.now() - arrhythmiaStateRef.current.windows[arrhythmiaStateRef.current.windows.length - 1].end > 1000) {
+        // Crear nueva ventana
+        arrhythmiaStateRef.current.windows.push({
+          start: Date.now(),
+          end: Date.now() + 1000
+        });
+        
+        // Limitar número de ventanas
+        if (arrhythmiaStateRef.current.windows.length > 10) {
+          arrhythmiaStateRef.current.windows.shift();
+        }
+      } else {
+        // Extender ventana actual
+        arrhythmiaStateRef.current.windows[arrhythmiaStateRef.current.windows.length - 1].end = 
+          Date.now() + 1000;
+      }
+      
+      return true;
+    } else {
+      stabilityCounterRef.current++;
+      
+      // Si hay suficientes ciclos estables, desactivar estado de arritmia
+      // pero esto no borra las ventanas de arritmia para visualización
+      if (stabilityCounterRef.current > 10) {
+        // No hacemos reset aquí - dejamos que el timeout lo haga para evitar
+        // falsos negativos en la detección de arritmias
+      }
+      
+      return arrhythmiaStateRef.current.isActive;
+    }
+  }, []);
   
   /**
-   * Reset the detector state
+   * Resetea el detector de arritmias
    */
   const reset = useCallback(() => {
     heartRateVariabilityRef.current = [];
     stabilityCounterRef.current = 0;
-    lastRRIntervalsRef.current = [];
     lastAnomalyTimeRef.current = 0;
-    lastIsArrhythmiaRef.current = false;
-    currentBeatIsArrhythmiaRef.current = false;
     
-    // Reset arrhythmia state
+    // Reset del estado de arritmia
     arrhythmiaStateRef.current = {
       isActive: false,
       lastDetectionTime: 0,
@@ -157,7 +137,7 @@ export function useArrhythmiaDetector(): UseArrhythmiaDetectorReturn {
   }, []);
   
   /**
-   * Get the current arrhythmia state
+   * Obtiene el estado actual de arritmia
    */
   const getArrhythmiaState = useCallback((): ArrhythmiaState => {
     return arrhythmiaStateRef.current;
@@ -166,11 +146,6 @@ export function useArrhythmiaDetector(): UseArrhythmiaDetectorReturn {
   return {
     processRRIntervals,
     reset,
-    getArrhythmiaState,
-    heartRateVariabilityRef,
-    stabilityCounterRef,
-    lastRRIntervalsRef,
-    lastIsArrhythmiaRef,
-    currentBeatIsArrhythmiaRef
+    getArrhythmiaState
   };
 }
