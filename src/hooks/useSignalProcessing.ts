@@ -1,11 +1,12 @@
+
 /**
  * Hook for central signal processing
  * Integrates specialized processors from signal-processing module
  */
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { 
-  PPGSignalProcessor, 
-  HeartbeatProcessor,
+  HeartBeatProcessor,
+  SignalProcessor,
   ProcessedPPGSignal,
   ProcessedHeartbeatSignal,
   SignalProcessingOptions,
@@ -41,8 +42,8 @@ export interface ProcessedSignalResult {
  */
 export function useSignalProcessing() {
   // Processor instances
-  const ppgProcessorRef = useRef<PPGSignalProcessor | null>(null);
-  const heartbeatProcessorRef = useRef<HeartbeatProcessor | null>(null);
+  const ppgProcessorRef = useRef<SignalProcessor | null>(null);
+  const heartbeatProcessorRef = useRef<HeartBeatProcessor | null>(null);
   
   // Processing state
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
@@ -61,12 +62,12 @@ export function useSignalProcessing() {
   useEffect(() => {
     if (!ppgProcessorRef.current) {
       console.log("useSignalProcessing: Creating PPG processor");
-      ppgProcessorRef.current = new PPGSignalProcessor();
+      ppgProcessorRef.current = new SignalProcessor();
     }
     
     if (!heartbeatProcessorRef.current) {
       console.log("useSignalProcessing: Creating heartbeat processor");
-      heartbeatProcessorRef.current = new HeartbeatProcessor();
+      heartbeatProcessorRef.current = new HeartBeatProcessor();
     }
     
     return () => {
@@ -194,7 +195,9 @@ export function useSignalProcessing() {
     
     // Reset processors
     ppgProcessorRef.current.reset();
-    heartbeatProcessorRef.current.reset();
+    if (typeof heartbeatProcessorRef.current.reset === 'function') {
+      heartbeatProcessorRef.current.reset();
+    }
     resetFingerDetector();
     
     // Clear states
@@ -223,10 +226,26 @@ export function useSignalProcessing() {
     if (ppgProcessorRef.current) {
       ppgProcessorRef.current.configure(options);
     }
+  }, []);
+  
+  /**
+   * Reset signal processing
+   */
+  const reset = useCallback(() => {
+    console.log("useSignalProcessing: Reset");
     
-    if (heartbeatProcessorRef.current) {
-      heartbeatProcessorRef.current.configure(options);
+    if (ppgProcessorRef.current) {
+      ppgProcessorRef.current.reset();
     }
+    
+    setSignalQuality(0);
+    setFingerDetected(false);
+    setHeartRate(0);
+    setLastResult(null);
+    recentBpmValues.current = [];
+    processedFramesRef.current = 0;
+    
+    setIsProcessing(false);
   }, []);
   
   return {
@@ -243,6 +262,7 @@ export function useSignalProcessing() {
     startProcessing,
     stopProcessing,
     configureProcessors,
+    reset,
     
     // Processors
     ppgProcessor: ppgProcessorRef.current,

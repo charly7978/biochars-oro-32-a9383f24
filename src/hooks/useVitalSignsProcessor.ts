@@ -140,6 +140,12 @@ export const useVitalSignsProcessor = () => {
     };
   };
   
+  const initializeProcessor = (): void => {
+    console.log("Initializing vital signs processor");
+    setIsProcessing(true);
+    setProcessedValues(0);
+  };
+  
   return {
     lastResult,
     lastValidResults,
@@ -151,6 +157,7 @@ export const useVitalSignsProcessor = () => {
     reset,
     fullReset,
     getArrhythmiaCounter,
+    initializeProcessor,
     processor: processorRef.current
   };
 };
