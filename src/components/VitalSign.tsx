@@ -25,6 +25,9 @@ const VitalSign: React.FC<VitalSignProps> = ({
     // Regular values
     return value;
   };
+
+  // Check if the value is valid for display
+  const isValidValue = value !== 0 && value !== "--" && value !== "";
   
   return (
     <div className={cn(
@@ -43,7 +46,7 @@ const VitalSign: React.FC<VitalSignProps> = ({
           {displayValue()}
         </span>
         
-        {unit && value !== "--" && value !== 0 && (
+        {unit && isValidValue && (
           <span className="ml-1 text-xs text-gray-400">
             {unit}
           </span>

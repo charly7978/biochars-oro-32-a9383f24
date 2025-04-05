@@ -1,15 +1,15 @@
 
 /**
  * Hook for accessing vital signs processing capabilities
- * Including the new hydration measurement
+ * Using direct PPG signal processing without any simulation
  */
 
-import { useState, useEffect, useRef } from 'react';
-import { VitalSignsProcessor } from '../modules/vital-signs/VitalSignsProcessor';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { VitalSignsProcessor } from '../modules/signal-processing/VitalSignsProcessor';
 import { VitalSignsResult } from '../modules/vital-signs/types/vital-signs-result';
 
 /**
- * Hook for processing vital signs with integrated hydration
+ * Hook for processing vital signs from PPG signal
  */
 export const useVitalSignsProcessor = () => {
   // Create processor instance
@@ -20,10 +20,14 @@ export const useVitalSignsProcessor = () => {
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [processedValues, setProcessedValues] = useState<number>(0);
   const [lastValidResults, setLastValidResults] = useState<VitalSignsResult | null>(null);
+  const [signalQuality, setSignalQuality] = useState<number>(0);
+  
+  // Debug counter for logging
+  const debugCounterRef = useRef<number>(0);
   
   // Create processor on mount
   useEffect(() => {
-    console.log("Creating vital signs processor with hydration support");
+    console.log("Creating vital signs processor with direct PPG processing");
     processorRef.current = new VitalSignsProcessor();
     
     return () => {
@@ -34,117 +38,161 @@ export const useVitalSignsProcessor = () => {
   
   /**
    * Process a PPG signal to calculate vital signs
-   * @param value PPG signal value
+   * @param value PPG signal value 
    * @param rrData Optional RR interval data
    * @returns VitalSignsResult with measurements
    */
-  const processSignal = (
-    value: number, 
-    rrData?: { 
-      intervals: number[], 
-      lastPeakTime: number | null 
-    }
-  ): VitalSignsResult => {
-    // Extra debugging
-    if (processedValues % 100 === 0) {
-      console.log("useVitalSignsProcessor: Processing signal batch", {
-        processedValues,
-        isProcessing,
-        hasProcessor: !!processorRef.current,
-        value,
-        hasRRData: !!rrData,
-        rrIntervals: rrData?.intervals?.length || 0
-      });
-    }
-    
-    if (!processorRef.current || !isProcessing) {
-      console.log("useVitalSignsProcessor: Not processing - processor not ready or not active", {
-        hasProcessor: !!processorRef.current,
-        isProcessing
-      });
-      return getEmptyResult();
-    }
-    
-    try {
-      // Process signal with standard interface
-      const result = processorRef.current.processSignal({ value, rrData });
+  const processSignal = useCallback(
+    (
+      value: number, 
+      rrData?: { 
+        intervals: number[], 
+        lastPeakTime: number | null 
+      }
+    ): VitalSignsResult => {
+      // Increment debug counter
+      debugCounterRef.current += 1;
       
-      // Update state
-      setLastResult(result);
-      setProcessedValues(prev => prev + 1);
-      
-      // Log every 30 values
-      if (processedValues % 30 === 0) {
-        console.log("Vital signs processed:", processedValues, "values");
-        console.log("Latest vital signs:", {
-          spo2: result.spo2,
-          pressure: result.pressure,
-          glucose: result.glucose,
-          hydration: result.lipids.hydrationPercentage,
-          cholesterol: result.lipids.totalCholesterol
+      // Debug logging every 100 values
+      if (debugCounterRef.current % 100 === 0) {
+        console.log("useVitalSignsProcessor: Processing signal batch", {
+          processedCount: debugCounterRef.current,
+          isProcessing,
+          hasProcessor: !!processorRef.current,
+          value: value.toFixed(4),
+          hasRRData: !!rrData,
+          rrIntervals: rrData?.intervals?.length || 0
         });
       }
       
-      return result;
-    } catch (error) {
-      console.error("Error processing vital signs:", error);
-      return getEmptyResult();
-    }
-  };
+      if (!processorRef.current || !isProcessing) {
+        console.log("useVitalSignsProcessor: Not processing - processor not ready or not active", {
+          hasProcessor: !!processorRef.current,
+          isProcessing
+        });
+        return getEmptyResult();
+      }
+      
+      try {
+        // Process signal with direct processing
+        const result = processorRef.current.processSignal(value, rrData);
+        
+        // Update state for valid results (with non-zero values)
+        if (result.spo2 > 0 || result.glucose > 0) {
+          setLastResult(result);
+          setSignalQuality(processorRef.current.getSignalQuality());
+        }
+        
+        // Update processed values counter
+        setProcessedValues(prev => prev + 1);
+        
+        // Detailed logging to debug measurement issues
+        if (debugCounterRef.current % 30 === 0) {
+          console.log("Vital signs processed:", {
+            valuesProcessed: debugCounterRef.current,
+            quality: processorRef.current.getSignalQuality(),
+            results: {
+              spo2: result.spo2,
+              pressure: result.pressure,
+              glucose: result.glucose,
+              hydration: result.lipids.hydrationPercentage,
+              cholesterol: result.lipids.totalCholesterol,
+              arrhythmia: result.arrhythmiaStatus
+            }
+          });
+        }
+        
+        return result;
+      } catch (error) {
+        console.error("Error processing vital signs:", error);
+        return getEmptyResult();
+      }
+    }, [isProcessing]
+  );
   
   /**
    * Start processing
    */
-  const startProcessing = (): void => {
-    console.log("Starting vital signs processing");
-    setIsProcessing(true);
+  const startProcessing = useCallback((): void => {
+    console.log("Starting vital signs processing with direct PPG processing");
+    
+    // Initialize processor if needed
+    if (!processorRef.current) {
+      console.log("Creating new processor instance");
+      processorRef.current = new VitalSignsProcessor();
+    }
+    
+    // Enable processing in processor
+    processorRef.current.enableProcessing(true);
+    
+    // Reset counters
     setProcessedValues(0);
-  };
+    debugCounterRef.current = 0;
+    
+    // Start processing
+    setIsProcessing(true);
+  }, []);
   
   /**
    * Stop processing
    */
-  const stopProcessing = (): void => {
+  const stopProcessing = useCallback((): void => {
     console.log("Stopping vital signs processing");
+    
+    // Stop processor
+    if (processorRef.current) {
+      processorRef.current.enableProcessing(false);
+    }
+    
     setIsProcessing(false);
-  };
+  }, []);
   
   /**
    * Reset processor
    * @returns Last valid result before reset
    */
-  const reset = (): VitalSignsResult | null => {
+  const reset = useCallback((): VitalSignsResult | null => {
     console.log("Resetting vital signs processor");
+    
     if (processorRef.current) {
       const lastValid = processorRef.current.reset();
+      
       if (lastValid) {
         setLastValidResults(lastValid);
       }
+      
       setProcessedValues(0);
+      debugCounterRef.current = 0;
+      
       return lastValid;
     }
+    
     return null;
-  };
+  }, []);
   
   /**
    * Full reset including counters
    */
-  const fullReset = (): void => {
+  const fullReset = useCallback((): void => {
     console.log("Full reset of vital signs processor");
+    
     if (processorRef.current) {
       processorRef.current.fullReset();
     }
+    
     setLastResult(null);
     setLastValidResults(null);
     setProcessedValues(0);
-  };
+    setSignalQuality(0);
+    debugCounterRef.current = 0;
+  }, []);
   
   /**
    * Get arrhythmia counter
    */
-  const getArrhythmiaCounter = (): number => {
+  const getArrhythmiaCounter = useCallback((): number => {
     return processorRef.current?.getArrhythmiaCounter() || 0;
-  };
+  }, []);
   
   /**
    * Get empty result for initialization or errors
@@ -162,27 +210,18 @@ export const useVitalSignsProcessor = () => {
     };
   };
   
-  const initializeProcessor = (): void => {
-    console.log("Initializing vital signs processor");
-    if (!processorRef.current) {
-      processorRef.current = new VitalSignsProcessor();
-    }
-    setIsProcessing(true);
-    setProcessedValues(0);
-  };
-  
   return {
     lastResult,
     lastValidResults,
     isProcessing,
     processedValues,
+    signalQuality,
     processSignal,
     startProcessing,
     stopProcessing,
     reset,
     fullReset,
     getArrhythmiaCounter,
-    initializeProcessor,
     processor: processorRef.current
   };
 };
