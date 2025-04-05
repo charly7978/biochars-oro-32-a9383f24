@@ -1,75 +1,152 @@
+
 /**
  * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
  * 
- * Implementación de buffer circular optimizado
- * Proporciona almacenamiento eficiente para señales
+ * Implementación de buffer circular con optimización de memoria
+ * Proporciona almacenamiento eficiente para señales con tamaño limitado
  */
 import { CircularBufferState } from '../types';
 import { logError, ErrorLevel } from '@/utils/debugUtils';
 
 /**
- * Buffer circular para valores
+ * Clase para implementar un buffer circular de tamaño fijo con optimización de memoria
  */
 export class CircularBuffer<T> {
   private buffer: T[];
   private head: number = 0;
   private tail: number = 0;
   private size: number = 0;
-  private readonly capacity: number;
-  private readonly useTypeChecking: boolean;
-  private readonly useAverageTracking: boolean;
-  private sumValue: number = 0;
-  private minValue: number = 0;
-  private maxValue: number = 0;
+  private capacity: number;
+  private memoryOptimization: boolean;
+  private adaptiveSize: boolean;
+  private resizeThreshold: number;
+  private memoryPressureThreshold: number;
   
   /**
    * Constructor del buffer circular
+   * @param capacity Capacidad máxima del buffer
+   * @param memoryOptimization Si se debe optimizar uso de memoria
+   * @param adaptiveSize Si el tamaño se debe adaptar automáticamente
    */
   constructor(
-    capacity: number, 
-    useTypeChecking: boolean = false,
-    useAverageTracking: boolean = false
+    capacity: number = 100, 
+    memoryOptimization: boolean = true,
+    adaptiveSize: boolean = true
   ) {
     this.capacity = Math.max(1, capacity);
     this.buffer = new Array<T>(this.capacity);
-    this.useTypeChecking = useTypeChecking;
-    this.useAverageTracking = useAverageTracking;
+    this.memoryOptimization = memoryOptimization;
+    this.adaptiveSize = adaptiveSize;
+    
+    // Parámetros para ajuste dinámico
+    this.resizeThreshold = 0.9; // 90% de capacidad para aumentar
+    this.memoryPressureThreshold = 0.8; // 80% de uso de memoria para reducir
   }
   
   /**
-   * Añade un valor al buffer
+   * Añade un elemento al buffer
    */
-  public push(value: T): void {
+  public push(item: T): void {
     try {
-      if (this.useTypeChecking && typeof value !== typeof this.buffer[0] && this.size > 0) {
-        throw new Error(`Tipo de dato inválido: ${typeof value}, se esperaba ${typeof this.buffer[0]}`);
-      }
-      
-      this.buffer[this.head] = value;
-      
-      if (this.useAverageTracking && typeof value === 'number') {
-        this.sumValue += value;
-        this.minValue = this.size === 0 ? value : Math.min(this.minValue, value);
-        this.maxValue = this.size === 0 ? value : Math.max(this.maxValue, value);
-      }
-      
-      this.head = (this.head + 1) % this.capacity;
-      
+      // Si el buffer está lleno, reemplaza el elemento más antiguo
       if (this.size === this.capacity) {
+        this.buffer[this.head] = item;
+        this.head = (this.head + 1) % this.capacity;
         this.tail = (this.tail + 1) % this.capacity;
-        
-        if (this.useAverageTracking && typeof value === 'number') {
-          const oldValue = this.buffer[this.tail];
-          if (typeof oldValue === 'number') {
-            this.sumValue -= oldValue;
-          }
-        }
       } else {
+        // Si no está lleno, añade al final
+        this.buffer[this.tail] = item;
+        this.tail = (this.tail + 1) % this.capacity;
         this.size++;
+      }
+      
+      // Ajuste dinámico de tamaño si está habilitado
+      if (this.adaptiveSize && this.size > this.capacity * this.resizeThreshold) {
+        this.resizeIfNeeded();
       }
     } catch (error) {
       logError(
-        `Error al añadir valor al buffer circular: ${error}`,
+        `Error al añadir elemento a buffer circular: ${error}`,
+        ErrorLevel.ERROR,
+        "CircularBuffer"
+      );
+    }
+  }
+  
+  /**
+   * Obtiene el elemento más antiguo sin eliminarlo
+   */
+  public peek(): T | undefined {
+    if (this.size === 0) return undefined;
+    return this.buffer[this.head];
+  }
+  
+  /**
+   * Obtiene y elimina el elemento más antiguo
+   */
+  public pop(): T | undefined {
+    if (this.size === 0) return undefined;
+    
+    const item = this.buffer[this.head];
+    this.buffer[this.head] = undefined as unknown as T;
+    this.head = (this.head + 1) % this.capacity;
+    this.size--;
+    
+    return item;
+  }
+  
+  /**
+   * Obtiene todos los elementos como un array
+   */
+  public toArray(): T[] {
+    const result: T[] = [];
+    if (this.size === 0) return result;
+    
+    let index = this.head;
+    for (let i = 0; i < this.size; i++) {
+      result.push(this.buffer[index]);
+      index = (index + 1) % this.capacity;
+    }
+    
+    return result;
+  }
+  
+  /**
+   * Obtiene los últimos N elementos
+   */
+  public getLastN(n: number): T[] {
+    const count = Math.min(n, this.size);
+    if (count === 0) return [];
+    
+    const result: T[] = [];
+    let startIndex = (this.tail - count + this.capacity) % this.capacity;
+    
+    for (let i = 0; i < count; i++) {
+      result.push(this.buffer[(startIndex + i) % this.capacity]);
+    }
+    
+    return result;
+  }
+  
+  /**
+   * Redimensiona el buffer si es necesario
+   */
+  private resizeIfNeeded(): void {
+    try {
+      // Verificar presión de memoria
+      const memoryInfo = this.getMemoryInfo();
+      
+      if (memoryInfo.usagePercentage > this.memoryPressureThreshold * 100) {
+        // Reducir tamaño si hay presión de memoria
+        this.resize(Math.max(10, Math.floor(this.capacity * 0.7)));
+        return;
+      }
+      
+      // Aumentar tamaño si no hay presión de memoria
+      this.resize(Math.floor(this.capacity * 1.5));
+    } catch (error) {
+      logError(
+        `Error al redimensionar buffer: ${error}`,
         ErrorLevel.WARNING,
         "CircularBuffer"
       );
@@ -77,62 +154,38 @@ export class CircularBuffer<T> {
   }
   
   /**
-   * Elimina y retorna el valor más antiguo del buffer
+   * Redimensiona el buffer a una nueva capacidad
    */
-  public pop(): T | undefined {
-    if (this.size === 0) {
-      return undefined;
-    }
+  private resize(newCapacity: number): void {
+    if (newCapacity === this.capacity) return;
     
-    const value = this.buffer[this.tail];
-    this.buffer[this.tail] = undefined as any;
+    const oldBuffer = this.toArray();
+    this.capacity = newCapacity;
+    this.buffer = new Array<T>(this.capacity);
+    this.head = 0;
+    this.size = Math.min(oldBuffer.length, this.capacity);
+    this.tail = this.size % this.capacity;
     
-    if (this.useAverageTracking && typeof value === 'number') {
-      this.sumValue -= value;
-    }
-    
-    this.tail = (this.tail + 1) % this.capacity;
-    this.size--;
-    
-    return value;
-  }
-  
-  /**
-   * Obtiene el valor en un índice específico
-   */
-  public get(index: number): T | undefined {
-    if (index < 0 || index >= this.size) {
-      return undefined;
-    }
-    
-    const actualIndex = (this.tail + index) % this.capacity;
-    return this.buffer[actualIndex];
-  }
-  
-  /**
-   * Retorna el buffer como un array
-   */
-  public toArray(): T[] {
-    const result: T[] = [];
-    
+    // Copiar elementos
     for (let i = 0; i < this.size; i++) {
-      result.push(this.get(i) as T);
+      this.buffer[i] = oldBuffer[i];
     }
     
-    return result;
+    logError(
+      `Buffer circular redimensionado: ${oldBuffer.length} → ${newCapacity}`,
+      ErrorLevel.INFO,
+      "CircularBuffer"
+    );
   }
   
   /**
    * Limpia el buffer
    */
   public clear(): void {
+    this.buffer = new Array<T>(this.capacity);
     this.head = 0;
     this.tail = 0;
     this.size = 0;
-    this.sumValue = 0;
-    this.minValue = 0;
-    this.maxValue = 0;
-    this.buffer = new Array<T>(this.capacity);
   }
   
   /**
@@ -150,73 +203,83 @@ export class CircularBuffer<T> {
   }
   
   /**
-   * Obtiene el valor promedio de los elementos en el buffer
+   * Comprueba si el buffer está vacío
    */
-  public getAverage(): number {
-    return this.useAverageTracking && this.size > 0 ? this.sumValue / this.size : 0;
+  public isEmpty(): boolean {
+    return this.size === 0;
   }
   
   /**
-   * Obtiene el valor mínimo en el buffer
+   * Comprueba si el buffer está lleno
    */
-  public getMinValue(): number {
-    return this.minValue;
+  public isFull(): boolean {
+    return this.size === this.capacity;
   }
   
   /**
-   * Obtiene el valor máximo en el buffer
+   * Calcula estadísticas de valores numéricos (solo para buffers de números)
    */
-  public getMaxValue(): number {
-    return this.maxValue;
-  }
-  
-  /**
-   * Obtiene información sobre el consumo de memoria
-   */
-  private getMemoryUsage(): { usedBytes: number, totalBytes: number } {
+  public getStats(): { min: number; max: number; avg: number } | null {
+    if (this.size === 0 || typeof this.peek() !== 'number') {
+      return null;
+    }
+    
     try {
-      // Estimación aproximada de memoria
-      const bytesPerItem = 8; // Estimación para números (puede variar para otros tipos)
-      const usedBytes = this.size * bytesPerItem;
-      const totalBytes = this.capacity * bytesPerItem;
+      let min = Number.MAX_VALUE;
+      let max = Number.MIN_VALUE;
+      let sum = 0;
       
-      return { usedBytes, totalBytes };
-    } catch (error) {
-      return { usedBytes: 0, totalBytes: 0 };
+      this.toArray().forEach(item => {
+        const value = item as unknown as number;
+        min = Math.min(min, value);
+        max = Math.max(max, value);
+        sum += value;
+      });
+      
+      return {
+        min,
+        max,
+        avg: sum / this.size
+      };
+    } catch {
+      return null;
     }
   }
   
   /**
-   * Obtiene el estado actual del buffer
+   * Obtiene información de uso de memoria
+   */
+  private getMemoryInfo(): { usedMemory: number; totalMemory: number; usagePercentage: number } {
+    if (typeof performance !== 'undefined' && performance.memory) {
+      return {
+        usedMemory: performance.memory.usedJSHeapSize / (1024 * 1024),
+        totalMemory: performance.memory.jsHeapSizeLimit / (1024 * 1024),
+        usagePercentage: (performance.memory.usedJSHeapSize / performance.memory.jsHeapSizeLimit) * 100
+      };
+    }
+    
+    // Valores por defecto si no hay API de memoria disponible
+    return {
+      usedMemory: 0,
+      totalMemory: 1000,
+      usagePercentage: 0
+    };
+  }
+  
+  /**
+   * Obtiene el estado completo del buffer
    */
   public getState(): CircularBufferState {
-    try {
-      const memory = this.getMemoryUsage();
-      
-      return {
-        size: this.size,
-        capacity: this.capacity,
-        memoryUsage: memory.usedBytes,
-        avgValue: this.useAverageTracking && this.size > 0 ? this.sumValue / this.size : 0,
-        minValue: this.useAverageTracking ? this.minValue : 0,
-        maxValue: this.useAverageTracking ? this.maxValue : 0
-      };
-    } catch (error) {
-      return {
-        size: this.size,
-        capacity: this.capacity,
-        memoryUsage: 0,
-        avgValue: 0,
-        minValue: 0,
-        maxValue: 0
-      };
-    }
-  }
-  
-  /**
-   * Returns the current buffer
-   */
-  public getBuffer(): T[] {
-    return this.buffer;
+    const stats = this.getStats();
+    const memoryInfo = this.getMemoryInfo();
+    
+    return {
+      size: this.size,
+      capacity: this.capacity,
+      memoryUsage: memoryInfo.usedMemory,
+      avgValue: stats?.avg ?? 0,
+      minValue: stats?.min ?? 0,
+      maxValue: stats?.max ?? 0
+    };
   }
 }

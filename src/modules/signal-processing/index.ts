@@ -15,30 +15,26 @@ export * from './heartbeat-processor';
 
 // Exportar utilidades adaptativas 
 export { getAdaptivePredictor } from './utils/adaptive-predictor';
-export { unifiedFingerDetector, resetFingerDetector } from './utils/unified-finger-detector';
+export { unifiedFingerDetector } from './utils/unified-finger-detector';
 
 // Exportar optimizador bayesiano
 export { 
+  BayesianOptimizer,
   createBayesianOptimizer,
   createDefaultPPGOptimizer,
   createHeartbeatOptimizer,
   DEFAULT_PPG_PARAMETERS,
   DEFAULT_HEARTBEAT_PARAMETERS,
-  OptimizationParameter
-} from './utils/bayesian-optimization';
-
-// Use 'export type' for types when isolatedModules is enabled
-export type { 
-  BayesianOptimizer, 
-  BayesianDataPoint,
-  BayesianOptimizerConfig,
-  GaussianProcess,
-  ParameterOptions
+  // Renombramos DataPoint para evitar conflicto
+  DataPoint as BayesianDataPoint
 } from './utils/bayesian-optimization';
 
 // Exportar sistema adaptativo
-export { getAdaptiveSystemCoordinator, MessageType } from './utils/adaptive-system-coordinator';
-export type { AdaptiveSystemMessage } from './utils/adaptive-system-coordinator';
+export {
+  getAdaptiveSystemCoordinator,
+  AdaptiveSystemCoordinator,
+  MessageType
+} from './utils/adaptive-system-coordinator';
 
 // Exportar funciones de creación
 export { createPPGSignalProcessor } from './ppg-processor';

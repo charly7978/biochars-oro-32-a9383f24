@@ -1,453 +1,529 @@
+
 /**
  * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
  * 
- * Optimización bayesiana para parámetros de señal
- * Implementación simple sin dependencias externas
+ * Optimizador bayesiano unificado para procesamiento adaptativo de señales
+ * Implementa algoritmos de optimización bayesiana para ajuste automático de parámetros
  */
+import { BayesianDataPoint, OptimizationParameter } from '../types';
 import { logError, ErrorLevel } from '@/utils/debugUtils';
 
 /**
- * Interfaz para el optimizador bayesiano
- */
-export interface BayesianOptimizer {
-  optimize(
-    objectiveFunction: (params: Record<string, number>) => number,
-    callback?: (result: any) => void
-  ): Promise<any>;
-  
-  suggest(objectiveFunction: (params: Record<string, number>) => number): Promise<any>;
-  
-  addObservation(params: Record<string, number>, value: number): void;
-  
-  getCurrentBest(): { params: Record<string, number>, value: number } | null;
-  
-  reset(): void;
-  
-  getGaussianProcess(): any;
-  
-  getParameterOptions(): any;
-  
-  getObservations(): { params: Record<string, number>, value: number }[];
-  
-  nextPointToEvaluate(): Record<string, number>;
-}
-
-/**
- * Gaussian Process interface for mock implementation
- */
-export interface GaussianProcess {
-  train(X: number[][], y: number[]): void;
-  predict(x: number[]): { mu: number, sigma: number };
-}
-
-/**
- * Parameter options interface
- */
-export interface ParameterOptions {
-  name: string;
-  type: string;
-  min: number;
-  max: number;
-}
-
-/**
- * Configuración para el optimizador bayesiano
+ * Configuración del optimizador bayesiano
  */
 export interface BayesianOptimizerConfig {
-  explorationWeight?: number;
-  useCustomGP?: boolean;
-  maxIterations?: number;
-  verbose?: boolean;
-  utilityFunction?: string;
-  acqFunc?: string;
-  randomInitialSamples?: number;
-  parameters?: OptimizationParameter[];
+  parameters: OptimizationParameter[];
+  explorationFactor?: number; // Equilibrio exploración/explotación (0-1)
+  maxObservations?: number;   // Número máximo de observaciones a mantener
+  convergenceThreshold?: number; // Umbral para considerar convergencia
+  adaptiveExploration?: boolean; // Si se debe adaptar el factor de exploración
+  memoryOptimization?: boolean; // Si se debe optimizar el uso de memoria
 }
 
 /**
- * Simple implementation of Gaussian Process
+ * Resultado de la sugerencia del optimizador
  */
-class SimpleGaussianProcess implements GaussianProcess {
-  private trainingX: number[][] = [];
-  private trainingY: number[] = [];
-  private lengthScale: number = 1.0;
-  private signalVariance: number = 1.0;
-  private noiseVariance: number = 0.1;
-
-  train(X: number[][], y: number[]): void {
-    this.trainingX = X;
-    this.trainingY = y;
-  }
-
-  predict(x: number[]): { mu: number, sigma: number } {
-    if (this.trainingX.length === 0) {
-      return { mu: 0, sigma: 1 };
-    }
-
-    // Simple prediction using nearest neighbor
-    let nearestIdx = 0;
-    let minDistance = Infinity;
-
-    for (let i = 0; i < this.trainingX.length; i++) {
-      const distance = this.euclideanDistance(x, this.trainingX[i]);
-      if (distance < minDistance) {
-        minDistance = distance;
-        nearestIdx = i;
-      }
-    }
-
-    // Return the value of the nearest training point
-    const mu = this.trainingY[nearestIdx];
-    // For sigma, use a simple distance-based heuristic
-    const sigma = Math.min(1, minDistance);
-
-    return { mu, sigma };
-  }
-
-  private euclideanDistance(a: number[], b: number[]): number {
-    let sum = 0;
-    for (let i = 0; i < Math.min(a.length, b.length); i++) {
-      sum += Math.pow(a[i] - b[i], 2);
-    }
-    return Math.sqrt(sum);
-  }
+export interface OptimizationSuggestion {
+  params: Record<string, number>;
+  expectedImprovement: number;
+  confidence: number;
+  explorationFactor: number;
 }
 
 /**
- * Simple implementation of Bayesian Optimizer
+ * Estado interno del optimizador
  */
-class SimpleBayesianOptimizer {
-  private gp: GaussianProcess;
-  private paramOptions: Record<string, ParameterOptions>;
-  private observations: { params: Record<string, number>, value: number }[] = [];
-  private explorationWeight: number;
-  private parameterNames: string[] = [];
+interface OptimizerState {
+  observations: BayesianDataPoint[];
+  bestObservation: BayesianDataPoint | null;
+  explorationFactor: number;
+  iterations: number;
+  lastImprovement: number;
+  convergenceScore: number;
+}
 
-  constructor(parameterOptions: Record<string, ParameterOptions>, config: BayesianOptimizerConfig = {}) {
-    this.paramOptions = parameterOptions;
-    this.gp = new SimpleGaussianProcess();
-    this.explorationWeight = config.explorationWeight || 0.1;
-
-    this.parameterNames = Object.keys(parameterOptions);
-  }
-
-  observe(params: Record<string, number>, value: number): void {
-    this.observations.push({ params: { ...params }, value });
+/**
+ * Implementación de optimizador bayesiano con memoria optimizada
+ */
+export class BayesianOptimizer {
+  private config: Required<BayesianOptimizerConfig>;
+  private state: OptimizerState;
+  
+  /**
+   * Constructor del optimizador
+   */
+  constructor(config: BayesianOptimizerConfig) {
+    // Configuración por defecto
+    this.config = {
+      parameters: config.parameters,
+      explorationFactor: config.explorationFactor ?? 0.3,
+      maxObservations: config.maxObservations ?? 50,
+      convergenceThreshold: config.convergenceThreshold ?? 0.01,
+      adaptiveExploration: config.adaptiveExploration ?? true,
+      memoryOptimization: config.memoryOptimization ?? true
+    };
     
-    // Train GP with all observations
-    const X = this.observations.map(obs => this.paramsToArray(obs.params));
-    const y = this.observations.map(obs => obs.value);
-    
-    this.gp.train(X, y);
+    // Estado inicial
+    this.state = {
+      observations: [],
+      bestObservation: null,
+      explorationFactor: this.config.explorationFactor,
+      iterations: 0,
+      lastImprovement: 0,
+      convergenceScore: 0
+    };
   }
-
-  run(objectiveFunction: (params: Record<string, number>) => number, iterations: number, callback?: (result: any) => void): void {
-    let bestValue = -Infinity;
-    let bestParams: Record<string, number> = {};
-
-    for (let i = 0; i < iterations; i++) {
-      // Get next point to evaluate
-      const nextPoint = this.nextPointToEvaluate();
+  
+  /**
+   * Agrega una observación al modelo
+   */
+  public addObservation(params: Record<string, number>, value: number, metadata?: BayesianDataPoint['metadata']): void {
+    try {
+      // Crear punto de datos
+      const observation: BayesianDataPoint = {
+        params: { ...params },
+        value,
+        metadata: metadata || {
+          timestamp: Date.now(),
+          quality: 1.0,
+          source: 'manual'
+        }
+      };
       
-      // Evaluate objective function
-      const value = objectiveFunction(nextPoint);
+      // Agregar a observaciones
+      this.state.observations.push(observation);
       
-      // Add observation
-      this.observe(nextPoint, value);
-      
-      // Update best value
-      if (value > bestValue) {
-        bestValue = value;
-        bestParams = { ...nextPoint };
+      // Actualizar mejor observación
+      if (!this.state.bestObservation || value > this.state.bestObservation.value) {
+        this.state.bestObservation = observation;
+        this.state.lastImprovement = this.state.iterations;
       }
       
-      // Call callback if provided
-      if (callback) {
-        callback({
-          iteration: i,
-          point: nextPoint,
-          value,
-          best: { params: bestParams, value: bestValue }
+      // Incrementar iteraciones
+      this.state.iterations++;
+      
+      // Ajustar factor de exploración si está habilitado
+      if (this.config.adaptiveExploration) {
+        this.adaptExplorationFactor();
+      }
+      
+      // Optimizar memoria si está habilitado
+      if (this.config.memoryOptimization && this.state.observations.length > this.config.maxObservations) {
+        this.optimizeMemory();
+      }
+      
+      // Actualizar puntuación de convergencia
+      this.updateConvergenceScore();
+    } catch (error) {
+      logError(
+        `Error al añadir observación al optimizador bayesiano: ${error}`,
+        ErrorLevel.ERROR,
+        "BayesianOptimizer"
+      );
+    }
+  }
+  
+  /**
+   * Optimiza el uso de memoria reduciendo observaciones menos relevantes
+   */
+  private optimizeMemory(): void {
+    if (this.state.observations.length <= this.config.maxObservations) return;
+    
+    try {
+      // Ordenar observaciones por relevancia
+      const sortedObservations = [...this.state.observations].sort((a, b) => {
+        // Criterios de relevancia:
+        
+        // 1. Calidad: mayor calidad es más relevante
+        const qualityA = a.metadata?.quality ?? 0.5;
+        const qualityB = b.metadata?.quality ?? 0.5;
+        
+        // 2. Tiempo: observaciones más recientes son más relevantes
+        const timeA = a.metadata?.timestamp ?? 0;
+        const timeB = b.metadata?.timestamp ?? 0;
+        
+        // 3. Valor: valores más altos son más relevantes
+        const valueA = a.value;
+        const valueB = b.value;
+        
+        // Cálculo de relevancia (mayor es mejor)
+        // Peso de calidad: 0.5, peso de recencia: 0.3, peso de valor: 0.2
+        const relevanceA = qualityA * 0.5 + (timeA / Date.now()) * 0.3 + (valueA / (this.state.bestObservation?.value || 1)) * 0.2;
+        const relevanceB = qualityB * 0.5 + (timeB / Date.now()) * 0.3 + (valueB / (this.state.bestObservation?.value || 1)) * 0.2;
+        
+        // Orden descendente (mayor relevancia primero)
+        return relevanceB - relevanceA;
+      });
+      
+      // Mantener solo las observaciones más relevantes
+      this.state.observations = sortedObservations.slice(0, this.config.maxObservations);
+    } catch (error) {
+      logError(
+        `Error en optimización de memoria: ${error}`,
+        ErrorLevel.WARNING,
+        "BayesianOptimizer"
+      );
+    }
+  }
+  
+  /**
+   * Adapta el factor de exploración según el progreso
+   */
+  private adaptExplorationFactor(): void {
+    // Número de iteraciones sin mejora
+    const iterationsWithoutImprovement = this.state.iterations - this.state.lastImprovement;
+    
+    // Si no hay mejora en varias iteraciones, aumentar exploración
+    if (iterationsWithoutImprovement > 5) {
+      this.state.explorationFactor = Math.min(0.8, this.state.explorationFactor * 1.2);
+    } 
+    // Si hubo mejora reciente, reducir exploración gradualmente
+    else if (iterationsWithoutImprovement <= 2) {
+      this.state.explorationFactor = Math.max(0.1, this.state.explorationFactor * 0.9);
+    }
+  }
+  
+  /**
+   * Actualiza la puntuación de convergencia
+   */
+  private updateConvergenceScore(): void {
+    try {
+      if (this.state.observations.length < 3) {
+        this.state.convergenceScore = 0;
+        return;
+      }
+      
+      // Obtener últimas N observaciones
+      const recentObservations = this.state.observations.slice(-5);
+      
+      // Calcular varianza normalizada de valores
+      const values = recentObservations.map(o => o.value);
+      const mean = values.reduce((sum, v) => sum + v, 0) / values.length;
+      const variance = values.reduce((sum, v) => sum + Math.pow(v - mean, 2), 0) / values.length;
+      const normalizedVariance = variance / Math.pow(mean || 1, 2);
+      
+      // Convertir a puntuación de convergencia (menor varianza = mayor convergencia)
+      this.state.convergenceScore = Math.max(0, 1 - Math.min(1, normalizedVariance * 10));
+    } catch (error) {
+      logError(
+        `Error al actualizar puntuación de convergencia: ${error}`,
+        ErrorLevel.WARNING,
+        "BayesianOptimizer"
+      );
+      this.state.convergenceScore = 0;
+    }
+  }
+  
+  /**
+   * Verifica si el optimizador ha convergido
+   */
+  public hasConverged(): boolean {
+    return this.state.convergenceScore >= this.config.convergenceThreshold &&
+           this.state.iterations > 10;
+  }
+  
+  /**
+   * Obtiene el siguiente punto para evaluar
+   */
+  public nextPointToEvaluate(): Record<string, number> {
+    const suggestion = this.suggestParams();
+    return suggestion.params;
+  }
+  
+  /**
+   * Sugiere nuevos parámetros para exploración/explotación
+   */
+  public suggestParams(): OptimizationSuggestion {
+    try {
+      // Si no hay suficientes observaciones, explorar parámetros por defecto
+      if (this.state.observations.length < 2) {
+        const defaultParams: Record<string, number> = {};
+        this.config.parameters.forEach(param => {
+          defaultParams[param.name] = param.default;
         });
+        
+        return {
+          params: defaultParams,
+          expectedImprovement: 0,
+          confidence: 0.5,
+          explorationFactor: this.state.explorationFactor
+        };
       }
+      
+      // Determinar si explorar o explotar
+      const shouldExplore = Math.random() < this.state.explorationFactor;
+      
+      if (shouldExplore) {
+        // Exploración: generar parámetros aleatorios
+        return this.exploreRandomParams();
+      } else {
+        // Explotación: refinar alrededor de mejores parámetros
+        return this.exploitBestParams();
+      }
+    } catch (error) {
+      logError(
+        `Error al sugerir parámetros: ${error}`,
+        ErrorLevel.ERROR,
+        "BayesianOptimizer"
+      );
+      
+      // Retornar parámetros por defecto en caso de error
+      const defaultParams: Record<string, number> = {};
+      this.config.parameters.forEach(param => {
+        defaultParams[param.name] = param.default;
+      });
+      
+      return {
+        params: defaultParams,
+        expectedImprovement: 0,
+        confidence: 0.5,
+        explorationFactor: this.state.explorationFactor
+      };
     }
   }
-
-  next(): Record<string, number> {
-    if (this.observations.length < 5) {
-      // Not enough observations for GP, use random sampling
-      return this.getRandomPoint();
-    }
-
-    // Use a simple acquisition function (Upper Confidence Bound)
-    let bestAcqValue = -Infinity;
-    let bestPoint: Record<string, number> | null = null;
-
-    // Try 10 random points and pick the one with highest acquisition value
-    for (let i = 0; i < 10; i++) {
-      const point = this.getRandomPoint();
-      const pointArray = this.paramsToArray(point);
+  
+  /**
+   * Explora parámetros aleatorios con distribución uniforme
+   */
+  private exploreRandomParams(): OptimizationSuggestion {
+    const params: Record<string, number> = {};
+    
+    this.config.parameters.forEach(param => {
+      const range = param.max - param.min;
       
-      // Predict with GP
-      const { mu, sigma } = this.gp.predict(pointArray);
+      // Generar valor aleatorio en el rango
+      let value = param.min + Math.random() * range;
       
-      // Upper Confidence Bound acquisition function
-      const acqValue = mu + this.explorationWeight * sigma;
-      
-      if (acqValue > bestAcqValue) {
-        bestAcqValue = acqValue;
-        bestPoint = point;
+      // Aplicar paso si está definido
+      if (param.step) {
+        value = Math.round(value / param.step) * param.step;
       }
-    }
-
-    return bestPoint || this.getRandomPoint();
-  }
-
-  best(): { params: Record<string, number>, value: number } | null {
-    if (this.observations.length === 0) {
-      return null;
-    }
-
-    // Find the observation with highest value
-    let bestIndex = 0;
-    let bestValue = this.observations[0].value;
-
-    for (let i = 1; i < this.observations.length; i++) {
-      if (this.observations[i].value > bestValue) {
-        bestValue = this.observations[i].value;
-        bestIndex = i;
-      }
-    }
-
+      
+      // Asegurar que está en rango
+      value = Math.max(param.min, Math.min(param.max, value));
+      
+      params[param.name] = value;
+    });
+    
     return {
-      params: { ...this.observations[bestIndex].params },
-      value: this.observations[bestIndex].value
+      params,
+      expectedImprovement: 0.2,
+      confidence: 0.3,
+      explorationFactor: this.state.explorationFactor
     };
   }
-
-  reset(): void {
-    this.observations = [];
-    this.gp = new SimpleGaussianProcess();
-  }
-
-  gp(): GaussianProcess {
-    return this.gp;
-  }
-
-  get parameterOptions(): Record<string, ParameterOptions> {
-    return this.paramOptions;
-  }
-
-  observations(): { params: Record<string, number>, value: number }[] {
-    return [...this.observations];
-  }
-
-  private getRandomPoint(): Record<string, number> {
-    const point: Record<string, number> = {};
+  
+  /**
+   * Explota alrededor de los mejores parámetros conocidos
+   */
+  private exploitBestParams(): OptimizationSuggestion {
+    const params: Record<string, number> = {};
     
-    for (const name of this.parameterNames) {
-      const param = this.paramOptions[name];
-      point[name] = param.min + Math.random() * (param.max - param.min);
+    // Si no hay mejor observación, usar valores por defecto
+    if (!this.state.bestObservation) {
+      this.config.parameters.forEach(param => {
+        params[param.name] = param.default;
+      });
+      
+      return {
+        params,
+        expectedImprovement: 0,
+        confidence: 0.5,
+        explorationFactor: this.state.explorationFactor
+      };
     }
     
-    return point;
-  }
-
-  private paramsToArray(params: Record<string, number>): number[] {
-    return this.parameterNames.map(name => params[name]);
-  }
-}
-
-/**
- * Parámetro de optimización
- */
-export interface OptimizationParameter {
-  name: string;
-  min: number;
-  max: number;
-  step?: number;
-  default: number;
-  initialValue?: number;
-  description?: string;
-  weight?: number;
-}
-
-/**
- * Data point for Bayesian optimization
- */
-export interface BayesianDataPoint {
-  parameters: Record<string, number>;
-  objective: number;
-  timestamp: number;
-}
-
-/**
- * Crea un optimizador bayesiano
- */
-export function createBayesianOptimizer(
-  parameters: OptimizationParameter[],
-  initialParameters: Partial<Record<string, number>> = {},
-  config: BayesianOptimizerConfig = {}
-): BayesianOptimizer {
-  const parameterOptions: Record<string, ParameterOptions> = {};
-  
-  for (const param of parameters) {
-    parameterOptions[param.name] = {
-      name: param.name,
-      type: 'continuous',
-      min: param.min,
-      max: param.max
-    };
-  }
-  
-  const bayesOptimizer = new SimpleBayesianOptimizer(parameterOptions, config);
-  
-  // Set initial values if provided
-  if (Object.keys(initialParameters).length > 0) {
-    for (let i = 0; i < (config.randomInitialSamples || 3); i++) {
-      const initialParams: Record<string, number> = {};
-      for (const param of parameters) {
-        initialParams[param.name] = initialParameters[param.name] !== undefined ?
-          initialParameters[param.name] as number :
-          param.default;
+    // Partir de los mejores parámetros conocidos
+    const bestParams = this.state.bestObservation.params;
+    
+    // Perturbar ligeramente cada parámetro
+    this.config.parameters.forEach(param => {
+      const currentValue = bestParams[param.name] ?? param.default;
+      const range = param.max - param.min;
+      
+      // Pequeña perturbación alrededor del valor actual
+      // Menor explorationFactor = menor perturbación
+      const perturbationScale = 0.1 * this.state.explorationFactor;
+      const perturbation = (Math.random() * 2 - 1) * range * perturbationScale;
+      
+      let value = currentValue + perturbation;
+      
+      // Aplicar paso si está definido
+      if (param.step) {
+        value = Math.round(value / param.step) * param.step;
       }
       
-      // Add initial observation with a default value
-      bayesOptimizer.observe(initialParams, -1);
-    }
+      // Asegurar que está en rango
+      value = Math.max(param.min, Math.min(param.max, value));
+      
+      params[param.name] = value;
+    });
+    
+    // Estimar mejora esperada (mayor confianza = mayor mejora esperada)
+    const confidence = Math.max(0.5, 1 - this.state.explorationFactor);
+    
+    return {
+      params,
+      expectedImprovement: 0.1 * (1 / this.state.explorationFactor),
+      confidence,
+      explorationFactor: this.state.explorationFactor
+    };
   }
   
-  return {
-    optimize: async (objectiveFunction, callback) => {
-      return new Promise((resolve, reject) => {
-        try {
-          bayesOptimizer.run(objectiveFunction, config.maxIterations || 20, callback);
-          resolve(bayesOptimizer.best());
-        } catch (error) {
-          logError(
-            `Error durante la optimización bayesiana: ${error}`,
-            ErrorLevel.ERROR,
-            "BayesianOptimizer"
-          );
-          reject(error);
-        }
-      });
-    },
-    suggest: async (objectiveFunction) => {
-      return new Promise((resolve, reject) => {
-        try {
-          const suggestion = bayesOptimizer.nextPointToEvaluate();
-          resolve(suggestion);
-        } catch (error) {
-          logError(
-            `Error sugiriendo nuevos parámetros: ${error}`,
-            ErrorLevel.ERROR,
-            "BayesianOptimizer"
-          );
-          reject(error);
-        }
-      });
-    },
-    addObservation: (params, value) => {
-      bayesOptimizer.observe(params, value);
-    },
-    getCurrentBest: () => {
-      const best = bayesOptimizer.best();
-      return best ? { params: best.params, value: best.value } : null;
-    },
-    reset: () => {
-      bayesOptimizer.reset();
-    },
-    getGaussianProcess: () => {
-      return bayesOptimizer.gp();
-    },
-    getParameterOptions: () => {
-      return bayesOptimizer.parameterOptions;
-    },
-    getObservations: () => {
-      return bayesOptimizer.observations();
-    },
-    nextPointToEvaluate: () => {
-      return bayesOptimizer.next();
-    }
-  };
+  /**
+   * Obtiene los mejores parámetros conocidos
+   */
+  public getBestParameters(): Record<string, number> | null {
+    return this.state.bestObservation ? { ...this.state.bestObservation.params } : null;
+  }
+  
+  /**
+   * Obtiene el valor óptimo conocido
+   */
+  public getBestValue(): number | null {
+    return this.state.bestObservation?.value ?? null;
+  }
+  
+  /**
+   * Obtiene todas las observaciones
+   */
+  public getObservations(): BayesianDataPoint[] {
+    return [...this.state.observations];
+  }
+  
+  /**
+   * Obtiene las N mejores observaciones
+   */
+  public getTopObservations(n: number = 5): BayesianDataPoint[] {
+    return [...this.state.observations]
+      .sort((a, b) => b.value - a.value)
+      .slice(0, n);
+  }
+  
+  /**
+   * Obtiene el estado actual del optimizador
+   */
+  public getState(): any {
+    return {
+      observations: this.state.observations.length,
+      bestValue: this.state.bestObservation?.value ?? null,
+      explorationFactor: this.state.explorationFactor,
+      iterations: this.state.iterations,
+      convergenceScore: this.state.convergenceScore,
+      hasConverged: this.hasConverged()
+    };
+  }
+  
+  /**
+   * Resetea el optimizador
+   */
+  public reset(): void {
+    this.state = {
+      observations: [],
+      bestObservation: null,
+      explorationFactor: this.config.explorationFactor,
+      iterations: 0,
+      lastImprovement: 0,
+      convergenceScore: 0
+    };
+  }
 }
 
 /**
- * Default parameters for PPG signal optimization
+ * Define conjuntos de parámetros predeterminados para procesamiento PPG
  */
 export const DEFAULT_PPG_PARAMETERS: OptimizationParameter[] = [
-  { 
+  {
     name: 'amplificationFactor',
-    min: 1.0,
-    max: 5.0,
+    min: 0.5,
+    max: 2.0,
     step: 0.1,
-    default: 2.5
+    default: 1.2,
+    description: 'Factor de amplificación de señal'
   },
-  { 
+  {
     name: 'filterStrength',
     min: 0.1,
-    max: 1.0,
+    max: 0.9,
     step: 0.05,
-    default: 0.5
+    default: 0.25,
+    description: 'Fuerza del filtrado adaptativo'
   },
-  { 
-    name: 'adaptiveThreshold',
-    min: 0.0,
-    max: 1.0,
+  {
+    name: 'fingerDetectionSensitivity',
+    min: 0.3,
+    max: 0.9,
     step: 0.05,
-    default: 0.5
+    default: 0.6,
+    description: 'Sensibilidad para detección de dedos'
+  },
+  {
+    name: 'adaptationRate',
+    min: 0.1,
+    max: 0.5,
+    step: 0.05,
+    default: 0.25,
+    description: 'Tasa de adaptación para ajustes dinámicos'
   }
 ];
 
 /**
- * Creates a default optimizer for PPG signal processing
- */
-export function createDefaultPPGOptimizer(
-  initialParameters: Partial<Record<string, number>> = {}
-): BayesianOptimizer {
-  return createBayesianOptimizer(
-    DEFAULT_PPG_PARAMETERS,
-    initialParameters,
-    {
-      explorationWeight: 0.2,
-      maxIterations: 50
-    }
-  );
-}
-
-/**
- * Default parameters for Heartbeat signal optimization
+ * Define conjuntos de parámetros predeterminados para procesamiento de latidos
  */
 export const DEFAULT_HEARTBEAT_PARAMETERS: OptimizationParameter[] = [
   {
-    name: 'peakThreshold',
-    min: 0.1,
-    max: 0.5,
-    step: 0.01,
-    default: 0.2
+    name: 'peakDetectionSensitivity',
+    min: 0.2,
+    max: 0.8,
+    step: 0.05,
+    default: 0.4,
+    description: 'Sensibilidad para detección de picos'
   },
   {
     name: 'minPeakDistance',
     min: 200,
-    max: 400,
+    max: 600,
     step: 10,
-    default: 250
+    default: 250,
+    description: 'Distancia mínima entre picos (ms)'
+  },
+  {
+    name: 'dynamicThresholdFactor',
+    min: 0.3,
+    max: 0.8,
+    step: 0.05,
+    default: 0.5,
+    description: 'Factor para umbral dinámico'
   }
 ];
 
 /**
- * Creates a default optimizer for Heartbeat signal processing
+ * Función para crear un optimizador bayesiano con parámetros PPG predeterminados
  */
-export function createHeartbeatOptimizer(
-  initialParameters: Partial<Record<string, number>> = {}
-): BayesianOptimizer {
-  return createBayesianOptimizer(
-    DEFAULT_HEARTBEAT_PARAMETERS,
-    initialParameters,
-    {
-      explorationWeight: 0.2,
-      maxIterations: 50
-    }
-  );
+export function createDefaultPPGOptimizer(): BayesianOptimizer {
+  return new BayesianOptimizer({
+    parameters: DEFAULT_PPG_PARAMETERS,
+    explorationFactor: 0.3,
+    maxObservations: 50,
+    adaptiveExploration: true
+  });
+}
+
+/**
+ * Función para crear un optimizador bayesiano con parámetros de latidos predeterminados
+ */
+export function createHeartbeatOptimizer(): BayesianOptimizer {
+  return new BayesianOptimizer({
+    parameters: DEFAULT_HEARTBEAT_PARAMETERS,
+    explorationFactor: 0.25,
+    maxObservations: 40,
+    adaptiveExploration: true
+  });
+}
+
+/**
+ * Crea un nuevo optimizador bayesiano con parámetros personalizados
+ */
+export function createBayesianOptimizer(config: BayesianOptimizerConfig): BayesianOptimizer {
+  return new BayesianOptimizer(config);
 }

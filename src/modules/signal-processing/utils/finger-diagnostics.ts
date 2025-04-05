@@ -1,3 +1,4 @@
+
 /**
  * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
  * 
@@ -175,13 +176,14 @@ class FingerDetectionDiagnostics {
     this.currentSession.summary.detectionChanges++;
     
     // Notificar al detector unificado
-    console.log("[finger-diagnostics]", {
-      eventType: event.eventType,
-      source: event.source,
-      isFingerDetected: event.isFingerDetected,
-      confidence: event.confidence,
-      details: event.details
-    });
+    unifiedFingerDetector.logDiagnosticEvent(
+      isDetected ? 'DETECTION_START' : 'DETECTION_END',
+      {
+        source,
+        confidence,
+        details
+      }
+    );
   }
   
   /**

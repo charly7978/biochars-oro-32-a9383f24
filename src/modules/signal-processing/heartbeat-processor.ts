@@ -5,8 +5,7 @@
  * Se encarga del procesamiento especializado de picos/latidos
  */
 import { ProcessedHeartbeatSignal, SignalProcessor, SignalProcessingOptions } from './types';
-import { getAdaptivePredictor } from './utils/adaptive-predictor';
-import type { AdaptivePredictor } from './utils/adaptive-predictor';
+import { AdaptivePredictor, getAdaptivePredictor } from './utils/adaptive-predictor';
 
 /**
  * Clase para el procesamiento avanzado de señales cardíacas
