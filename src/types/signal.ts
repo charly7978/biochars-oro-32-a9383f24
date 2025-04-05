@@ -1,65 +1,134 @@
 
 /**
- * Interface for PPG data point with timestamp
+ * Signal types for the application
  */
-export interface PPGDataPoint {
-  timestamp: number;
+
+// Basic signal point with timestamp
+export interface SignalPoint {
   value: number;
-  time: number; // Required for backward compatibility
-  [key: string]: any;
+  timestamp: number;
 }
 
-/**
- * Interface for standardized PPG data across the system
- */
-export interface TimestampedPPGData {
-  timestamp: number;
-  value: number;
-  time: number; // Changed from optional to required to match PPGDataPoint
-  [key: string]: any;
+// Region of interest in an image
+export interface ROI {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
 }
 
-/**
- * Represents a processed PPG signal
- */
+// Processed signal with quality metrics
 export interface ProcessedSignal {
-  timestamp: number;        // Timestamp of the signal
-  rawValue: number;         // Raw sensor value
-  filteredValue: number;    // Filtered value for analysis
-  quality: number;          // Signal quality (0-100)
-  fingerDetected: boolean;  // Whether a finger is detected on the sensor
-  roi: {                    // Region of interest in the image
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-  };
-  perfusionIndex?: number;  // Optional perfusion index
-  spectrumData?: {          // Optional frequency spectrum data
+  timestamp: number;
+  rawValue: number;
+  filteredValue: number;
+  quality: number;
+  fingerDetected: boolean;
+  roi: ROI;
+  perfusionIndex?: number;
+  spectrumData?: {
     frequencies: number[];
     amplitudes: number[];
     dominantFrequency: number;
   };
+  diagnosticInfo?: {
+    processingStage: string;
+    validationPassed: boolean;
+    errorCode?: string;
+    errorMessage?: string;
+    processingTimeMs?: number;
+    timestamp?: number;
+  };
 }
 
-/**
- * Processing error structure
- */
+// Error in signal processing
 export interface ProcessingError {
-  code: string;       // Error code
-  message: string;    // Descriptive message
-  timestamp: number;  // Error timestamp
+  code: string;
+  message: string;
+  timestamp: number;
+  severity?: 'low' | 'medium' | 'high' | 'critical';
+  recoverable?: boolean;
+  component?: string;
+  suggestions?: string[];
 }
 
-/**
- * Interface that all signal processors must implement
- */
+// Interface for signal processor
 export interface SignalProcessor {
-  initialize: () => Promise<void>;                      // Initialization
-  start: () => void;                                    // Start processing
-  stop: () => void;                                     // Stop processing
-  calibrate?: () => Promise<boolean>;                   // Optional calibration
-  onSignalReady?: (signal: ProcessedSignal) => void;    // Signal ready callback
-  onError?: (error: ProcessingError) => void;           // Error callback
-  processFrame?: (imageData: ImageData) => void;        // Process image frame
+  processFrame(imageData: ImageData): void;
+  start(): void;
+  stop(): void;
+  resetToDefault(): void;
+  initialize(): Promise<void>;
+}
+
+// Types of vital signs that can be processed
+export enum VitalSignType {
+  HEART_RATE = 'heartRate',
+  SPO2 = 'spo2',
+  BLOOD_PRESSURE = 'bloodPressure',
+  GLUCOSE = 'glucose',
+  LIPIDS = 'lipids',
+  ARRHYTHMIA = 'arrhythmia',
+  CARDIAC = 'cardiac'
+}
+
+// Feedback from a channel to improve processing
+export interface ChannelFeedback {
+  channelId: string;
+  signalQuality: number;
+  suggestedAdjustments: Record<string, number>;
+  timestamp: number;
+  success: boolean;
+}
+
+// Additional interfaces needed by various modules
+export interface PPGDataPoint {
+  value: number;
+  timestamp: number;
+  quality?: number;
+}
+
+export interface TimestampedPPGData {
+  values: number[];
+  timestamp: number;
+  quality?: number;
+}
+
+export interface SignalDiagnosticInfo {
+  processingStage: string;
+  validationPassed: boolean;
+  errorCode?: string;
+  errorMessage?: string;
+  processingTimeMs?: number;
+  timestamp?: number;
+}
+
+export interface SignalValidationResult {
+  isValid: boolean;
+  errorCode?: string;
+  errorMessage?: string;
+}
+
+export interface SignalValidationConfig {
+  qualityThreshold: number;
+  validateAmplitude: boolean;
+  minAmplitude: number;
+  maxAmplitude: number;
+  validateFrequency: boolean;
+  minFrequency: number;
+  maxFrequency: number;
+}
+
+export interface ErrorHandlerConfig {
+  logErrors: boolean;
+  throwOnCritical: boolean;
+  recoveryAttempts: number;
+  debugMode: boolean;
+}
+
+export interface SignalDistributorConfig {
+  channelCount: number;
+  bufferSize: number;
+  processingInterval: number;
+  autoStart: boolean;
 }
