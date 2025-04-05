@@ -75,7 +75,7 @@ export abstract class SpecializedChannel {
   
   /**
    * Aplica retroalimentación al canal
-   * Implementation required in all derived classes
+   * Default implementation that can be overridden
    */
   public applyFeedback(feedback: ChannelFeedback): void {
     // Base implementation - update quality if provided

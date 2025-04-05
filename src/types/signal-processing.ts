@@ -36,11 +36,10 @@ export interface ProcessedSignalResult {
   fingerDetected: boolean;
   signalStrength: number;
   
-  // Adding these properties for compatibility
+  // Adding missing properties for compatibility
   isPeak?: boolean;
   rrInterval?: number | null;
   averageBPM?: number;
-  heartRate?: number;
 }
 
 // Resultado del análisis de intervalo RR
@@ -69,7 +68,4 @@ export interface UnifiedVitalSignsResult {
     rmssd: number;
     rrVariation: number;
   } | null;
-  
-  // Adding heartRate for compatibility
-  heartRate?: number;
 }

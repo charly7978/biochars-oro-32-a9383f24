@@ -58,9 +58,9 @@ export class SafePPGBuffer<T extends TimestampedPPGData = TimestampedPPGData> {
       const enhancedItem = { ...item } as T;
       
       // Garantizar que tanto time como timestamp existan
-      if (enhancedItem.timestamp && !enhancedItem.time) {
+      if ('timestamp' in enhancedItem && !('time' in enhancedItem)) {
         (enhancedItem as any).time = enhancedItem.timestamp;
-      } else if (enhancedItem.time && !enhancedItem.timestamp) {
+      } else if ('time' in enhancedItem && !('timestamp' in enhancedItem)) {
         (enhancedItem as any).timestamp = enhancedItem.time;
       }
       
