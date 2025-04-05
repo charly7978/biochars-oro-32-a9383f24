@@ -15,8 +15,7 @@ export {
   shouldProcessMeasurement, 
   createWeakSignalResult,
   resetSignalQualityState,
-  isFingerDetected,
-  checkArrhythmiaWindow
+  isFingerDetected
 } from './signal-quality';
 
 export { 
@@ -25,9 +24,7 @@ export {
 
 export { 
   updateLastValidBpm, 
-  processLowConfidenceResult,
-  enhanceDiagnosticData,
-  checkArrhythmiaWindows
+  processLowConfidenceResult 
 } from './result-processor';
 
 export {

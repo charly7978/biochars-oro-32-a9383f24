@@ -1,4 +1,3 @@
-
 import { useCallback, useRef, useEffect } from 'react';
 import { HeartBeatResult } from './types';
 import { HeartBeatConfig } from '../../modules/heart-beat/config';
@@ -7,15 +6,9 @@ import {
   shouldProcessMeasurement, 
   createWeakSignalResult, 
   handlePeakDetection,
-  isFingerDetected,
-  checkArrhythmiaWindow
+  updateLastValidBpm,
+  processLowConfidenceResult as importedProcessLowConfidence // Rename to avoid conflict
 } from './signal-processing';
-import { 
-  updateLastValidBpm, 
-  processLowConfidenceResult,
-  enhanceDiagnosticData,
-  checkArrhythmiaWindows
-} from './signal-processing/result-processor';
 import { 
   optimizeCardiacSignal,
   detectPeakRealTime,
@@ -182,15 +175,6 @@ export function useSignalProcessor() {
       
       if (rrData && rrData.intervals && rrData.intervals.length > 0) {
         lastRRIntervalsRef.current = [...rrData.intervals];
-        
-        // Check for arrhythmia in RR intervals
-        if (lastRRIntervalsRef.current.length > 4) {
-          const isArrhythmicWindow = checkArrhythmiaWindows(lastRRIntervalsRef.current);
-          if (isArrhythmicWindow) {
-            result.isArrhythmia = true;
-            console.log("Arrhythmia detected from RR intervals");
-          }
-        }
       }
       
       handlePeakDetection(
@@ -205,10 +189,10 @@ export function useSignalProcessor() {
       
       lastSignalQualityRef.current = result.confidence;
       
-      const processedResult = processLowConfidenceResult(
+      const processedResult = importedProcessLowConfidence(
         result, 
         currentBPM || lastValidBpmRef.current,
-        processor.getArrhythmiaCounter ? processor.getArrhythmiaCounter() : 0
+        processor.getArrhythmiaCounter()
       );
       
       if (processedResult.bpm === 0 && lastValidBpmRef.current > 0) {
@@ -232,7 +216,7 @@ export function useSignalProcessor() {
         }
       }
       
-      if (!processedResult.diagnosticData) {
+      if (processedResult.diagnosticData === undefined) {
         processedResult.diagnosticData = {};
       }
       
