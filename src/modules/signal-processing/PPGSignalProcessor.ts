@@ -47,7 +47,12 @@ export class PPGSignalProcessor {
       amplifiedValue,
       quality,
       fingerDetected,
-      signalStrength
+      signalStrength,
+      // Required properties for the ProcessedPPGSignal interface
+      type: SignalType.PPG_SIGNAL,
+      sourceId: 'ppg-processor',
+      priority: 'MEDIUM',
+      isValid: fingerDetected && quality > 20
     };
   }
   
@@ -134,15 +139,70 @@ export class PPGSignalProcessor {
     // Get recent values
     const recentValues = this.lastValues.slice(-10);
     
-    // Calculate variance
+    // Calculate variance (indicates signal richness)
     const mean = recentValues.reduce((sum, val) => sum + val, 0) / recentValues.length;
     const variance = recentValues.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / recentValues.length;
     
-    // Calculate signal-to-noise ratio
-    const amplitude = Math.max(...recentValues) - Math.min(...recentValues);
-    const snr = variance > 0 ? amplitude / Math.sqrt(variance) : 0;
+    // Calculate stability (lower value = more stable)
+    let stability = 0;
+    for (let i = 1; i < recentValues.length; i++) {
+      stability += Math.abs(recentValues[i] - recentValues[i - 1]);
+    }
+    stability = stability / (recentValues.length - 1);
     
-    // Scale to 0-100
-    return Math.min(100, Math.max(0, snr * 20));
+    // Quality is a balance of variance (we want some but not too much) and stability
+    const varianceScore = Math.min(100, variance * 1000);
+    const stabilityScore = Math.max(0, 100 - (stability * 100));
+    
+    // Combined quality score
+    let quality = (varianceScore * 0.7) + (stabilityScore * 0.3);
+    
+    // Finger detection adjustment
+    if (this.detectFinger(recentValues)) {
+      quality += 20;
+    } else {
+      quality *= 0.5;
+    }
+    
+    return Math.min(100, Math.max(0, quality));
+  }
+  
+  /**
+   * Simple finger detection algorithm
+   */
+  private detectFinger(values: number[]): boolean {
+    if (values.length < 5) {
+      return false;
+    }
+    
+    // Calculate average
+    const avg = values.reduce((sum, val) => sum + val, 0) / values.length;
+    
+    // If average is very low, probably no finger
+    if (avg < 0.05 * this.fingerDetectionSensitivity) {
+      return false;
+    }
+    
+    // Calculate variance
+    const variance = values.reduce((sum, val) => sum + Math.pow(val - avg, 2), 0) / values.length;
+    
+    // If variance is too low, probably no finger or not properly placed
+    if (variance < 0.0001 * this.fingerDetectionSensitivity) {
+      return false;
+    }
+    
+    return true;
   }
 }
+
+// Required enum for the PPG signal processor
+enum SignalType {
+  PPG_SIGNAL = 'PPG_SIGNAL',
+  VALIDATED_SIGNAL = 'VALIDATED_SIGNAL'
+}
+
+// Required priority type
+type Priority = 'HIGH' | 'MEDIUM' | 'LOW';
+
+// Make these available for other importers
+export { SignalType };

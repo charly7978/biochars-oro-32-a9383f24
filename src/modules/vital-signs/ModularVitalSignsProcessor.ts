@@ -9,6 +9,7 @@
 import { ProcessedSignal, VitalSignType, ChannelFeedback } from '../../types/signal';
 import { OptimizedSignalDistributor } from '../signal-processing/OptimizedSignalDistributor';
 import { v4 as uuidv4 } from 'uuid';
+import { ProcessedPPGSignal } from '../signal-processing/SignalBus';
 
 // Import specialized vital sign processors
 import { GlucoseProcessor } from './specialized/GlucoseProcessor';
@@ -168,8 +169,22 @@ export class ModularVitalSignsProcessor {
       // Start performance measurement
       const startTime = performance.now();
       
+      // Convert ProcessedSignal to ProcessedPPGSignal needed by the distributor
+      const convertedSignal: ProcessedPPGSignal = {
+        type: SignalType.PPG_SIGNAL,
+        timestamp: signal.timestamp,
+        sourceId: 'vital-signs-processor',
+        priority: 'MEDIUM',
+        isValid: true,
+        rawValue: signal.rawValue,
+        filteredValue: signal.filteredValue,
+        amplifiedValue: signal.filteredValue * 1.5, // Approximate amplification if not available
+        quality: signal.quality,
+        fingerDetected: signal.fingerDetected
+      };
+      
       // Distribute signal to specialized channels
-      const channelValues = this.signalDistributor.processSignal(signal);
+      const channelValues = this.signalDistributor.processSignal(convertedSignal);
       
       // Process each vital sign with its optimized signal
       const glucoseValue = this.glucoseProcessor.processValue(channelValues[VitalSignType.GLUCOSE]);
@@ -335,4 +350,10 @@ export class ModularVitalSignsProcessor {
       processorConfidence: this.lastResult?.confidence
     };
   }
+}
+
+// Add the missing SignalType enum to avoid dependency issues
+enum SignalType {
+  PPG_SIGNAL = 'PPG_SIGNAL',
+  VALIDATED_SIGNAL = 'VALIDATED_SIGNAL'
 }

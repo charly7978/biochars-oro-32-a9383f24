@@ -143,8 +143,10 @@ export function useUnidirectionalSignalFlow(): UnidirectionalSignalFlowResult {
         if (heartbeatProcessorRef.current) {
           const heartbeatResult = heartbeatProcessorRef.current.processSignal(signal.filteredValue);
           
-          if (heartbeatResult.averageBPM && heartbeatResult.averageBPM > 0) {
-            setHeartRate(heartbeatResult.averageBPM);
+          // Fix for the error: Property 'averageBPM' does not exist
+          // Check for instantaneousBPM instead (from ProcessedHeartbeatSignal type)
+          if (heartbeatResult.instantaneousBPM && heartbeatResult.instantaneousBPM > 0) {
+            setHeartRate(heartbeatResult.instantaneousBPM);
           }
         }
       }

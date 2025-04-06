@@ -1,4 +1,3 @@
-
 /**
  * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
  * 
@@ -189,9 +188,9 @@ export class OptimizedSignalDistributor {
       return;
     }
     
-    console.log(`OptimizedSignalDistributor: Received feedback for ${feedback.channelType}`, {
-      qualityFactor: feedback.qualityFactor,
-      optimizationHint: feedback.optimizationHint
+    console.log(`OptimizedSignalDistributor: Received feedback for ${feedback.channelId}`, {
+      signalQuality: feedback.signalQuality,
+      suggestedAdjustments: feedback.suggestedAdjustments
     });
     
     // Store feedback for future optimizations
@@ -205,9 +204,11 @@ export class OptimizedSignalDistributor {
     const channelDiagnostics: Record<string, any> = {};
     
     this.channels.forEach((channel, type) => {
-      if (typeof channel.getDiagnostics === 'function') {
-        channelDiagnostics[type] = channel.getDiagnostics();
-      }
+      channelDiagnostics[type] = {
+        quality: channel.getQuality(),
+        amplification: channel.getAmplification(),
+        filterStrength: channel.getFilterStrength()
+      };
     });
     
     return {

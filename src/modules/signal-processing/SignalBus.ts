@@ -1,4 +1,3 @@
-
 /**
  * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
  * 
@@ -54,10 +53,15 @@ export interface ProcessedPPGSignal extends Signal {
 }
 
 // Validated signal (after passing through the OptimizedSignalDistributor)
-export interface ValidatedSignal extends ProcessedPPGSignal {
+export interface ValidatedSignal extends Signal {
   readonly type: SignalType.VALIDATED_SIGNAL;
   readonly validationId: string;
   readonly distributorVersion: string;
+  readonly rawValue: number;
+  readonly filteredValue: number;
+  readonly amplifiedValue: number;
+  readonly quality: number;
+  readonly fingerDetected: boolean;
 }
 
 // Signal handler type
@@ -258,8 +262,16 @@ export function createValidatedSignal(
   validationId: string
 ): ValidatedSignal {
   return {
-    ...ppgSignal,
+    timestamp: ppgSignal.timestamp,
+    sourceId: ppgSignal.sourceId,
+    priority: ppgSignal.priority,
+    isValid: ppgSignal.isValid,
     type: SignalType.VALIDATED_SIGNAL,
+    rawValue: ppgSignal.rawValue,
+    filteredValue: ppgSignal.filteredValue,
+    amplifiedValue: ppgSignal.amplifiedValue,
+    quality: ppgSignal.quality,
+    fingerDetected: ppgSignal.fingerDetected,
     validationId,
     distributorVersion: '1.0.0'
   };

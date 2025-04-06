@@ -9,6 +9,19 @@
 
 import { getSignalBus, createRawFrameSignal, SignalType, SignalPriority } from './SignalBus';
 
+// Define ImageCapture interface if not available
+declare global {
+  interface Window {
+    ImageCapture: typeof ImageCapture;
+  }
+  
+  class ImageCapture {
+    constructor(track: MediaStreamTrack);
+    grabFrame(): Promise<ImageBitmap>;
+    takePhoto(): Promise<Blob>;
+  }
+}
+
 /**
  * Configuration for frame processing
  */
@@ -95,7 +108,7 @@ export class CameraFrameProcessor {
     // Create ImageCapture API if supported
     if ('ImageCapture' in window) {
       try {
-        this.imageCapture = new ImageCapture(track);
+        this.imageCapture = new window.ImageCapture(track);
         console.log('CameraFrameProcessor: ImageCapture API initialized');
       } catch (error) {
         console.error('CameraFrameProcessor: Failed to initialize ImageCapture:', error);
