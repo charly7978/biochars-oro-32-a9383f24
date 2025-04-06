@@ -12,6 +12,7 @@ export interface VitalSignsResult {
   pressure: string;
   arrhythmiaStatus: string;
   glucose: number;
+  hydration: number;
   lipids: {
     totalCholesterol: number;
     triglycerides: number;

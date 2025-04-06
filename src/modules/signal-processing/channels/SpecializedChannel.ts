@@ -60,7 +60,7 @@ export abstract class SpecializedChannel implements OptimizedSignalChannel {
     // Apply common processing first
     const filteredValue = this.applyFilter(value);
     const amplifiedValue = this.applyAmplification(filteredValue);
-    const optimizedValue = this.applyChannelSpecificOptimization(amplifiedValue);
+    const optimizedValue = this.specializedProcessing(amplifiedValue);
     
     // Add to recent values
     this.recentValues.push(optimizedValue);
@@ -78,7 +78,7 @@ export abstract class SpecializedChannel implements OptimizedSignalChannel {
    * Apply channel-specific optimization
    * Must be implemented by each specialized channel
    */
-  protected abstract applyChannelSpecificOptimization(value: number): number;
+  protected abstract specializedProcessing(value: number): number;
   
   /**
    * Apply filtering to the value
@@ -244,6 +244,20 @@ export abstract class SpecializedChannel implements OptimizedSignalChannel {
    */
   public getQuality(): number {
     return this.quality;
+  }
+  
+  /**
+   * Get current amplification factor
+   */
+  public getAmplification(): number {
+    return this.amplificationFactor;
+  }
+  
+  /**
+   * Get current filter strength
+   */
+  public getFilterStrength(): number {
+    return this.filterStrength;
   }
   
   /**

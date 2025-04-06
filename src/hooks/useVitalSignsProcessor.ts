@@ -1,16 +1,17 @@
 
 /**
  * Hook for processing vital signs signals
- * Now with diagnostics channel and prioritization system
+ * Now with diagnostics channel, prioritization system, and anti-simulation protection
  */
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { VitalSignsProcessor } from '../modules/vital-signs'; // Import from central module
-import { ProcessingPriority } from '../modules/extraction'; // Import priority enum
-import type { VitalSignsResult, RRIntervalData } from '../types/vital-signs';
-import type { ArrhythmiaWindow } from './vital-signs/types';
+import { VitalSignsProcessor } from '../modules/vital-signs/VitalSignsProcessor'; 
+import { ProcessingPriority } from '../modules/extraction/types';
+import type { VitalSignsResult } from '../modules/vital-signs/types/vital-signs-result';
+import type { RRIntervalData } from '../types/vital-signs';
+import type { ArrhythmiaWindow } from './types/arrhythmia';
 import { getDiagnosticsData, clearDiagnosticsData } from '../hooks/heart-beat/signal-processing/peak-detection';
 
-// Interfaz para datos de diagnóstico integral
+// Interface for comprehensive diagnostics info
 interface DiagnosticsInfo {
   processedSignals: number;
   signalLog: Array<{ timestamp: number, value: number, result: any, priority: ProcessingPriority }>;
@@ -20,6 +21,11 @@ interface DiagnosticsInfo {
     mediumPriorityPercentage: number;
     lowPriorityPercentage: number;
   };
+  simulationAttempts?: number;
+  lastViolation?: {
+    type: string | null;
+    time: number;
+  }
 }
 
 export function useVitalSignsProcessor() {
@@ -28,7 +34,7 @@ export function useVitalSignsProcessor() {
   const [arrhythmiaWindows, setArrhythmiaWindows] = useState<ArrhythmiaWindow[]>([]);
   const [diagnosticsEnabled, setDiagnosticsEnabled] = useState<boolean>(true);
   
-  // Estado para diagnóstico mejorado
+  // Enhanced diagnostics state
   const debugInfo = useRef<DiagnosticsInfo>({
     processedSignals: 0,
     signalLog: [],
@@ -43,7 +49,7 @@ export function useVitalSignsProcessor() {
   // Initialize processor on mount
   const initializeProcessor = useCallback(() => {
     processorRef.current = new VitalSignsProcessor();
-    console.log("VitalSignsProcessor initialized with diagnostics channel");
+    console.log("VitalSignsProcessor initialized with diagnostics channel and anti-simulation protection");
   }, []);
 
   // Initialization effect
@@ -57,27 +63,27 @@ export function useVitalSignsProcessor() {
       if (processorRef.current) {
         console.log("VitalSignsProcessor cleanup");
         processorRef.current = null;
-        clearDiagnosticsData(); // Limpiar datos de diagnóstico
+        clearDiagnosticsData(); // Clear diagnostic data
       }
     };
   }, [initializeProcessor]);
   
-  // Actualizar métricas de rendimiento periódicamente
+  // Update performance metrics periodically
   useEffect(() => {
     if (!diagnosticsEnabled) return;
     
     const updateInterval = setInterval(() => {
-      // Obtener datos de diagnóstico del módulo de detección de picos
+      // Get diagnostic data from peak detection module
       const peakDiagnostics = getDiagnosticsData();
       
       if (peakDiagnostics.length > 0) {
-        // Calcular métricas de rendimiento
+        // Calculate performance metrics
         const totalTime = peakDiagnostics.reduce((sum, data) => sum + data.processTime, 0);
         const highPriorityCount = peakDiagnostics.filter(data => data.processingPriority === 'high').length;
         const mediumPriorityCount = peakDiagnostics.filter(data => data.processingPriority === 'medium').length;
         const lowPriorityCount = peakDiagnostics.filter(data => data.processingPriority === 'low').length;
         
-        // Actualizar métricas en debugInfo
+        // Update metrics in debugInfo
         debugInfo.current.performanceMetrics = {
           avgProcessTime: totalTime / peakDiagnostics.length,
           highPriorityPercentage: (highPriorityCount / peakDiagnostics.length) * 100,
@@ -85,7 +91,7 @@ export function useVitalSignsProcessor() {
           lowPriorityPercentage: (lowPriorityCount / peakDiagnostics.length) * 100
         };
       }
-    }, 5000); // Actualizar cada 5 segundos
+    }, 5000); // Update every 5 seconds
     
     return () => clearInterval(updateInterval);
   }, [diagnosticsEnabled]);
@@ -102,6 +108,7 @@ export function useVitalSignsProcessor() {
         pressure: "--/--",
         arrhythmiaStatus: "--",
         glucose: 0,
+        hydration: 0,
         lipids: {
           totalCholesterol: 0,
           triglycerides: 0
@@ -109,10 +116,10 @@ export function useVitalSignsProcessor() {
       };
     }
     
-    // Incrementar contador de señales procesadas
+    // Increment processed signals counter
     debugInfo.current.processedSignals++;
     
-    // Determinar prioridad de la señal basada en su amplitud
+    // Determine signal priority based on amplitude
     let priority: ProcessingPriority;
     const signalStrength = Math.abs(value);
     
@@ -124,16 +131,16 @@ export function useVitalSignsProcessor() {
       priority = 'low' as ProcessingPriority;
     }
     
-    // Medir tiempo de procesamiento para diagnóstico
+    // Measure processing time for diagnostics
     const startTime = performance.now();
     
-    // Procesar señal
+    // Process signal
     const result = processorRef.current.processSignal({
       value,
       rrData
     });
     
-    // Calcular tiempo de procesamiento
+    // Calculate processing time
     const processingTime = performance.now() - startTime;
     
     // Log for debugging with priority info
@@ -150,12 +157,13 @@ export function useVitalSignsProcessor() {
         debugInfo.current.signalLog.shift();
       }
       
-      // Log para diagnóstico detallado
+      // Detailed diagnostic log
       console.log(`Signal processed [Priority: ${priority}] in ${processingTime.toFixed(2)}ms`, {
         signalStrength,
         arrhythmiaCount: processorRef.current.getArrhythmiaCounter(),
         spo2: result.spo2,
-        pressure: result.pressure
+        pressure: result.pressure,
+        hydration: result.hydration
       });
     }
     
@@ -201,7 +209,7 @@ export function useVitalSignsProcessor() {
           lowPriorityPercentage: 0
         }
       };
-      clearDiagnosticsData(); // Limpiar datos de diagnóstico
+      clearDiagnosticsData(); // Clear diagnostic data
     }
   }, []);
   
@@ -209,7 +217,7 @@ export function useVitalSignsProcessor() {
   const toggleDiagnostics = useCallback((enabled: boolean): void => {
     setDiagnosticsEnabled(enabled);
     if (!enabled) {
-      // Limpiar datos de diagnóstico si se desactiva
+      // Clean up diagnostic data if disabled
       clearDiagnosticsData();
     }
     console.log(`Diagnostics channel ${enabled ? 'enabled' : 'disabled'}`);

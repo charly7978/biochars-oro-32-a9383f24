@@ -19,6 +19,18 @@ export { LipidsChannel } from './channels/LipidsChannel';
 export { BloodPressureChannel } from './channels/BloodPressureChannel';
 export { SpO2Channel } from './channels/SpO2Channel';
 export { CardiacChannel } from './channels/CardiacChannel';
+export { HydrationChannel } from './channels/HydrationChannel';
+
+// Export utility functions
+export { applySMAFilter, amplifySignal } from './utils/filter-utils';
+
+// Export diagnostic and validation utilities
+export { createDiagnosticInfo, logDiagnostics } from './diagnostics';
+export { validateSignalData, validateSampleTiming } from './signal-validator';
+export { handleProcessingError, isRecoverableError } from './error-handler';
 
 // Re-export utility types
 export type { SignalDistributorConfig } from '../../types/signal';
+
+// Anti-simulation protection
+export { AntiSimulationGuard } from './security/anti-simulation-guard';

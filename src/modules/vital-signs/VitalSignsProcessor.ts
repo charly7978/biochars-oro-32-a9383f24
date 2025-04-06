@@ -1,17 +1,20 @@
+
 /**
  * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
  */
 
-import { SpO2Processor } from './spo2-processor';
-import { BloodPressureProcessor } from './blood-pressure-processor';
-import { ArrhythmiaProcessor } from './arrhythmia-processor';
-import { SignalProcessor } from './signal-processor';
-import { GlucoseProcessor } from './glucose-processor';
-import { LipidProcessor } from './lipid-processor';
+import { SpO2Processor } from './specialized/SpO2Processor';
+import { BloodPressureProcessor } from './specialized/BloodPressureProcessor';
+import { ArrhythmiaProcessor } from './specialized/ArrhythmiaProcessor';
+import { SignalProcessor } from './specialized/SignalProcessor';
+import { GlucoseProcessor } from './specialized/GlucoseProcessor';
+import { LipidProcessor } from './specialized/LipidProcessor';
+import { HydrationProcessor } from './specialized/HydrationProcessor';
 import { ResultFactory } from './factories/result-factory';
 import { SignalValidator } from './validators/signal-validator';
 import { ConfidenceCalculator } from './calculators/confidence-calculator';
 import { VitalSignsResult } from './types/vital-signs-result';
+import { AntiSimulationGuard } from './security/anti-simulation-guard';
 
 /**
  * Main vital signs processor
@@ -26,10 +29,12 @@ export class VitalSignsProcessor {
   private signalProcessor: SignalProcessor;
   private glucoseProcessor: GlucoseProcessor;
   private lipidProcessor: LipidProcessor;
+  private hydrationProcessor: HydrationProcessor;
   
   // Validators and calculators
   private signalValidator: SignalValidator;
   private confidenceCalculator: ConfidenceCalculator;
+  private antiSimulationGuard: AntiSimulationGuard;
 
   /**
    * Constructor that initializes all specialized processors
@@ -45,10 +50,12 @@ export class VitalSignsProcessor {
     this.signalProcessor = new SignalProcessor();
     this.glucoseProcessor = new GlucoseProcessor();
     this.lipidProcessor = new LipidProcessor();
+    this.hydrationProcessor = new HydrationProcessor();
     
     // Initialize validators and calculators
     this.signalValidator = new SignalValidator(0.01, 15);
     this.confidenceCalculator = new ConfidenceCalculator(0.15);
+    this.antiSimulationGuard = new AntiSimulationGuard();
   }
   
   /**
@@ -59,6 +66,12 @@ export class VitalSignsProcessor {
     value: number, 
     rrData?: { intervals: number[]; lastPeakTime: number | null }
   }): VitalSignsResult {
+    // Apply anti-simulation protection
+    if (this.antiSimulationGuard.detectSimulation(data.value)) {
+      console.warn("VitalSignsProcessor: Simulation attempt detected and blocked");
+      return ResultFactory.createEmptyResults();
+    }
+    
     return this.process(data.value, data.rrData);
   }
   
@@ -70,6 +83,12 @@ export class VitalSignsProcessor {
     ppgValue: number,
     rrData?: { intervals: number[]; lastPeakTime: number | null }
   ): VitalSignsResult {
+    // Apply anti-simulation protection
+    if (this.antiSimulationGuard.detectSimulation(ppgValue)) {
+      console.warn("VitalSignsProcessor: Simulation attempt detected and blocked");
+      return ResultFactory.createEmptyResults();
+    }
+    
     // Check for near-zero signal
     if (!this.signalValidator.isValidSignal(ppgValue)) {
       console.log("VitalSignsProcessor: Signal too weak, returning zeros", { value: ppgValue });
@@ -127,14 +146,20 @@ export class VitalSignsProcessor {
     const lipids = this.lipidProcessor.calculateLipids(ppgValues);
     const lipidsConfidence = this.lipidProcessor.getConfidence();
     
+    // Calculate hydration with real data only
+    const hydration = this.hydrationProcessor.calculateHydration(ppgValues.slice(-45));
+    const hydrationConfidence = this.hydrationProcessor.getConfidence();
+    
     // Calculate overall confidence
     const overallConfidence = this.confidenceCalculator.calculateOverallConfidence(
       glucoseConfidence,
-      lipidsConfidence
+      lipidsConfidence,
+      hydrationConfidence
     );
 
     // Only show values if confidence exceeds threshold
     const finalGlucose = this.confidenceCalculator.meetsThreshold(glucoseConfidence) ? glucose : 0;
+    const finalHydration = this.confidenceCalculator.meetsThreshold(hydrationConfidence) ? hydration : 0;
     const finalLipids = this.confidenceCalculator.meetsThreshold(lipidsConfidence) ? lipids : {
       totalCholesterol: 0,
       triglycerides: 0
@@ -145,8 +170,10 @@ export class VitalSignsProcessor {
       pressure,
       arrhythmiaStatus: arrhythmiaResult.arrhythmiaStatus,
       glucose: finalGlucose,
+      hydration: finalHydration,
       glucoseConfidence,
       lipidsConfidence,
+      hydrationConfidence,
       signalAmplitude: amplitude,
       confidenceThreshold: this.confidenceCalculator.getConfidenceThreshold()
     });
@@ -157,6 +184,7 @@ export class VitalSignsProcessor {
       pressure,
       arrhythmiaResult.arrhythmiaStatus,
       finalGlucose,
+      finalHydration,
       finalLipids,
       {
         glucose: glucoseConfidence,
@@ -178,6 +206,8 @@ export class VitalSignsProcessor {
     this.signalProcessor.reset();
     this.glucoseProcessor.reset();
     this.lipidProcessor.reset();
+    this.hydrationProcessor.reset();
+    this.antiSimulationGuard.reset();
     console.log("VitalSignsProcessor: Reset complete - all processors at zero");
     return null; // Always return null to ensure measurements start from zero
   }
@@ -203,6 +233,7 @@ export class VitalSignsProcessor {
    */
   public fullReset(): void {
     this.reset();
+    this.antiSimulationGuard.reset();
     console.log("VitalSignsProcessor: Full reset completed - starting from zero");
   }
 }
