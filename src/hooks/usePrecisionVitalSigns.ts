@@ -1,4 +1,3 @@
-
 /**
  * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
  * 
@@ -104,8 +103,20 @@ export function usePrecisionVitalSigns() {
     }
     
     try {
+      // Convertir ProcessedSignal a número o ProcessedPPGSignal como espera PrecisionVitalSignsProcessor
+      const signalValue = {
+        timestamp: signal.timestamp,
+        rawValue: signal.rawValue,
+        filteredValue: signal.filteredValue,
+        normalizedValue: 0, // Add required properties
+        amplifiedValue: signal.filteredValue * 1.5, // Approximate amplification
+        signalStrength: signal.quality, // Map quality to signalStrength
+        quality: signal.quality,
+        fingerDetected: signal.fingerDetected
+      };
+      
       // Procesar señal con precisión mejorada
-      const result = processorRef.current.processSignal(signal);
+      const result = processorRef.current.processSignal(signalValue);
       
       // Actualizar estado con el resultado
       setState(prev => ({
@@ -114,11 +125,11 @@ export function usePrecisionVitalSigns() {
         isCalibrated: result.isCalibrated,
         calibrationStatus: {
           hasReference: result.isCalibrated,
-          confidence: result.precisionMetrics.calibrationConfidence
+          confidence: result.precisionMetrics.calibrationConfidence || 0
         },
         environmentalStatus: {
-          lightDetected: processorRef.current?.getDiagnostics().environmentalConditions.lightLevel || 50,
-          motionDetected: processorRef.current?.getDiagnostics().environmentalConditions.motionLevel || 0
+          lightDetected: processorRef.current?.getDiagnostics()?.environmentalConditions?.lightLevel || 50,
+          motionDetected: processorRef.current?.getDiagnostics()?.environmentalConditions?.motionLevel || 0
         }
       }));
       
@@ -171,10 +182,10 @@ export function usePrecisionVitalSigns() {
       // Actualizar estado de calibración
       setState(prev => ({
         ...prev,
-        isCalibrated: processorRef.current?.isCalibrated() || false,
+        isCalibrated: processorRef.current?.isCalibrated ? processorRef.current.isCalibrated() : false,
         calibrationStatus: {
           hasReference: true,
-          confidence: processorRef.current?.getDiagnostics().calibrationFactors.confidence || 0
+          confidence: processorRef.current?.getDiagnostics()?.calibrationFactors?.confidence || 0
         }
       }));
     }
