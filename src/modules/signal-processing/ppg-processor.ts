@@ -44,7 +44,10 @@ export class PPGProcessor implements SignalProcessor<ProcessedPPGSignal> {
       amplifiedValue,
       quality,
       fingerDetected,
-      signalStrength: Math.abs(amplifiedValue)
+      signalStrength: Math.abs(amplifiedValue),
+      sourceId: 'ppg-processor',
+      priority: 'MEDIUM',
+      isValid: fingerDetected && quality > 20
     };
   }
   

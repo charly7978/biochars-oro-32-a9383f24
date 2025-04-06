@@ -1,4 +1,18 @@
-import { OptimizedSignalChannel, ChannelFeedback, VitalSignType } from '../../../types/signal';
+import { ChannelFeedback, VitalSignType } from '../../../types/signal';
+
+/**
+ * Interface for all optimized signal channels
+ */
+export interface OptimizedSignalChannel {
+  id: string;
+  type: VitalSignType;
+  processValue(value: number): number;
+  applyFeedback(feedback: ChannelFeedback): void;
+  getQuality(): number;
+  reset(): void;
+  getAmplification(): number;
+  getFilterStrength(): number;
+}
 
 /**
  * Base class for specialized signal processing channels

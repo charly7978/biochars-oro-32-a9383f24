@@ -1,4 +1,3 @@
-
 /**
  * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
  * 
@@ -186,7 +185,10 @@ export function usePrecisionVitalSigns() {
         amplifiedValue: signal.filteredValue * 1.2, // Apply a simple amplification
         quality: signal.quality,
         fingerDetected: signal.fingerDetected,
-        signalStrength: signal.quality // Use quality as signal strength
+        signalStrength: signal.quality, // Use quality as signal strength
+        sourceId: 'precision-vitals-hook',
+        priority: 'MEDIUM',
+        isValid: signal.fingerDetected && signal.quality > 20
       };
       
       // Register good signal for recovery
