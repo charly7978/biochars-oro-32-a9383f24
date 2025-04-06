@@ -303,6 +303,3 @@ export class PrecisionVitalSignsProcessor {
     console.log("PrecisionVitalSignsProcessor reset");
   }
 }
-
-// Export the types
-export type { PrecisionVitalSignsResult };

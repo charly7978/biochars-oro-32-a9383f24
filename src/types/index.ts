@@ -1,4 +1,3 @@
-
 /**
  * Central export for all type definitions
  * Import types from here instead of individual files
@@ -30,3 +29,5 @@ export type { SignalProcessor };
 import { VitalSignType } from './signal';
 export { VitalSignType };
 
+// Add this line to export the type from PrecisionVitalSignsProcessor
+export type { PrecisionVitalSignsResult } from '../modules/vital-signs/PrecisionVitalSignsProcessor';
