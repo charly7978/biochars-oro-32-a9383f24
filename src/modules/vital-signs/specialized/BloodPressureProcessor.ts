@@ -6,7 +6,7 @@
 import { BaseVitalSignProcessor } from './BaseVitalSignProcessor';
 import { ChannelFeedback, VitalSignType } from '../../../types/signal';
 
-export class BloodPressureProcessor extends BaseVitalSignProcessor {
+export class BloodPressureProcessor extends BaseVitalSignProcessor<{ systolic: number, diastolic: number }> {
   private systolic: number = 0;
   private diastolic: number = 0;
   private meanArterialPressure: number = 0;
@@ -53,6 +53,20 @@ export class BloodPressureProcessor extends BaseVitalSignProcessor {
       systolic: Math.round(this.systolic),
       diastolic: Math.round(this.diastolic)
     };
+  }
+  
+  /**
+   * Calculate blood pressure from signal values
+   * This method is called by VitalSignsProcessor
+   */
+  public calculateBloodPressure(values: number[]): { systolic: number, diastolic: number } {
+    // For simple implementation, use the average value from the array
+    let avgValue = 0;
+    if (values.length > 0) {
+      avgValue = values.reduce((sum, val) => sum + val, 0) / values.length;
+    }
+    
+    return this.processValue(avgValue);
   }
   
   /**

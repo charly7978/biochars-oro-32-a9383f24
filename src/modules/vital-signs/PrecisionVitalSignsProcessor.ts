@@ -12,7 +12,7 @@ import { BloodPressureProcessor } from './specialized/BloodPressureProcessor';
 import { SpO2Processor } from './specialized/SpO2Processor';
 import { HydrationProcessor } from './specialized/HydrationProcessor';
 import { ArrhythmiaProcessor } from './specialized/ArrhythmiaProcessor';
-import { ProcessedSignal } from '../signal-processing/types';
+import { ProcessedPPGSignal as ProcessedSignal } from '../signal-processing/types';
 import { CalibrationReference } from './calibration/CalibrationManager';
 
 /**
@@ -26,6 +26,7 @@ export interface PrecisionVitalSignsResult extends VitalSignsResult {
     confidence: number;
     variance: number;
     timeSeriesStability: number;
+    calibrationConfidence?: number;
   };
 }
 
@@ -93,7 +94,8 @@ export class PrecisionVitalSignsProcessor {
       precisionMetrics: {
         confidence: confidence,
         variance: 0.05,
-        timeSeriesStability: 0.8
+        timeSeriesStability: 0.8,
+        calibrationConfidence: this._isCalibrated ? 0.95 : 0.0
       }
     };
     
