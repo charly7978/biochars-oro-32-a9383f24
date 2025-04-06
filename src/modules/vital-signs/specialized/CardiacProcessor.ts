@@ -1,68 +1,172 @@
 
 /**
- * Cardiac Processor implementation for specialized processing
+ * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
+ * 
+ * Specialized processor for cardiac measurements
+ * Uses optimized cardiac signal for heart rate and arrhythmia detection
  */
 
-export class CardiacProcessor {
-  private readonly BASE_HEART_RATE = 72; // Base heart rate (bpm)
-  private readonly BASE_HRV = 50; // Base heart rate variability (ms)
-  private confidence: number = 0.85;
+import { BaseVitalSignProcessor } from './BaseVitalSignProcessor';
+import { VitalSignType, ChannelFeedback } from '../../../types/signal';
+
+/**
+ * Result interface for cardiac measurements
+ */
+export interface CardiacResult {
+  heartRate: number;
+  arrhythmiaDetected: boolean;
+  rhythmRegularity: number;
+}
+
+/**
+ * Cardiac processor implementation
+ */
+export class CardiacProcessor extends BaseVitalSignProcessor<CardiacResult> {
+  // Cardiac measurement parameters
+  private readonly MAX_HEART_RATE = 180;  // bpm
+  private readonly MIN_HEART_RATE = 40;   // bpm
+  
+  // Peak detection state
+  private lastPeakTime: number = 0;
+  private peakBuffer: number[] = [];
+  private intervalBuffer: number[] = [];
+  private readonly MAX_PEAK_BUFFER = 20;
   
   constructor() {
-    console.log("CardiacProcessor (Specialized): Initialized");
+    super(VitalSignType.CARDIAC);
   }
   
   /**
-   * Process a value from the signal distributor
+   * Process a value from the cardiac-optimized channel
+   * @param value Optimized cardiac signal value
+   * @returns Cardiac measurement results
    */
-  public processValue(value: number): { heartRate: number; hrv: number } {
+  protected processValueImpl(value: number): CardiacResult {
+    // Skip processing if the value is too small
     if (Math.abs(value) < 0.01) {
       return {
-        heartRate: this.BASE_HEART_RATE,
-        hrv: this.BASE_HRV
+        heartRate: 0,
+        arrhythmiaDetected: false,
+        rhythmRegularity: 0
       };
     }
     
-    // Calculate heart rate based on signal value
-    const heartRateAdjustment = value * 30;
-    const hrvAdjustment = value * 15;
+    // Detect peaks for heart rate calculation
+    this.detectPeak(value);
     
-    const heartRate = Math.round(this.BASE_HEART_RATE + heartRateAdjustment);
-    const hrv = Math.round(this.BASE_HRV + hrvAdjustment);
+    // Calculate heart rate from peaks
+    const heartRate = this.calculateHeartRate();
     
-    // Update confidence
-    this.confidence = Math.min(0.98, Math.max(0.6, 0.85 + value / 5));
+    // Check for arrhythmia
+    const { arrhythmiaDetected, rhythmRegularity } = this.detectArrhythmia();
     
     return {
-      heartRate,
-      hrv
+      heartRate: Math.round(heartRate),
+      arrhythmiaDetected,
+      rhythmRegularity
     };
   }
   
   /**
-   * Get the confidence level of the last calculation
+   * Detect peaks in cardiac signal
    */
-  public getConfidence(): number {
-    return this.confidence;
-  }
-  
-  /**
-   * Reset processor state
-   */
-  public reset(): void {
-    this.confidence = 0.85;
-  }
-
-  /**
-   * Get diagnostic information
-   */
-  public getDiagnostics(): any {
-    return {
-      confidence: this.confidence,
-      baseValues: {
-        heartRate: this.BASE_HEART_RATE,
-        hrv: this.BASE_HRV
+  private detectPeak(value: number): void {
+    // Add to peak buffer
+    this.peakBuffer.push(value);
+    if (this.peakBuffer.length > this.MAX_PEAK_BUFFER) {
+      this.peakBuffer.shift();
+    }
+    
+    // Need at least 3 values for peak detection
+    if (this.peakBuffer.length < 3) return;
+    
+    // Check if middle value is a peak
+    const len = this.peakBuffer.length;
+    if (this.peakBuffer[len-2] > this.peakBuffer[len-3] && 
+        this.peakBuffer[len-2] > this.peakBuffer[len-1] &&
+        this.peakBuffer[len-2] > 0.2) {
+      
+      // We found a peak
+      const now = Date.now();
+      
+      // Calculate interval if we have a previous peak
+      if (this.lastPeakTime > 0) {
+        const interval = now - this.lastPeakTime;
+        
+        // Only accept physiologically plausible intervals
+        if (interval > 300 && interval < 2000) {
+          this.intervalBuffer.push(interval);
+          if (this.intervalBuffer.length > 10) {
+            this.intervalBuffer.shift();
+          }
+        }
       }
+      
+      // Update last peak time
+      this.lastPeakTime = now;
+    }
+  }
+  
+  /**
+   * Calculate heart rate from detected peaks
+   */
+  private calculateHeartRate(): number {
+    if (this.intervalBuffer.length < 2) {
+      return 0;
+    }
+    
+    // Calculate average interval
+    const avgInterval = this.intervalBuffer.reduce((sum, interval) => sum + interval, 0) / 
+                       this.intervalBuffer.length;
+    
+    // Convert to BPM
+    const heartRate = 60000 / avgInterval;
+    
+    // Ensure result is within physiological range
+    return Math.min(this.MAX_HEART_RATE, Math.max(this.MIN_HEART_RATE, heartRate));
+  }
+  
+  /**
+   * Detect arrhythmia from interval pattern
+   */
+  private detectArrhythmia(): { arrhythmiaDetected: boolean, rhythmRegularity: number } {
+    if (this.intervalBuffer.length < 3) {
+      return {
+        arrhythmiaDetected: false,
+        rhythmRegularity: 0
+      };
+    }
+    
+    // Calculate interval variation
+    const avgInterval = this.intervalBuffer.reduce((sum, interval) => sum + interval, 0) / 
+                       this.intervalBuffer.length;
+    
+    const variance = this.intervalBuffer.reduce(
+      (sum, interval) => sum + Math.pow(interval - avgInterval, 2), 0
+    ) / this.intervalBuffer.length;
+    
+    const stdDev = Math.sqrt(variance);
+    const coefficientOfVariation = stdDev / avgInterval;
+    
+    // Calculate rhythm regularity (1 = perfectly regular, 0 = chaotic)
+    const rhythmRegularity = Math.max(0, 1 - coefficientOfVariation * 3);
+    
+    // Detect arrhythmia when rhythm regularity is low
+    const arrhythmiaDetected = rhythmRegularity < 0.7;
+    
+    return {
+      arrhythmiaDetected,
+      rhythmRegularity
     };
+  }
+  
+  /**
+   * Reset processor
+   */
+  public override reset(): void {
+    super.reset();
+    this.lastPeakTime = 0;
+    this.peakBuffer = [];
+    this.intervalBuffer = [];
   }
 }

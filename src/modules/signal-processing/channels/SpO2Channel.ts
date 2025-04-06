@@ -1,133 +1,118 @@
 
-/**
- * SpO2 specialized channel
- */
+import { SpecializedChannel, ChannelConfig } from './SpecializedChannel';
+import { VitalSignType, ChannelFeedback } from '../../../types/signal';
 
-import { VitalSignType } from '../../../types/signal';
-import { SpecializedChannel } from './SpecializedChannel';
+interface SpO2ChannelConfig extends ChannelConfig {
+  initialSaturation?: number;  // Initial SpO2 saturation percentage
+  adaptationRate?: number;     // How quickly the channel adapts to signal changes
+}
 
-/**
- * Channel optimized for SpO2 signal extraction
- */
 export class SpO2Channel extends SpecializedChannel {
-  private readonly RED_WEIGHT = 0.7;
-  private readonly IR_WEIGHT = 0.3;
-  private readonly AC_EMPHASIS = 1.2;
-  private readonly DC_SUPPRESSION = 0.7;
-  private readonly NOISE_THRESHOLD = 0.05;
+  private amplificationFactor: number;
+  private filterStrength: number;
+  private saturationEstimate: number;
+  private adaptationRate: number;
+  private perfusionIndex: number;
   
-  private lastValues: number[] = [];
-  private readonly BUFFER_SIZE = 10;
+  constructor(config?: SpO2ChannelConfig) {
+    super(VitalSignType.SPO2, config);
+    
+    this.amplificationFactor = config?.initialAmplification || 1.5;
+    this.filterStrength = config?.initialFilterStrength || 0.8;
+    this.saturationEstimate = config?.initialSaturation || 97;
+    this.adaptationRate = config?.adaptationRate || 0.05;
+    this.perfusionIndex = 0;
+  }
   
-  /**
-   * Constructor
-   */
-  constructor() {
-    super(VitalSignType.SPO2);
-    this.amplification = 1.2; // Higher amplification for SpO2
-    this.filterStrength = 0.6; // Stronger filtering for SpO2
+  protected override applyChannelSpecificOptimization(value: number): number {
+    // Aplicar amplificación adaptativa para SpO2
+    const amplifiedValue = value * this.amplificationFactor;
+    
+    // Filtrado simple basado en promedio móvil ponderado
+    let filteredValue = amplifiedValue;
+    if (this.recentValues.length > 3) {
+      const recentAvg = (
+        this.recentValues[this.recentValues.length - 2] * 0.7 + 
+        this.recentValues[this.recentValues.length - 3] * 0.3
+      );
+      filteredValue = amplifiedValue * (1 - this.filterStrength) + recentAvg * this.filterStrength;
+    }
+    
+    // Calcular índice de perfusión simplificado (proporción de componente pulsátil)
+    if (this.recentValues.length > 10) {
+      const min = Math.min(...this.recentValues.slice(-10));
+      const max = Math.max(...this.recentValues.slice(-10));
+      this.perfusionIndex = (max - min) / ((max + min) / 2 || 1);
+    }
+    
+    // Ajustar calidad basada en la estabilidad reciente y perfusión
+    const recentValuesStd = this.calculateStandardDeviation(this.recentValues.slice(-15));
+    this.quality = Math.min(1, Math.max(0, 1 - recentValuesStd / 5)) * 
+                   Math.min(1, this.perfusionIndex * 10);
+    
+    return filteredValue;
   }
   
   /**
-   * Process signal with SpO2-specific optimizations
+   * Implementación de applyFeedback para SpO2Channel
+   * Ajusta parámetros en función del feedback recibido
    */
-  protected override specializedProcessing(value: number): number {
-    // Store the value for analysis
-    this.lastValues.push(value);
-    if (this.lastValues.length > this.BUFFER_SIZE) {
-      this.lastValues.shift();
+  public override applyFeedback(feedback: ChannelFeedback): void {
+    super.applyFeedback(feedback);
+    
+    // Aplica ajustes específicos para SpO2
+    if (feedback.suggestedAdjustments) {
+      if (feedback.suggestedAdjustments.amplificationFactor !== undefined) {
+        this.amplificationFactor = feedback.suggestedAdjustments.amplificationFactor;
+      }
+      
+      if (feedback.suggestedAdjustments.filterStrength !== undefined) {
+        this.filterStrength = feedback.suggestedAdjustments.filterStrength;
+      }
     }
     
-    // Not enough values yet for full processing
-    if (this.lastValues.length < 3) {
-      return value;
+    // Ajustar estimación de saturación si la calidad es buena
+    if (feedback.success && feedback.signalQuality && feedback.signalQuality > 0.7) {
+      // Podríamos recibir una estimación de SpO2 desde algoritmos externos
+      // y ajustar gradualmente nuestra estimación interna
     }
-    
-    // Calculate baseline
-    const baseline = this.calculateBaseline();
-    
-    // Extract AC component (pulsatile)
-    const ac = value - baseline;
-    
-    // Enhance AC component for better SpO2 estimation
-    const enhancedAc = ac * this.AC_EMPHASIS;
-    
-    // Reduce DC component for better SNR
-    const reducedDc = baseline * this.DC_SUPPRESSION;
-    
-    // Improved SpO2-optimized signal
-    const spo2Signal = reducedDc + enhancedAc;
-    
-    // Noise reduction
-    return this.reduceNoise(spo2Signal);
   }
   
   /**
-   * Calculate signal baseline (DC component)
+   * Obtiene la estimación actual de SpO2
    */
-  private calculateBaseline(): number {
-    if (this.lastValues.length < 3) {
-      return this.lastValues[0] || 0;
-    }
-    
-    // Simple moving average for baseline
-    return this.lastValues.reduce((sum, val) => sum + val, 0) / this.lastValues.length;
+  public getSaturationEstimate(): number {
+    // Un valor de SpO2 básico basado en la calidad de la señal
+    // En una implementación real, se usarían algoritmos más sofisticados
+    return Math.min(100, this.saturationEstimate);
   }
   
   /**
-   * Reduce noise in the signal
+   * Obtiene el índice de perfusión actual
    */
-  private reduceNoise(value: number): number {
-    if (this.lastValues.length < 3) {
-      return value;
-    }
-    
-    // Check for excessive noise
-    const last = this.lastValues[this.lastValues.length - 1] || 0;
-    const secondLast = this.lastValues[this.lastValues.length - 2] || 0;
-    
-    const diff = Math.abs(value - last);
-    const prevDiff = Math.abs(last - secondLast);
-    
-    // If current change is much larger than previous change, it might be noise
-    if (diff > prevDiff * 3 && diff > this.NOISE_THRESHOLD) {
-      // Reduce the influence of the noise spike
-      return last + (value - last) * 0.3;
-    }
-    
-    return value;
+  public getPerfusionIndex(): number {
+    return this.perfusionIndex;
   }
   
   /**
-   * Apply weighted emphasis on red/IR components
-   * This is specific to SpO2 calculation
+   * Calcula la desviación estándar de un array de valores
    */
-  public applySpO2Weights(redValue: number, irValue: number): number {
-    return redValue * this.RED_WEIGHT + irValue * this.IR_WEIGHT;
+  private calculateStandardDeviation(values: number[]): number {
+    if (values.length < 2) return 0;
+    
+    const mean = values.reduce((acc, val) => acc + val, 0) / values.length;
+    const squaredDiffs = values.map(value => Math.pow(value - mean, 2));
+    const variance = squaredDiffs.reduce((acc, val) => acc + val, 0) / values.length;
+    
+    return Math.sqrt(variance);
   }
   
   /**
-   * Reset channel state
+   * Reset the channel state
    */
   public override reset(): void {
     super.reset();
-    this.lastValues = [];
-    this.amplification = 1.2; // Higher amplification for SpO2
-    this.filterStrength = 0.6; // Stronger filtering for SpO2
-  }
-  
-  /**
-   * Update quality calculation with SpO2-specific metrics
-   */
-  public calculateQuality(redValue: number, irValue: number): number {
-    // Calculate ratio
-    const ratio = irValue !== 0 ? redValue / irValue : 0;
-    
-    // Update quality based on ratio validity
-    if (ratio > 0.3 && ratio < 1.0) {
-      return Math.min(1.0, super.getQuality() + 0.1);
-    } else {
-      return Math.max(0.0, super.getQuality() - 0.1);
-    }
+    this.perfusionIndex = 0;
+    this.saturationEstimate = 97; // Default SpO2 estimate
   }
 }

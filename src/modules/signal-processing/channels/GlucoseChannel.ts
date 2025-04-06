@@ -1,153 +1,68 @@
 
 /**
- * Specialized channel for glucose signal processing
- * Optimizes the signal specifically for glucose measurement algorithms
+ * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
  */
 
+import { VitalSignType, ChannelFeedback } from '../../../types/signal';
 import { SpecializedChannel, ChannelConfig } from './SpecializedChannel';
-import { VitalSignType } from '../../../types/signal';
 
 /**
- * Glucose-specific channel configuration
+ * Canal especializado para procesamiento de glucosa
  */
 export class GlucoseChannel extends SpecializedChannel {
-  // Glucose-specific parameters
-  private readonly LOW_FREQUENCY_WEIGHT = 0.6;  // Higher weight for low frequencies
-  private readonly HIGH_FREQUENCY_WEIGHT = 0.4; // Lower weight for high frequencies
-  private readonly PERFUSION_EMPHASIS = 1.2;    // Emphasis on perfusion-related components
-  private areaUnderCurveBuffer: number[] = [];
-  private readonly AUC_BUFFER_SIZE = 30;
+  private amplificationFactor: number = 1.0;
+  private filterStrength: number = 0.15;
   
-  constructor(config: ChannelConfig) {
+  constructor(config?: ChannelConfig) {
     super(VitalSignType.GLUCOSE, config);
+    
+    // Aplicar configuración si está disponible
+    if (config) {
+      this.amplificationFactor = config.initialAmplification || this.amplificationFactor;
+      this.filterStrength = config.initialFilterStrength || this.filterStrength;
+    }
   }
   
   /**
-   * Apply glucose-specific optimization to the signal
-   * - Emphasizes low-frequency components related to blood glucose changes
-   * - Enhances perfusion-related signal characteristics
-   * - Calculates and uses area under the curve for glucose correlation
+   * Optimización específica para glucosa
    */
   protected applyChannelSpecificOptimization(value: number): number {
-    // Calculate a baseline from recent values
-    const baseline = this.calculateBaseline();
+    // Filtrado específico para extracción de componentes de glucosa
+    const filteredValue = this.applySpecializedFilter(value);
     
-    // Calculate an emphasis factor based on recent signal areas
-    const emphasisFactor = this.calculateEmphasisFactor(value, baseline);
+    // Amplificar señal
+    return filteredValue * this.amplificationFactor;
+  }
+
+  /**
+   * Aplica filtrado especializado para componentes de glucosa
+   */
+  private applySpecializedFilter(value: number): number {
+    if (this.recentValues.length < 10) return value;
     
-    // Apply frequency weighting specific to glucose signal components
-    const frequencyWeightedValue = this.applyFrequencyWeighting(value, baseline);
+    // Aplicar filtrado simple para este ejemplo
+    const recentValues = this.recentValues.slice(-10);
+    const avg = recentValues.reduce((sum, val) => sum + val, 0) / recentValues.length;
     
-    // Enhance perfusion-related components
-    const enhancedValue = frequencyWeightedValue * this.PERFUSION_EMPHASIS * emphasisFactor;
-    
-    // Update area under curve buffer
-    this.updateAreaUnderCurveBuffer(value, baseline);
-    
-    return enhancedValue;
+    // Mezcla con valor actual usando intensidad de filtro
+    return value * (1 - this.filterStrength) + avg * this.filterStrength;
   }
   
   /**
-   * Calculate a baseline from recent values
+   * Implementación de retroalimentación para canal de glucosa
    */
-  private calculateBaseline(): number {
-    if (this.recentValues.length < 5) {
-      return 0;
-    }
+  public override applyFeedback(feedback: ChannelFeedback): void {
+    super.applyFeedback(feedback);
     
-    // Use median filtering for more stable baseline
-    const sortedValues = [...this.recentValues].sort((a, b) => a - b);
-    return sortedValues[Math.floor(sortedValues.length / 2)];
-  }
-  
-  /**
-   * Calculate emphasis factor based on signal characteristics
-   */
-  private calculateEmphasisFactor(value: number, baseline: number): number {
-    // Default emphasis if not enough data
-    if (this.recentValues.length < 10) {
-      return 1.0;
-    }
-    
-    // Calculate signal area properties
-    const areaValues = this.recentValues.map(v => v - baseline);
-    let positiveArea = 0;
-    let negativeArea = 0;
-    
-    for (const areaValue of areaValues) {
-      if (areaValue > 0) {
-        positiveArea += areaValue;
-      } else {
-        negativeArea += Math.abs(areaValue);
+    // Ajustes específicos para este canal
+    if (feedback.suggestedAdjustments) {
+      if (feedback.suggestedAdjustments.amplificationFactor !== undefined) {
+        this.amplificationFactor = feedback.suggestedAdjustments.amplificationFactor;
+      }
+      
+      if (feedback.suggestedAdjustments.filterStrength !== undefined) {
+        this.filterStrength = feedback.suggestedAdjustments.filterStrength;
       }
     }
-    
-    // Area ratio affects emphasis
-    const areaRatio = (positiveArea + 0.0001) / (negativeArea + 0.0001);
-    
-    // Emphasis is higher when areas are more balanced
-    const balanceFactor = Math.min(1, 1 / Math.abs(Math.log10(areaRatio)));
-    
-    return 0.8 + (balanceFactor * 0.4); // Range: 0.8 - 1.2
-  }
-  
-  /**
-   * Apply frequency weighting to emphasize glucose-relevant components
-   */
-  private applyFrequencyWeighting(value: number, baseline: number): number {
-    if (this.recentValues.length < 10) {
-      return value;
-    }
-    
-    // Split into low and high frequency components
-    const lowFreqComponent = this.calculateLowFrequencyComponent(value, baseline);
-    const highFreqComponent = value - baseline - lowFreqComponent;
-    
-    // Weight and combine components
-    return baseline + 
-           (lowFreqComponent * this.LOW_FREQUENCY_WEIGHT) + 
-           (highFreqComponent * this.HIGH_FREQUENCY_WEIGHT);
-  }
-  
-  /**
-   * Calculate low frequency component using a simple approximation
-   */
-  private calculateLowFrequencyComponent(value: number, baseline: number): number {
-    if (this.recentValues.length < 8) {
-      return value - baseline;
-    }
-    
-    // Simple low-pass filter approximation
-    const recent = this.recentValues.slice(-8);
-    const avgValue = recent.reduce((sum, val) => sum + val, 0) / recent.length;
-    
-    return avgValue - baseline;
-  }
-  
-  /**
-   * Update area under curve buffer for glucose correlations
-   */
-  private updateAreaUnderCurveBuffer(value: number, baseline: number): void {
-    this.areaUnderCurveBuffer.push(value - baseline);
-    
-    if (this.areaUnderCurveBuffer.length > this.AUC_BUFFER_SIZE) {
-      this.areaUnderCurveBuffer.shift();
-    }
-  }
-  
-  /**
-   * Get area under curve for recent values
-   * Important for glucose correlation
-   */
-  public getAreaUnderCurve(): number {
-    return this.areaUnderCurveBuffer.reduce((sum, val) => sum + val, 0);
-  }
-  
-  /**
-   * Reset channel state
-   */
-  public override reset(): void {
-    super.reset();
-    this.areaUnderCurveBuffer = [];
   }
 }
