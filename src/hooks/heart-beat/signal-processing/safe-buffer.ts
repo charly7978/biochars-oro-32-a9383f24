@@ -10,24 +10,101 @@ import {
 import { 
   PPGDataPoint, 
   TimestampedPPGData, 
-  SignalValidationResult 
+  SignalValidationResult,
+  SignalDiagnosticInfo
 } from '../../../types/signal';
-import { 
-  SignalValidator, 
-  createSignalValidator 
-} from '../../../modules/signal-processing/signal-validator';
-import { 
-  SignalProcessingErrorHandler, 
-  getErrorHandler 
-} from '../../../modules/signal-processing/error-handler';
-import { 
-  SignalProcessingDiagnostics, 
-  getDiagnostics 
-} from '../../../modules/signal-processing/diagnostics';
 
 /**
- * SafeBuffer que añade validación y manejo de errores
- * Compatible con la interfaz original para facilitar integración
+ * Simple signal validator interface
+ */
+interface SignalValidator {
+  validatePPGDataPoint(point: any): SignalValidationResult;
+}
+
+/**
+ * Simple error handler interface
+ */
+interface SignalProcessingErrorHandler {
+  handleError(
+    error: any, 
+    componentName: string, 
+    lastValidPoint?: any
+  ): { shouldRetry: boolean; fallbackValue: any | null };
+  registerGoodValue(componentName: string, value: any): void;
+}
+
+/**
+ * Simple diagnostics interface
+ */
+interface SignalProcessingDiagnostics {
+  recordDiagnosticInfo(info: SignalDiagnosticInfo): void;
+}
+
+/**
+ * Create a simple validator
+ */
+function createSignalValidator(): SignalValidator {
+  return {
+    validatePPGDataPoint: (point: any): SignalValidationResult => {
+      if (!point || typeof point !== 'object') {
+        return {
+          isValid: false,
+          errorCode: 'INVALID_POINT',
+          errorMessage: 'Invalid point object'
+        };
+      }
+      
+      if (typeof point.value !== 'number') {
+        return {
+          isValid: false,
+          errorCode: 'MISSING_VALUE',
+          errorMessage: 'Missing or invalid value field'
+        };
+      }
+      
+      return { isValid: true };
+    }
+  };
+}
+
+/**
+ * Create a simple error handler
+ */
+function getErrorHandler(): SignalProcessingErrorHandler {
+  const lastGoodValues: Record<string, any> = {};
+  
+  return {
+    handleError: (error, componentName, lastValidPoint) => {
+      console.warn(`Error in ${componentName}:`, error);
+      
+      return {
+        shouldRetry: false,
+        fallbackValue: lastValidPoint || lastGoodValues[componentName] || null
+      };
+    },
+    registerGoodValue: (componentName, value) => {
+      lastGoodValues[componentName] = value;
+    }
+  };
+}
+
+/**
+ * Create a simple diagnostics service
+ */
+function getDiagnostics(): SignalProcessingDiagnostics {
+  return {
+    recordDiagnosticInfo: (info) => {
+      // Just log to console in this simple implementation
+      if (!info.validationPassed) {
+        console.log('Signal processing diagnostic:', info);
+      }
+    }
+  };
+}
+
+/**
+ * SafeBuffer that adds validation and error handling
+ * Compatible with the original interface for easy integration
  */
 export class SafePPGBuffer<T extends TimestampedPPGData = TimestampedPPGData> {
   private buffer: OptimizedPPGBuffer<T>;
@@ -38,10 +115,10 @@ export class SafePPGBuffer<T extends TimestampedPPGData = TimestampedPPGData> {
   private lastValidPoint: T | null = null;
 
   constructor(capacity: number, componentName = 'SafePPGBuffer') {
-    // Inicializar buffer optimizado
+    // Initialize optimized buffer
     this.buffer = new OptimizedPPGBuffer<T>(capacity);
     
-    // Inicializar sistemas de validación y error
+    // Initialize validation and error systems
     this.validator = createSignalValidator();
     this.errorHandler = getErrorHandler();
     this.diagnostics = getDiagnostics();
@@ -51,26 +128,26 @@ export class SafePPGBuffer<T extends TimestampedPPGData = TimestampedPPGData> {
   }
 
   /**
-   * Añadir un punto con validación
+   * Add a point with validation
    */
   public push(item: T): void {
     try {
-      // Asegurarse de que el punto tenga todas las propiedades necesarias
+      // Ensure the point has all required properties
       const enhancedItem = { ...item } as T;
       
-      // Garantizar que tanto time como timestamp existan
-      if ('timestamp' in item && !('time' in item)) {
-        (enhancedItem as unknown as { time: number }).time = item.timestamp;
-      } else if ('time' in item && !('timestamp' in item)) {
-        (enhancedItem as unknown as { timestamp: number }).timestamp = item.time;
+      // Ensure both time and timestamp exist
+      if ('timestamp' in enhancedItem && !('time' in enhancedItem)) {
+        (enhancedItem as any).time = enhancedItem.timestamp;
+      } else if ('time' in enhancedItem && !('timestamp' in enhancedItem)) {
+        (enhancedItem as any).timestamp = enhancedItem.time;
       }
       
-      // Validar el punto antes de añadirlo
+      // Validate the point before adding it
       const validationStart = performance.now();
       const validationResult: SignalValidationResult = this.validator.validatePPGDataPoint(enhancedItem);
       const validationTimeMs = performance.now() - validationStart;
       
-      // Registrar diagnóstico de validación
+      // Record validation diagnostic
       this.diagnostics.recordDiagnosticInfo({
         processingStage: `${this.componentName}.validate`,
         validationPassed: validationResult.isValid,
@@ -80,13 +157,10 @@ export class SafePPGBuffer<T extends TimestampedPPGData = TimestampedPPGData> {
       });
       
       if (!validationResult.isValid) {
-        // Manejar el error de validación
+        // Handle validation error
         const error = {
           code: validationResult.errorCode || 'VALIDATION_ERROR',
           message: validationResult.errorMessage || 'Data validation failed',
-          timestamp: Date.now(),
-          severity: 'medium' as const,
-          recoverable: true,
           data: {
             item,
             validationResult
@@ -100,32 +174,32 @@ export class SafePPGBuffer<T extends TimestampedPPGData = TimestampedPPGData> {
         );
         
         if (shouldRetry) {
-          // No hacer nada, dejar que el sistema siga operando
+          // Do nothing, let the system continue operating
           return;
         } else if (fallbackValue) {
-          // Usar el último valor válido
+          // Use the last valid value
           this.buffer.push(fallbackValue);
           return;
         } else {
-          // No añadir el punto inválido
+          // Don't add the invalid point
           return;
         }
       }
       
-      // Si pasa la validación, guardar como último valor válido
+      // If validation passes, save as last valid point
       this.lastValidPoint = enhancedItem;
       
-      // Registrar como valor bueno para futuros fallbacks
+      // Register as good value for future fallbacks
       this.errorHandler.registerGoodValue(this.componentName, enhancedItem);
       
-      // Añadir al buffer
+      // Add to buffer
       this.buffer.push(enhancedItem);
       
     } catch (error) {
-      // Capturar errores inesperados
+      // Catch unexpected errors
       console.error(`SafePPGBuffer: Unexpected error in push operation:`, error);
       
-      // Registrar error en el sistema de diagnóstico
+      // Record error in the diagnostic system
       this.diagnostics.recordDiagnosticInfo({
         processingStage: `${this.componentName}.push`,
         validationPassed: false,
@@ -136,19 +210,16 @@ export class SafePPGBuffer<T extends TimestampedPPGData = TimestampedPPGData> {
   }
 
   /**
-   * Obtener un elemento con manejo de errores
+   * Get an element with error handling
    */
   public get(index: number): T | null {
     try {
       return this.buffer.get(index);
     } catch (error) {
-      // Registrar error
+      // Record error
       const processingError = {
         code: 'BUFFER_GET_ERROR',
-        message: error instanceof Error ? error.message : String(error),
-        timestamp: Date.now(),
-        severity: 'low' as const,
-        recoverable: true
+        message: error instanceof Error ? error.message : String(error)
       };
       
       this.errorHandler.handleError(processingError, this.componentName);
@@ -157,7 +228,7 @@ export class SafePPGBuffer<T extends TimestampedPPGData = TimestampedPPGData> {
   }
 
   /**
-   * Obtener todos los puntos con protección de errores
+   * Get all points with error protection
    */
   public getPoints(): T[] {
     try {
@@ -165,10 +236,7 @@ export class SafePPGBuffer<T extends TimestampedPPGData = TimestampedPPGData> {
     } catch (error) {
       const processingError = {
         code: 'BUFFER_GET_POINTS_ERROR',
-        message: error instanceof Error ? error.message : String(error),
-        timestamp: Date.now(),
-        severity: 'low' as const,
-        recoverable: true
+        message: error instanceof Error ? error.message : String(error)
       };
       
       this.errorHandler.handleError(processingError, this.componentName);
@@ -177,7 +245,7 @@ export class SafePPGBuffer<T extends TimestampedPPGData = TimestampedPPGData> {
   }
 
   /**
-   * Limpiar el buffer
+   * Clear the buffer
    */
   public clear(): void {
     try {
@@ -189,35 +257,35 @@ export class SafePPGBuffer<T extends TimestampedPPGData = TimestampedPPGData> {
   }
 
   /**
-   * Tamaño actual del buffer
+   * Current buffer size
    */
   public size(): number {
     return this.buffer.size();
   }
 
   /**
-   * Verificar si el buffer está vacío
+   * Check if the buffer is empty
    */
   public isEmpty(): boolean {
     return this.buffer.isEmpty();
   }
 
   /**
-   * Verificar si el buffer está lleno
+   * Check if the buffer is full
    */
   public isFull(): boolean {
     return this.buffer.isFull();
   }
 
   /**
-   * Obtener la capacidad del buffer
+   * Get the buffer capacity
    */
   public getCapacity(): number {
     return this.buffer.getCapacity();
   }
 
   /**
-   * Obtener los valores del buffer
+   * Get the buffer values
    */
   public getValues(): number[] {
     try {
@@ -225,10 +293,7 @@ export class SafePPGBuffer<T extends TimestampedPPGData = TimestampedPPGData> {
     } catch (error) {
       const processingError = {
         code: 'BUFFER_GET_VALUES_ERROR',
-        message: error instanceof Error ? error.message : String(error),
-        timestamp: Date.now(),
-        severity: 'low' as const,
-        recoverable: true
+        message: error instanceof Error ? error.message : String(error)
       };
       
       this.errorHandler.handleError(processingError, this.componentName);
@@ -237,7 +302,7 @@ export class SafePPGBuffer<T extends TimestampedPPGData = TimestampedPPGData> {
   }
 
   /**
-   * Obtener los últimos N elementos
+   * Get the last N elements
    */
   public getLastN(n: number): T[] {
     try {
@@ -245,10 +310,7 @@ export class SafePPGBuffer<T extends TimestampedPPGData = TimestampedPPGData> {
     } catch (error) {
       const processingError = {
         code: 'BUFFER_GET_LAST_N_ERROR',
-        message: error instanceof Error ? error.message : String(error),
-        timestamp: Date.now(),
-        severity: 'low' as const,
-        recoverable: true
+        message: error instanceof Error ? error.message : String(error)
       };
       
       this.errorHandler.handleError(processingError, this.componentName);
@@ -257,7 +319,7 @@ export class SafePPGBuffer<T extends TimestampedPPGData = TimestampedPPGData> {
   }
 
   /**
-   * Obtener el buffer interno optimizado
+   * Get the internal optimized buffer
    */
   public getOptimizedBuffer(): OptimizedPPGBuffer<T> {
     return this.buffer;
@@ -265,8 +327,8 @@ export class SafePPGBuffer<T extends TimestampedPPGData = TimestampedPPGData> {
 }
 
 /**
- * Adaptador seguro compatible con CircularBuffer
- * Proporciona la misma interfaz con protecciones adicionales
+ * Safe adapter compatible with CircularBuffer
+ * Provides the same interface with additional protections
  */
 export class SafeCircularBufferAdapter<T extends TimestampedPPGData = TimestampedPPGData> extends CircularBufferAdapter<T> {
   private safeBuffer: SafePPGBuffer<T>;
@@ -282,7 +344,7 @@ export class SafeCircularBufferAdapter<T extends TimestampedPPGData = Timestampe
   }
   
   /**
-   * Obtener el buffer seguro
+   * Get the safe buffer
    */
   public getSafeBuffer(): SafePPGBuffer<T> {
     return this.safeBuffer;
@@ -290,7 +352,7 @@ export class SafeCircularBufferAdapter<T extends TimestampedPPGData = Timestampe
 }
 
 /**
- * Crear un buffer seguro a partir de un buffer circular
+ * Create a safe buffer from a circular buffer
  */
 export function createSafeBuffer<U extends TimestampedPPGData>(
   capacity: number, 
@@ -300,7 +362,7 @@ export function createSafeBuffer<U extends TimestampedPPGData>(
 }
 
 /**
- * Crear un adaptador de buffer seguro
+ * Create a safe circular buffer adapter
  */
 export function createSafeCircularBufferAdapter<U extends TimestampedPPGData>(
   capacity: number,

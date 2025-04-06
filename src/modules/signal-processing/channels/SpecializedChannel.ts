@@ -4,7 +4,8 @@
  * Provides common functionality and structure for channel-specific optimizations
  */
 
-import { OptimizedSignalChannel, ChannelFeedback, VitalSignType } from '../../../types/signal';
+import { ChannelFeedback } from '../../../types/vital-sign-types';
+import { VitalSignType } from '../../../types/vital-sign-types';
 import { v4 as uuidv4 } from 'uuid';
 
 /**
@@ -18,12 +19,26 @@ export interface ChannelConfig {
 }
 
 /**
+ * Interface for OptimizedSignalChannel
+ */
+export interface OptimizedSignalChannel {
+  id: string;                     // Unique identifier
+  type: VitalSignType;            // Type of vital sign
+  processValue: (value: number) => number;  // Process value for this specific channel
+  applyFeedback: (feedback: ChannelFeedback) => void;  // Apply feedback from algorithm
+  getQuality: () => number;       // Get channel quality (0-1)
+  reset: () => void;              // Reset channel state
+  getAmplification: () => number; // Get amplification factor
+  getFilterStrength: () => number; // Get filter strength
+}
+
+/**
  * Base class for specialized signal channels
  * Each specialized channel optimizes the signal for a specific vital sign
  */
 export abstract class SpecializedChannel implements OptimizedSignalChannel {
   public readonly id: string;
-  protected readonly type: VitalSignType;
+  public readonly type: VitalSignType;
   protected amplificationFactor: number;
   protected filterStrength: number;
   protected frequencyBandMin: number;
@@ -133,148 +148,68 @@ export abstract class SpecializedChannel implements OptimizedSignalChannel {
       // Update filter strength if suggested
       if (adjustments.filterStrength !== undefined) {
         // Ensure filter strength stays between 0.1 and 0.95
-        this.filterStrength = Math.min(0.95, Math.max(0.1, adjustments.filterStrength));
-      }
-      
-      // Update frequency band if suggested
-      if (adjustments.frequencyRangeMin !== undefined) {
-        this.frequencyBandMin = adjustments.frequencyRangeMin;
-      }
-      
-      if (adjustments.frequencyRangeMax !== undefined) {
-        this.frequencyBandMax = adjustments.frequencyRangeMax;
-      }
-    }
-    
-    // Check for consistent feedback patterns
-    this.analyzeAndOptimizeFeedbackPatterns();
-    
-    console.log(`${this.typeToString()} Channel: Applied feedback`, {
-      channelId: this.id,
-      newAmplification: this.amplificationFactor,
-      newFilterStrength: this.filterStrength,
-      signalQuality: feedback.signalQuality
-    });
-  }
-  
-  /**
-   * Analyze feedback history to identify patterns
-   * and make autonomous optimizations
-   */
-  private analyzeAndOptimizeFeedbackPatterns(): void {
-    // Need enough feedback for pattern analysis
-    if (this.feedbackHistory.length < 5) {
-      return;
-    }
-    
-    // Count successful vs unsuccessful operations
-    const successCount = this.feedbackHistory.filter(f => f.success).length;
-    const failureCount = this.feedbackHistory.length - successCount;
-    const successRate = successCount / this.feedbackHistory.length;
-    
-    // If consistently unsuccessful, make larger adjustments
-    if (successRate < 0.3) {
-      // Increase adaptability when consistently failing
-      console.log(`${this.typeToString()} Channel: Low success rate, making larger adaptations`);
-      
-      // Average signal quality from feedback
-      const avgQuality = this.feedbackHistory.reduce((sum, fb) => sum + fb.signalQuality, 0) / 
-                        this.feedbackHistory.length;
-      
-      // If quality is consistently low, increase amplification
-      if (avgQuality < 0.4) {
-        this.amplificationFactor *= 1.15; // Increase by 15%
-      }
-    }
-    
-    // If consistently successful, make smaller refinements
-    if (successRate > 0.8) {
-      // Fine-tune for stability
-      console.log(`${this.typeToString()} Channel: High success rate, fine-tuning`);
-      
-      // Slightly reduce filter strength for faster response if it's high
-      if (this.filterStrength > 0.8) {
-        this.filterStrength *= 0.95;
+        this.filterStrength = Math.max(0.1, Math.min(0.95, adjustments.filterStrength));
       }
     }
   }
   
   /**
-   * Update internal quality metric
+   * Update quality indicator based on recent values
    */
   protected updateQuality(): void {
     if (this.recentValues.length < 5) {
-      this.quality = 0;
+      this.quality = 0.5; // Default quality
       return;
     }
     
-    // Calculate signal stability
-    const recent = this.recentValues.slice(-10);
-    const mean = recent.reduce((sum, val) => sum + val, 0) / recent.length;
+    // Simple quality metric based on variance
+    // Real physiological signals have controlled variance
+    const mean = this.recentValues.reduce((sum, val) => sum + val, 0) / this.recentValues.length;
+    const variance = this.recentValues.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / this.recentValues.length;
     
-    // Calculate variance
-    const variance = recent.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / recent.length;
+    // Quality decreases if variance is too high or too low
+    const optimalVariance = 0.01;
+    const varianceScore = Math.min(1, Math.max(0, 1 - Math.abs(variance - optimalVariance) / optimalVariance));
     
-    // Calculate signal-to-noise ratio (simple approximation)
-    const maxDiff = Math.max(...recent) - Math.min(...recent);
-    const snr = maxDiff > 0 ? mean / Math.sqrt(variance) : 0;
-    
-    // Quality is a function of SNR and variance
-    // Higher SNR and lower variance (relative to signal) = better quality
-    const normalizedVariance = variance / (Math.abs(mean) + 0.0001);
-    const varianceQuality = Math.max(0, 1 - Math.min(1, normalizedVariance * 10));
-    const snrQuality = Math.min(1, snr / 10);
-    
-    // Weighted average of quality indicators
-    this.quality = (varianceQuality * 0.6 + snrQuality * 0.4);
-    
-    // Apply feedback influence
-    if (this.lastFeedback) {
-      // Blend our calculated quality with the algorithm feedback
-      const feedbackAge = Date.now() - this.lastFeedback.timestamp;
-      const feedbackWeight = Math.max(0, 1 - (feedbackAge / 10000)); // Decay over 10 seconds
-      
-      this.quality = this.quality * (1 - feedbackWeight * 0.5) + 
-                    this.lastFeedback.signalQuality * feedbackWeight * 0.5;
-    }
+    // Update quality (with smoothing)
+    this.quality = this.quality * 0.7 + varianceScore * 0.3;
   }
   
   /**
-   * Get current quality of this channel (0-1)
+   * Get the current quality indicator
    */
   public getQuality(): number {
     return this.quality;
   }
   
   /**
-   * Get current amplification factor
+   * Reset the channel
+   */
+  public reset(): void {
+    this.recentValues = [];
+    this.quality = 0.5;
+    this.lastFeedback = null;
+    this.feedbackHistory = [];
+  }
+  
+  /**
+   * Get the current amplification factor
    */
   public getAmplification(): number {
     return this.amplificationFactor;
   }
   
   /**
-   * Get current filter strength
+   * Get the current filter strength
    */
   public getFilterStrength(): number {
     return this.filterStrength;
   }
   
   /**
-   * Reset channel state
-   */
-  public reset(): void {
-    this.recentValues = [];
-    this.quality = 0;
-    this.lastFeedback = null;
-    this.feedbackHistory = [];
-    console.log(`${this.typeToString()} Channel reset`);
-  }
-  
-  /**
-   * Convert type to readable string
+   * Convert channel type to string for logging
    */
   protected typeToString(): string {
-    return this.type.charAt(0).toUpperCase() + this.type.slice(1);
+    return this.type.toString();
   }
 }

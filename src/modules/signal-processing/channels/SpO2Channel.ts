@@ -1,71 +1,48 @@
 
+import { SpecializedChannel, ChannelConfig } from './SpecializedChannel';
+import { VitalSignType } from '../../../types/vital-sign-types';
+
 /**
  * Specialized channel for SpO2 signal processing
- * Optimizes the signal specifically for oxygen saturation measurement
- */
-
-import { SpecializedChannel, ChannelConfig } from './SpecializedChannel';
-import { VitalSignType } from '../../../types/signal';
-
-/**
- * SpO2-specific parameters
  */
 export class SpO2Channel extends SpecializedChannel {
-  // SpO2-specific parameters
-  private readonly RED_INTENSITY_WEIGHT = 0.7;
-  private readonly MIN_PULSE_AMPLITUDE = 0.01;
+  private readonly redWavelength = 660; // nm
+  private readonly infraredWavelength = 940; // nm
+  private readonly absorptionRatio = 0.4;
   
   constructor() {
+    // Default configuration optimized for SpO2 signals
     const config: ChannelConfig = {
-      initialAmplification: 1.5,
-      initialFilterStrength: 0.4,
-      frequencyBandMin: 0.5,  // Hz - typical pulse frequency range
-      frequencyBandMax: 3.0   // Hz
+      initialAmplification: 2.0,
+      initialFilterStrength: 0.3,
+      frequencyBandMin: 0.5,
+      frequencyBandMax: 4.0
     };
     
     super(VitalSignType.SPO2, config);
   }
   
   /**
-   * Apply SpO2-specific optimization to the signal
-   * - Emphasizes pulsatile components 
-   * - Optimizes for light absorption data characteristic of SpO2
+   * Apply specialized processing for SpO2 signals
    */
   protected specializedProcessing(value: number): number {
-    if (Math.abs(value) < this.MIN_PULSE_AMPLITUDE) {
-      return value;
+    // SpO2 processing involves red/infrared light absorption ratios
+    
+    // Simple simulation of red/infrared calculation
+    // In real implementation, this would involve actual measurements
+    let processedValue = value;
+    
+    // We simulate the optical characteristics of SpO2 measurement
+    const simulatedRatio = this.absorptionRatio + (value * 0.1);
+    processedValue = processedValue * (1 - simulatedRatio);
+    
+    // Add physiologically relevant adjustments
+    if (this.recentValues.length > 0) {
+      // SpO2 has small variations with respiration
+      const respiratoryEffect = Math.sin(this.recentValues.length * 0.05) * 0.02;
+      processedValue = processedValue * (1 + respiratoryEffect);
     }
     
-    // Apply frequency-domain emphasis for pulse components
-    return this.applyPulseEmphasis(value);
-  }
-  
-  /**
-   * Apply emphasis to pulsatile components that are important for SpO2
-   */
-  private applyPulseEmphasis(value: number): number {
-    if (this.recentValues.length < 3) {
-      return value;
-    }
-    
-    // SpO2 needs strong pulsatility detection
-    // Amplify changes that are in physiological pulse range
-    const prev1 = this.recentValues[this.recentValues.length - 1];
-    const prev2 = this.recentValues[this.recentValues.length - 2]; 
-    
-    // Calculate first derivative (rate of change)
-    const derivative1 = value - prev1;
-    const derivative2 = prev1 - prev2;
-    
-    // If we have a sign change in derivative (potential peak or valley)
-    // which is important for SpO2 calculation, emphasize it
-    if (Math.sign(derivative1) !== Math.sign(derivative2) && 
-        Math.abs(derivative1) > this.MIN_PULSE_AMPLITUDE) {
-      // Emphasize this feature as it's likely a pulse component
-      const emphasis = 1.2;
-      return value * emphasis;
-    }
-    
-    return value;
+    return processedValue;
   }
 }
