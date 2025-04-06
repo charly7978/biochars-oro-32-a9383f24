@@ -6,12 +6,11 @@
 import { VitalSignsResult } from '../types/vital-signs-result';
 
 /**
- * Factory for creating standardized vital signs results
+ * Factory for creating consistent vital signs results
  */
 export class ResultFactory {
   /**
-   * Create empty results with default values
-   * Used when no measurements are available
+   * Create empty/zero results
    */
   public static createEmptyResults(): VitalSignsResult {
     return {
@@ -23,12 +22,13 @@ export class ResultFactory {
       lipids: {
         totalCholesterol: 0,
         triglycerides: 0
-      }
+      },
+      lastArrhythmiaData: null
     };
   }
   
   /**
-   * Create a complete result with all parameters
+   * Create result with all vital signs
    */
   public static createResult(
     spo2: number,
@@ -36,17 +36,13 @@ export class ResultFactory {
     arrhythmiaStatus: string,
     glucose: number,
     hydration: number,
-    lipids: { totalCholesterol: number; triglycerides: number },
-    confidence?: {
-      glucose: number;
-      lipids: number;
-      overall: number;
+    lipids: { totalCholesterol: number, triglycerides: number },
+    confidence?: { 
+      glucose: number,
+      lipids: number,
+      overall: number
     },
-    lastArrhythmiaData?: {
-      timestamp: number;
-      rmssd: number;
-      rrVariation: number;
-    } | null
+    lastArrhythmiaData?: { timestamp: number, rmssd?: number, rrVariation?: number } | null
   ): VitalSignsResult {
     return {
       spo2,
@@ -55,7 +51,6 @@ export class ResultFactory {
       glucose,
       hydration,
       lipids,
-      confidence,
       lastArrhythmiaData
     };
   }

@@ -4,38 +4,62 @@
  */
 
 /**
- * Calculator for confidence levels of measurements
- * Works with real data only, no simulation
+ * Calculator for confidence levels in vital signs measurements
  */
 export class ConfidenceCalculator {
-  private readonly MIN_CONFIDENCE_THRESHOLD: number;
+  private confidenceThreshold: number;
   
   /**
    * Create a new confidence calculator
+   * @param threshold Minimum threshold for confidence to be considered reliable
    */
-  constructor(minConfidenceThreshold: number = 0.15) {
-    this.MIN_CONFIDENCE_THRESHOLD = minConfidenceThreshold;
+  constructor(threshold: number) {
+    this.confidenceThreshold = threshold;
   }
   
   /**
-   * Calculate overall confidence from individual metrics
+   * Calculate overall confidence based on individual measurements
    */
-  public calculateOverallConfidence(glucoseConfidence: number, lipidsConfidence: number): number {
-    return (glucoseConfidence * 0.5) + (lipidsConfidence * 0.5);
+  public calculateOverallConfidence(
+    glucoseConfidence: number,
+    lipidsConfidence: number,
+    hydrationConfidence: number
+  ): number {
+    // Weight the different confidence values
+    const weights = {
+      glucose: 0.3,
+      lipids: 0.3,
+      hydration: 0.4
+    };
+    
+    // Calculate weighted average
+    const overallConfidence = (
+      (glucoseConfidence * weights.glucose) +
+      (lipidsConfidence * weights.lipids) +
+      (hydrationConfidence * weights.hydration)
+    );
+    
+    return Math.min(overallConfidence, 1);
   }
   
   /**
-   * Check if confidence meets the threshold
+   * Check if confidence meets threshold
    */
   public meetsThreshold(confidence: number): boolean {
-    return confidence > this.MIN_CONFIDENCE_THRESHOLD;
+    return confidence >= this.confidenceThreshold;
   }
   
   /**
    * Get current confidence threshold
    */
   public getConfidenceThreshold(): number {
-    return this.MIN_CONFIDENCE_THRESHOLD;
+    return this.confidenceThreshold;
+  }
+  
+  /**
+   * Set confidence threshold
+   */
+  public setConfidenceThreshold(threshold: number): void {
+    this.confidenceThreshold = threshold;
   }
 }
-

@@ -4,8 +4,7 @@
  */
 
 /**
- * Interface for vital signs measurement results
- * Direct measurement only, no simulation
+ * Standardized result format for vital signs
  */
 export interface VitalSignsResult {
   spo2: number;
@@ -17,14 +16,9 @@ export interface VitalSignsResult {
     totalCholesterol: number;
     triglycerides: number;
   };
-  confidence?: {
-    glucose: number;
-    lipids: number;
-    overall: number;
-  };
   lastArrhythmiaData?: {
     timestamp: number;
-    rmssd: number;
-    rrVariation: number;
+    rmssd?: number;
+    rrVariation?: number;
   } | null;
 }

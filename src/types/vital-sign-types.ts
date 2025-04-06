@@ -32,3 +32,20 @@ export interface ChannelFeedback {
   timestamp: number;
   success: boolean;
 }
+
+/**
+ * RR interval data for cardiac measurements
+ */
+export interface RRIntervalData {
+  intervals: number[];
+  lastPeakTime: number | null;
+}
+
+/**
+ * Arrhythmia data for cardiac anomaly detection
+ */
+export interface ArrhythmiaData {
+  timestamp: number;
+  rmssd?: number;
+  rrVariation?: number;
+}
