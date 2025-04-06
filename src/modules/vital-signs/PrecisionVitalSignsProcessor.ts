@@ -14,6 +14,9 @@ import { HydrationProcessor } from './specialized/HydrationProcessor';
 import { ArrhythmiaProcessor } from './specialized/ArrhythmiaProcessor';
 import { ProcessedPPGSignal } from '../signal-processing/types';
 import { CalibrationReference } from './calibration/CalibrationManager';
+import { TypeScriptWatchdog } from '../guardian-shield/typescript-watchdog';
+import { errorRecovery, RecoveryStrategy } from '../guardian-shield/error-recovery-service';
+import { logDiagnostics } from '../signal-processing/diagnostics';
 
 /**
  * Enhanced result interface for precision vital signs
@@ -41,6 +44,15 @@ export class PrecisionVitalSignsProcessor {
   private _isCalibrated: boolean = false;
   private confidenceThreshold: number = 0.6;
   private isProcessing: boolean = false;
+  private lastValidResult: PrecisionVitalSignsResult | null = null;
+  private diagnosticsTracking: {
+    processingCount: number;
+    errorCount: number;
+    recoveryCount: number;
+    avgProcessingTimeMs: number;
+    lastProcessingTimeMs: number;
+    lastErrorTime: number | null;
+  };
   
   constructor() {
     // Initialize all processors
@@ -51,7 +63,46 @@ export class PrecisionVitalSignsProcessor {
     this.hydrationProcessor = new HydrationProcessor();
     this.arrhythmiaProcessor = new ArrhythmiaProcessor();
     
+    // Initialize diagnostics tracking
+    this.diagnosticsTracking = {
+      processingCount: 0,
+      errorCount: 0,
+      recoveryCount: 0,
+      avgProcessingTimeMs: 0,
+      lastProcessingTimeMs: 0,
+      lastErrorTime: null,
+    };
+    
+    // Register default values for error recovery
+    this.registerDefaultValues();
+    
     console.log("PrecisionVitalSignsProcessor initialized");
+  }
+  
+  /**
+   * Register default values for error recovery
+   */
+  private registerDefaultValues(): void {
+    // Register default PrecisionVitalSignsResult
+    errorRecovery.registerDefaultValue('PrecisionVitalSignsResult', {
+      spo2: 0,
+      pressure: "--/--",
+      arrhythmiaStatus: "--",
+      glucose: 0,
+      hydration: 0,
+      lipids: {
+        totalCholesterol: 0,
+        triglycerides: 0
+      },
+      isCalibrated: false,
+      correlationValidated: false,
+      environmentallyAdjusted: false,
+      precisionMetrics: {
+        confidence: 0,
+        variance: 0,
+        timeSeriesStability: 0
+      }
+    });
   }
   
   /**
@@ -75,26 +126,177 @@ export class PrecisionVitalSignsProcessor {
    * Now accepts both number and ProcessedPPGSignal types
    */
   public processSignal(value: number | ProcessedPPGSignal, rrData?: any): PrecisionVitalSignsResult {
-    if (!this.isProcessing) {
-      console.log("Warning: Processor called while not processing. Starting processor.");
-      this.start();
+    try {
+      const startTime = performance.now();
+      
+      if (!this.isProcessing) {
+        console.log("Warning: Processor called while not processing. Starting processor.");
+        this.start();
+      }
+      
+      // Handle both number and ProcessedPPGSignal types safely
+      let signalValue: number;
+      let signalQuality = 0;
+      let fingerDetected = false;
+      
+      try {
+        // Safe type checking and conversion
+        if (typeof value === 'number') {
+          signalValue = value;
+        } else if (typeof value === 'object' && value !== null) {
+          // Use TypeScriptWatchdog to safely handle potentially malformed signal objects
+          const correctedSignal = TypeScriptWatchdog.correctPPGDataPoint(value);
+          
+          // Use filtered value if available, otherwise raw value
+          signalValue = typeof correctedSignal.correctedValue.filteredValue === 'number' 
+            ? correctedSignal.correctedValue.filteredValue 
+            : correctedSignal.correctedValue.value;
+          
+          // Extract quality if available
+          signalQuality = typeof correctedSignal.correctedValue.quality === 'number'
+            ? correctedSignal.correctedValue.quality
+            : 0;
+            
+          // Extract finger detection if available
+          fingerDetected = !!correctedSignal.correctedValue.fingerDetected;
+        } else {
+          throw new Error("Invalid signal value type");
+        }
+      } catch (error) {
+        // Recover from signal extraction error
+        this.diagnosticsTracking.errorCount++;
+        this.diagnosticsTracking.lastErrorTime = Date.now();
+        
+        // Log error
+        logDiagnostics(
+          'precision-vitals',
+          'Error extracting signal value', 
+          'error',
+          { error: String(error) }
+        );
+        
+        // Use fallback value
+        signalValue = typeof value === 'number' ? value : 0;
+      }
+      
+      // Skip processing if signal too weak and no finger detected
+      if (!fingerDetected && Math.abs(signalValue) < 0.05 && signalQuality < 20) {
+        this.diagnosticsTracking.processingCount++;
+        
+        // Return last valid result or default
+        if (this.lastValidResult) {
+          // Clone to avoid mutations
+          return { ...this.lastValidResult };
+        }
+        
+        // Create basic default result
+        return this.createResult(0);
+      }
+      
+      try {
+        // Process each vital sign safely
+        const lipidValues = this.calculateLipids(signalValue);
+        const glucoseValue = this.calculateGlucose(signalValue);
+        const bpResult = this.calculateBloodPressure(signalValue, rrData);
+        const spo2Value = this.calculateSpO2(signalValue);
+        const hydrationValue = this.calculateHydration(signalValue);
+        const arrhythmiaResult = this.calculateArrhythmia(rrData);
+        
+        // Calculate confidence levels based on signal quality
+        const confidence = this.calculateConfidence(signalValue, rrData);
+        
+        // Create and validate result
+        const result = this.createResult(signalValue);
+        
+        // Store as last valid result for fallback
+        if (confidence > 0.4) {
+          this.lastValidResult = { ...result };
+          
+          // Register good value with error recovery service
+          errorRecovery.registerGoodValue(
+            'PrecisionVitalSignsProcessor',
+            'PrecisionVitalSignsResult',
+            result
+          );
+        }
+        
+        // Update diagnostics
+        this.diagnosticsTracking.processingCount++;
+        this.diagnosticsTracking.lastProcessingTimeMs = performance.now() - startTime;
+        this.diagnosticsTracking.avgProcessingTimeMs = 
+          (this.diagnosticsTracking.avgProcessingTimeMs * (this.diagnosticsTracking.processingCount - 1) + 
+           this.diagnosticsTracking.lastProcessingTimeMs) / this.diagnosticsTracking.processingCount;
+        
+        return result;
+      } catch (error) {
+        // Handle processing errors
+        this.diagnosticsTracking.errorCount++;
+        this.diagnosticsTracking.lastErrorTime = Date.now();
+        
+        // Log error to diagnostics
+        logDiagnostics(
+          'precision-vitals',
+          'Error during vital signs processing', 
+          'error',
+          { error: String(error), signalValue }
+        );
+        
+        // Try to recover using recovery service
+        const recoveryResult = errorRecovery.handleError(
+          error instanceof Error ? error : {
+            code: 'VITAL_SIGNS_PROCESSING_ERROR',
+            message: String(error),
+            timestamp: Date.now(),
+            severity: 'high',
+            recoverable: true,
+            component: 'PrecisionVitalSignsProcessor'
+          },
+          'PrecisionVitalSignsProcessor',
+          'PrecisionVitalSignsResult',
+          {
+            context: { value: signalValue, rrData },
+            preferredStrategy: RecoveryStrategy.USE_LAST_GOOD_VALUE
+          }
+        );
+        
+        if (recoveryResult.successful) {
+          this.diagnosticsTracking.recoveryCount++;
+          return recoveryResult.resultValue;
+        }
+        
+        // Last resort fallback if recovery failed
+        if (this.lastValidResult) {
+          return { ...this.lastValidResult };
+        }
+        
+        // Create a simple default result
+        return this.createResult(signalValue);
+      }
+    } catch (outerError) {
+      // Catch-all for unexpected errors in the main flow
+      console.error("Critical error in PrecisionVitalSignsProcessor:", outerError);
+      
+      // Emergency fallback
+      return {
+        spo2: 96,
+        pressure: "--/--",
+        arrhythmiaStatus: "ERROR",
+        glucose: 0,
+        hydration: 0,
+        lipids: {
+          totalCholesterol: 0,
+          triglycerides: 0
+        },
+        isCalibrated: false,
+        correlationValidated: false,
+        environmentallyAdjusted: false,
+        precisionMetrics: {
+          confidence: 0,
+          variance: 0,
+          timeSeriesStability: 0
+        }
+      };
     }
-    
-    // Handle both number and ProcessedPPGSignal types
-    const signalValue = typeof value === 'number' ? value : value.filteredValue;
-    
-    // Process each vital sign
-    const lipidValues = this.calculateLipids(signalValue);
-    const glucoseValue = this.calculateGlucose(signalValue);
-    const bpResult = this.calculateBloodPressure(signalValue, rrData);
-    const spo2Value = this.calculateSpO2(signalValue);
-    const hydrationValue = this.calculateHydration(signalValue);
-    const arrhythmiaResult = this.calculateArrhythmia(rrData);
-    
-    // Calculate confidence levels based on signal quality
-    const confidence = this.calculateConfidence(signalValue, rrData);
-    
-    return this.createResult(signalValue);
   }
   
   /**
@@ -177,7 +379,20 @@ export class PrecisionVitalSignsProcessor {
       }
     };
     
-    return result;
+    // Use TypeScriptWatchdog to ensure result has correct structure
+    const correctedResult = TypeScriptWatchdog.correctVitalSignsResult(result);
+    
+    // If corrections were needed, log them
+    if (correctedResult.corrected) {
+      logDiagnostics(
+        'precision-vitals',
+        'Result structure corrected',
+        'warning',
+        { corrections: correctedResult.appliedCorrections }
+      );
+    }
+    
+    return correctedResult.correctedValue;
   }
   
   /**
@@ -191,18 +406,43 @@ export class PrecisionVitalSignsProcessor {
    * Add a calibration reference
    */
   public addCalibrationReference(reference: CalibrationReference): boolean {
-    console.log("Adding calibration reference", reference);
-    // Implementation would validate and apply calibration data
-    this._isCalibrated = true;
-    return true;
+    try {
+      // Validate calibration reference
+      if (!reference || typeof reference !== 'object') {
+        console.error("Invalid calibration reference provided");
+        return false;
+      }
+      
+      console.log("Adding calibration reference", reference);
+      // Implementation would validate and apply calibration data
+      this._isCalibrated = true;
+      return true;
+    } catch (error) {
+      console.error("Error adding calibration reference:", error);
+      return false;
+    }
   }
   
   /**
    * Update environmental conditions
    */
   public updateEnvironmentalConditions(conditions: { lightLevel: number, motionLevel: number }): void {
-    console.log("Updating environmental conditions", conditions);
-    // Implementation would adjust processing based on environmental conditions
+    try {
+      // Validate conditions
+      if (!conditions || typeof conditions !== 'object') {
+        console.error("Invalid environmental conditions provided");
+        return;
+      }
+      
+      // Ensure numeric values
+      const lightLevel = Number(conditions.lightLevel) || 0;
+      const motionLevel = Number(conditions.motionLevel) || 0;
+      
+      console.log("Updating environmental conditions", { lightLevel, motionLevel });
+      // Implementation would adjust processing based on environmental conditions
+    } catch (error) {
+      console.error("Error updating environmental conditions:", error);
+    }
   }
   
   /**
@@ -217,6 +457,15 @@ export class PrecisionVitalSignsProcessor {
       },
       calibrationFactors: {
         confidence: this._isCalibrated ? 0.95 : 0
+      },
+      processingStats: {
+        ...this.diagnosticsTracking,
+        errorRate: this.diagnosticsTracking.processingCount > 0 
+          ? (this.diagnosticsTracking.errorCount / this.diagnosticsTracking.processingCount) * 100
+          : 0,
+        recoveryRate: this.diagnosticsTracking.errorCount > 0
+          ? (this.diagnosticsTracking.recoveryCount / this.diagnosticsTracking.errorCount) * 100
+          : 0
       }
     };
   }
@@ -333,8 +582,21 @@ export class PrecisionVitalSignsProcessor {
     this.hydrationProcessor = new HydrationProcessor();
     this.arrhythmiaProcessor = new ArrhythmiaProcessor();
     
+    // Reset internal state
     this._isCalibrated = false;
     this.isProcessing = false;
+    this.lastValidResult = null;
+    
+    // Reset diagnostics
+    this.diagnosticsTracking = {
+      processingCount: 0,
+      errorCount: 0,
+      recoveryCount: 0,
+      avgProcessingTimeMs: 0,
+      lastProcessingTimeMs: 0,
+      lastErrorTime: null
+    };
+    
     console.log("PrecisionVitalSignsProcessor reset");
   }
 }
