@@ -1,9 +1,12 @@
 
 /**
- * Type definitions for vital signs processing results
+ * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
  */
 
-// Base result interface for vital signs processing
+/**
+ * Interface for vital signs measurement results
+ * Direct measurement only, no simulation
+ */
 export interface VitalSignsResult {
   spo2: number;
   pressure: string;
@@ -11,34 +14,20 @@ export interface VitalSignsResult {
   glucose: number;
   lipids: {
     totalCholesterol: number;
-    triglycerides: number;
+    hydrationPercentage: number;
+  };
+  hydration: {
+    totalCholesterol: number;
+    hydrationPercentage: number;
+  };
+  confidence?: {
+    glucose: number;
+    lipids: number;  // Kept as 'lipids' for backward compatibility
+    overall: number;
   };
   lastArrhythmiaData?: {
     timestamp: number;
-    rmssd?: number;
-    rrVariation?: number;
+    rmssd: number;
+    rrVariation: number;
   } | null;
-}
-
-// Define the interface for precision metrics
-export interface PrecisionMetrics {
-  calibrationConfidence: number;
-  measurementVariance: number;
-  signalQualityScore: number;
-  crossValidationScore: number;
-  environmentalAdjustmentFactor: number;
-}
-
-// Define the interface for arrhythmia detection results
-export interface ArrhythmiaDetectionResult {
-  isArrhythmia: boolean;
-  type: string;
-  confidence: number;
-  rmssd?: number;
-  rrVariation?: number;
-  anomalies?: Array<{
-    timestamp: number;
-    type: string;
-    magnitude: number;
-  }>;
 }

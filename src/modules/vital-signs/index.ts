@@ -5,17 +5,37 @@
  * Central export for vital signs module
  */
 
-// Export the traditional processor
+// Export the VitalSignsProcessor
 export { VitalSignsProcessor } from './VitalSignsProcessor';
-export type { VitalSignsResult } from './types/vital-signs-result';
 
-// Export the new modular processor
+// Create a type definition for VitalSignsResult
+export interface VitalSignsResult {
+  spo2: number;
+  pressure: string;
+  arrhythmiaStatus: string;
+  glucose: number;
+  lipids: {
+    totalCholesterol: number;
+    hydrationPercentage: number;  // Changed from triglycerides to hydrationPercentage
+  };
+  lastArrhythmiaData?: any;
+  confidence?: {
+    glucose: number;
+    lipids: number;  // Kept as 'lipids' for backward compatibility
+    overall: number;
+  };
+}
+
+// Export the traditional processor
 export { ModularVitalSignsProcessor } from './ModularVitalSignsProcessor';
-export type { VitalSignsResult as ModularVitalSignsResult } from './ModularVitalSignsProcessor';
 
-// Export the new precision processor with advanced features
-export { PrecisionVitalSignsProcessor } from './PrecisionVitalSignsProcessor';
+// Export the precision processor with advanced features
+export { PrecisionVitalSignsProcessor } from './PrecisionVitalSignsProcessor'; 
 export type { PrecisionVitalSignsResult } from './PrecisionVitalSignsProcessor';
+
+// Export hybrid processor with neural network enhancements
+export { HybridVitalSignsProcessor } from './HybridVitalSignsProcessor';
+export type { HybridProcessingOptions } from './HybridVitalSignsProcessor';
 
 // Export calibration module
 export { CalibrationManager } from './calibration/CalibrationManager';
@@ -32,17 +52,17 @@ export type { EnvironmentalConditions, AdjustmentFactors } from './environment/E
 // Export specialized processors
 export * from './specialized/BaseVitalSignProcessor';
 export * from './specialized/GlucoseProcessor';
-export * from './specialized/LipidsProcessor';
+export * from './specialized/HydrationProcessor';  // Export new HydrationProcessor instead of LipidsProcessor
 export * from './specialized/BloodPressureProcessor';
 export * from './specialized/SpO2Processor';
 export * from './specialized/CardiacProcessor';
 
-// Export arrhythmia types
+// Export shared signal utils and arrhythmia types
 export * from './arrhythmia/types';
 export * from './shared-signal-utils';
 
-// Export utility functions from utils.ts
-export {
+// Export specific utility functions
+export { 
   // Export signal processing core functions
   calculateAC,
   calculateDC,
@@ -59,15 +79,8 @@ export {
   amplifySignal,
   
   // Export perfusion functions
-  calculatePerfusionIndex,
-  
-  // Enhanced detection functions
-  findPeaksFourier,
-  findPeaksWavelet,
-  validateMultiBeatSequence,
-  getAdaptiveThreshold,
-  calculateSignalNoiseRatio,
-  calculatePulsatilityIndex,
-  calculateConsistencyMetrics,
-  performSpectralAnalysis
+  calculatePerfusionIndex
 } from './utils';
+
+// Export the blood pressure processor for direct access
+export { BloodPressureProcessor } from './blood-pressure-processor';

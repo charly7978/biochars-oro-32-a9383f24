@@ -20,7 +20,7 @@ const Index = () => {
     glucose: 0,
     lipids: {
       totalCholesterol: 0,
-      triglycerides: 0
+      hydrationPercentage: 0
     }
   });
   const [heartRate, setHeartRate] = useState(0);
@@ -181,7 +181,7 @@ const Index = () => {
       glucose: 0,
       lipids: {
         totalCholesterol: 0,
-        triglycerides: 0
+        hydrationPercentage: 0
       }
     });
     setSignalQuality(0);
@@ -353,9 +353,9 @@ const Index = () => {
                 highlighted={showResults}
               />
               <VitalSign 
-                label="TRIGLICÉRIDOS"
-                value={vitalSigns.lipids?.triglycerides || "--"}
-                unit="mg/dL"
+                label="HIDRATACIÓN"
+                value={vitalSigns.lipids?.hydrationPercentage || "--"}
+                unit="%"
                 highlighted={showResults}
               />
             </div>

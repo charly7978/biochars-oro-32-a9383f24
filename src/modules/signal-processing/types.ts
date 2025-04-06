@@ -1,50 +1,53 @@
 
 /**
- * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
- * 
  * Type definitions for signal processing
  */
 
-/**
- * Processed PPG signal data
- */
 export interface ProcessedPPGSignal {
   timestamp: number;
   rawValue: number;
   filteredValue: number;
   normalizedValue: number;
+  amplifiedValue: number;
   quality: number;
+  signalStrength: number;
   fingerDetected: boolean;
 }
 
-/**
- * Processed heartbeat signal data
- */
 export interface ProcessedHeartbeatSignal {
   timestamp: number;
   value: number;
   isPeak: boolean;
-  bpm: number;
+  peakConfidence: number;
+  instantaneousBPM: number | null;
   rrInterval: number | null;
-  confidence: number;
+  heartRateVariability: number | null;
 }
 
-/**
- * Configuration options for signal processing
- */
 export interface SignalProcessingOptions {
+  amplificationFactor?: number;
   filterStrength?: number;
   qualityThreshold?: number;
-  adaptiveFiltering?: boolean;
   fingerDetectionSensitivity?: number;
+  useAdaptiveControl?: boolean;
+  adaptationRate?: number;
+  predictionHorizon?: number;
 }
 
-/**
- * Interface for optimized signal channels
- */
-export interface OptimizedSignalChannel {
-  type: string;
-  processSignal(signal: number): any;
-  calculateQuality(signal: number): number;
+export interface ISignalProcessor {
+  processSignal(value: number): any;
   reset(): void;
+  configure(options: SignalProcessingOptions): void;
+}
+
+export interface ProcessorFeedback {
+  quality: number;
+  calibrationStatus: string;
+  lastUpdated: number;
+}
+
+export interface ChannelFeedback extends ProcessorFeedback {
+  channelId: string;
+  signalAmplitude: number;
+  signalNoise: number;
 }

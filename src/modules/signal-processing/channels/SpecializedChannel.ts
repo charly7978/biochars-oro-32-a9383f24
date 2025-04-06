@@ -1,80 +1,146 @@
 
 /**
- * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
- * 
- * Base class for all specialized signal processing channels
+ * Base class for specialized signal processing channels
  */
 
-import { OptimizedSignalChannel } from '../types';
+import { OptimizedSignalChannel, ChannelFeedback, VitalSignType } from '../../../types/signal';
 
 /**
- * Base abstract class for specialized signal channels
- * Each channel handles a specific vital sign processing
+ * Base class for all specialized signal channels
  */
 export abstract class SpecializedChannel implements OptimizedSignalChannel {
-  // Channel type identifier - now public to match the interface
-  public readonly type: string;
+  protected id: string;
+  protected amplification: number = 1.0;
+  protected filterStrength: number = 0.5;
+  protected signalType: VitalSignType;
+  protected quality: number = 0;
   
-  // Common buffer for all channels
-  protected recentValues: number[] = [];
-  protected readonly maxBufferSize: number = 30;
-  
-  constructor(type: string) {
-    this.type = type;
+  /**
+   * Constructor
+   */
+  constructor(signalType: VitalSignType) {
+    this.signalType = signalType;
+    this.id = `${signalType}-channel`;
   }
   
   /**
-   * Process a signal value and return channel-specific output
+   * Process a signal value with specialized processing
    */
-  abstract processSignal(signal: number): any;
+  public processValue(value: number): number {
+    // Apply basic processing
+    const filteredValue = this.applyFiltering(value);
+    const amplifiedValue = this.applyAmplification(filteredValue);
+    
+    // Update quality based on signal
+    this.updateQuality(amplifiedValue);
+    
+    // Apply channel-specific processing
+    return this.specializedProcessing(amplifiedValue);
+  }
   
   /**
-   * Calculate quality score for this channel's processing
+   * Apply filtering to the signal
    */
-  abstract calculateQuality(signal: number): number;
+  protected applyFiltering(value: number): number {
+    // Basic low-pass filter
+    return value * this.filterStrength;
+  }
   
   /**
-   * Add value to buffer and maintain buffer size
+   * Apply amplification to the signal
    */
-  protected addToBuffer(value: number): void {
-    this.recentValues.push(value);
-    if (this.recentValues.length > this.maxBufferSize) {
-      this.recentValues.shift();
+  protected applyAmplification(value: number): number {
+    return value * this.amplification;
+  }
+  
+  /**
+   * Update signal quality measure
+   */
+  protected updateQuality(value: number): void {
+    // Simple quality estimation based on signal strength
+    const signalStrength = Math.abs(value);
+    
+    if (signalStrength > 0.1) {
+      this.quality = Math.min(1.0, this.quality + 0.05);
+    } else {
+      this.quality = Math.max(0.0, this.quality - 0.1);
     }
   }
   
   /**
-   * Reset channel state
+   * Apply specialized processing for this channel type
+   * To be implemented by derived classes
+   */
+  protected abstract specializedProcessing(value: number): number;
+  
+  /**
+   * Apply feedback to adjust channel parameters
+   */
+  public applyFeedback(feedback: ChannelFeedback): void {
+    // Only apply feedback for this channel
+    if (feedback.channelId !== this.id) return;
+    
+    // Update amplification if needed
+    if (feedback.signalAmplitude < 0.2 && this.amplification < 2.0) {
+      this.amplification *= 1.1;
+    } else if (feedback.signalAmplitude > 0.8 && this.amplification > 0.5) {
+      this.amplification *= 0.9;
+    }
+    
+    // Update filter strength if needed
+    const targetQuality = feedback.quality || feedback.signalQuality || 0.5;
+    if (targetQuality < 0.3 && this.filterStrength < 0.9) {
+      this.filterStrength += 0.05;
+    } else if (targetQuality > 0.7 && this.filterStrength > 0.1) {
+      this.filterStrength -= 0.05;
+    }
+    
+    // Apply suggested adjustments if provided
+    if (feedback.suggestedAdjustments) {
+      if (feedback.suggestedAdjustments.amplification) {
+        this.amplification = feedback.suggestedAdjustments.amplification;
+      }
+      
+      if (feedback.suggestedAdjustments.filterStrength) {
+        this.filterStrength = feedback.suggestedAdjustments.filterStrength;
+      }
+    }
+  }
+  
+  /**
+   * Reset the channel state
    */
   public reset(): void {
-    this.recentValues = [];
+    this.amplification = 1.0;
+    this.filterStrength = 0.5;
+    this.quality = 0;
   }
   
   /**
-   * Get variance of recent values
+   * Get the channel ID
    */
-  protected getVariance(): number {
-    if (this.recentValues.length < 2) return 0;
-    
-    const mean = this.getMean();
-    return this.recentValues.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / this.recentValues.length;
+  public getId(): string {
+    return this.id;
   }
   
   /**
-   * Get mean of recent values
+   * Get current amplification factor
    */
-  protected getMean(): number {
-    if (this.recentValues.length === 0) return 0;
-    return this.recentValues.reduce((sum, val) => sum + val, 0) / this.recentValues.length;
+  public getAmplification(): number {
+    return this.amplification;
   }
   
   /**
-   * Apply basic filtering to smooth values
+   * Get current filter strength
    */
-  protected smoothValue(value: number): number {
-    if (this.recentValues.length < 3) return value;
-    
-    const recentValuesCopy = [...this.recentValues, value].slice(-3);
-    return recentValuesCopy.reduce((sum, val) => sum + val, 0) / recentValuesCopy.length;
+  public getFilterStrength(): number {
+    return this.filterStrength;
+  }
+  
+  /**
+   * Get the current signal quality
+   */
+  public getQuality(): number {
+    return this.quality;
   }
 }

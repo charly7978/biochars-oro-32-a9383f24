@@ -3,7 +3,7 @@
  * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
  * 
  * Specialized processor for lipids measurement
- * Uses optimized lipid signal to calculate cholesterol and triglycerides
+ * Uses optimized lipid signal to calculate cholesterol and hydration
  */
 
 import { BaseVitalSignProcessor } from './BaseVitalSignProcessor';
@@ -14,7 +14,7 @@ import { VitalSignType, ChannelFeedback } from '../../../types/signal';
  */
 export interface LipidsResult {
   totalCholesterol: number;
-  triglycerides: number;
+  hydrationPercentage: number; // Changed from triglycerides to hydrationPercentage
 }
 
 /**
@@ -23,10 +23,10 @@ export interface LipidsResult {
 export class LipidsProcessor extends BaseVitalSignProcessor<LipidsResult> {
   // Default values for lipid measurements
   private readonly BASELINE_CHOLESTEROL = 180; // mg/dL
-  private readonly BASELINE_TRIGLYCERIDES = 150; // mg/dL
+  private readonly BASELINE_HYDRATION = 65; // % (Changed from triglycerides)
   
   constructor() {
-    super(VitalSignType.LIPIDS);
+    super(VitalSignType.HYDRATION); // Changed from LIPIDS to HYDRATION
   }
   
   /**
@@ -37,16 +37,16 @@ export class LipidsProcessor extends BaseVitalSignProcessor<LipidsResult> {
   protected processValueImpl(value: number): LipidsResult {
     // Skip processing if the value is too small
     if (Math.abs(value) < 0.01) {
-      return { totalCholesterol: 0, triglycerides: 0 };
+      return this.getEmptyResult();
     }
     
     // Calculate lipid values
     const totalCholesterol = this.calculateCholesterol(value);
-    const triglycerides = this.calculateTriglycerides(value);
+    const hydrationPercentage = this.calculateHydration(value);
     
     return {
       totalCholesterol: Math.round(totalCholesterol),
-      triglycerides: Math.round(triglycerides)
+      hydrationPercentage: Math.round(hydrationPercentage)
     };
   }
   
@@ -64,15 +64,36 @@ export class LipidsProcessor extends BaseVitalSignProcessor<LipidsResult> {
   }
   
   /**
-   * Calculate triglycerides
+   * Calculate hydration percentage
    */
-  private calculateTriglycerides(value: number): number {
+  private calculateHydration(value: number): number {
     if (this.confidence < 0.2) return 0;
     
-    // Simple placeholder implementation
-    const triglycerides = this.BASELINE_TRIGLYCERIDES + (value * 35);
+    // Simple placeholder implementation for hydration percentage
+    const hydration = this.BASELINE_HYDRATION + (value * 15);
     
-    // Ensure result is within physiological range
-    return Math.min(300, Math.max(50, triglycerides));
+    // Ensure result is within physiological range (45-100%)
+    return Math.min(100, Math.max(45, hydration));
+  }
+
+  /**
+   * Get an empty result for invalid signals
+   */
+  public getEmptyResult(): LipidsResult {
+    return {
+      totalCholesterol: 0,
+      hydrationPercentage: 0
+    };
+  }
+
+  /**
+   * Calculate hydration from values array
+   */
+  public calculateHydration(values: number[]): LipidsResult {
+    if (!values.length) return this.getEmptyResult();
+    
+    // Use the last value for calculation
+    const lastValue = values[values.length - 1];
+    return this.processValue(lastValue);
   }
 }
