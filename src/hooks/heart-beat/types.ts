@@ -1,3 +1,4 @@
+
 /**
  * Type definitions for heart beat processing
  */
@@ -30,9 +31,6 @@ export interface DiagnosticData {
     qualityTrend: string;
   };
   rhythmQuality?: string;
-  isFingerDetected?: boolean;
-  isArrhythmia?: boolean;
-  arrhythmiaCount?: number;
 }
 
 export interface HeartBeatResult {
