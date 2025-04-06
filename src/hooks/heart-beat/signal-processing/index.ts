@@ -18,8 +18,12 @@ export {
   isFingerDetected
 } from './signal-quality';
 
-export { 
-  handlePeakDetection 
+// Export peak detection functions but without handlePeakDetection which doesn't exist
+export {
+  detectPeaks,
+  calculateHeartRate,
+  getDiagnosticsData,
+  clearDiagnosticsData
 } from './peak-detection';
 
 export { 

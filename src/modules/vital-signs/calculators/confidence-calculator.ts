@@ -4,62 +4,54 @@
  */
 
 /**
- * Calculator for confidence levels in vital signs measurements
+ * Calculator for confidence levels in vital measurements
  */
 export class ConfidenceCalculator {
-  private confidenceThreshold: number;
+  private readonly confidenceThreshold: number;
   
   /**
    * Create a new confidence calculator
-   * @param threshold Minimum threshold for confidence to be considered reliable
+   * @param confidenceThreshold Minimum confidence level to consider a measurement valid (0-1)
    */
-  constructor(threshold: number) {
-    this.confidenceThreshold = threshold;
+  constructor(confidenceThreshold: number = 0.5) {
+    this.confidenceThreshold = Math.max(0, Math.min(1, confidenceThreshold));
   }
   
   /**
-   * Calculate overall confidence based on individual measurements
+   * Calculate overall confidence from individual measurements
    */
   public calculateOverallConfidence(
     glucoseConfidence: number,
     lipidsConfidence: number,
     hydrationConfidence: number
   ): number {
-    // Weight the different confidence values
+    // Calculate weighted average of individual confidences
     const weights = {
-      glucose: 0.3,
+      glucose: 0.4,
       lipids: 0.3,
-      hydration: 0.4
+      hydration: 0.3
     };
     
-    // Calculate weighted average
-    const overallConfidence = (
-      (glucoseConfidence * weights.glucose) +
-      (lipidsConfidence * weights.lipids) +
-      (hydrationConfidence * weights.hydration)
-    );
+    const weightedConfidence = 
+      glucoseConfidence * weights.glucose +
+      lipidsConfidence * weights.lipids +
+      hydrationConfidence * weights.hydration;
     
-    return Math.min(overallConfidence, 1);
+    // Return normalized confidence (0-1)
+    return Math.max(0, Math.min(1, weightedConfidence));
   }
   
   /**
-   * Check if confidence meets threshold
+   * Check if confidence meets the threshold
    */
   public meetsThreshold(confidence: number): boolean {
     return confidence >= this.confidenceThreshold;
   }
   
   /**
-   * Get current confidence threshold
+   * Get the current confidence threshold
    */
   public getConfidenceThreshold(): number {
     return this.confidenceThreshold;
-  }
-  
-  /**
-   * Set confidence threshold
-   */
-  public setConfidenceThreshold(threshold: number): void {
-    this.confidenceThreshold = threshold;
   }
 }

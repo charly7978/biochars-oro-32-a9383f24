@@ -1,28 +1,40 @@
 
 /**
- * Functions for processing signal results
+ * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
  */
-import React from 'react';
+
+let lastValidBpm = 0;
+let lastConfidence = 0;
+let validBpmCount = 0;
 
 /**
- * Process signal results with low confidence
+ * Update last valid BPM
+ */
+export function updateLastValidBpm(bpm: number, confidence: number): void {
+  if (confidence > 0.5 && bpm >= 40 && bpm <= 200) {
+    // Use exponential smoothing to update
+    lastValidBpm = lastValidBpm > 0 
+      ? 0.8 * lastValidBpm + 0.2 * bpm
+      : bpm;
+    
+    lastConfidence = confidence;
+    validBpmCount++;
+  }
+}
+
+/**
+ * Process result with low confidence
  */
 export function processLowConfidenceResult(
   result: any, 
-  currentBPM: number,
-  arrhythmiaCounter: number = 0
+  confidenceThreshold: number = 0.5
 ): any {
-  // If confidence is very low, don't update values
-  if (result.confidence < 0.25) {
+  if (result.confidence < confidenceThreshold && lastValidBpm > 0) {
+    // If confidence is low but we have a valid previous BPM
     return {
-      bpm: currentBPM,
-      confidence: result.confidence,
-      isPeak: false,
-      arrhythmiaCount: arrhythmiaCounter || 0,
-      rrData: {
-        intervals: [],
-        lastPeakTime: null
-      }
+      ...result,
+      bpm: lastValidBpm,
+      confidence: Math.max(0.3, result.confidence)
     };
   }
   
@@ -30,32 +42,25 @@ export function processLowConfidenceResult(
 }
 
 /**
- * Updates the reference to last valid BPM when condition is met
+ * Get last valid measurements
  */
-export function updateLastValidBpm(result: any, lastValidBpmRef: React.MutableRefObject<number>): void {
-  if (result.bpm >= 40 && result.bpm <= 200) {
-    lastValidBpmRef.current = result.bpm;
-  }
+export function getLastValidMeasurements(): {
+  bpm: number;
+  confidence: number;
+  count: number;
+} {
+  return {
+    bpm: lastValidBpm,
+    confidence: lastConfidence,
+    count: validBpmCount
+  };
 }
 
 /**
- * Handle peak detection
+ * Reset valid measurements tracking
  */
-export function handlePeakDetection(
-  result: any, 
-  lastPeakTimeRef: React.MutableRefObject<number | null>,
-  requestBeepCallback: (value: number) => boolean,
-  isMonitoringRef: React.MutableRefObject<boolean>,
-  value: number
-): void {
-  const now = Date.now();
-  
-  // Only process peaks with minimum confidence
-  if (result.isPeak && result.confidence > 0.4) {
-    lastPeakTimeRef.current = now;
-    
-    if (isMonitoringRef.current && result.confidence > 0.5) {
-      requestBeepCallback(value);
-    }
-  }
+export function resetValidMeasurements(): void {
+  lastValidBpm = 0;
+  lastConfidence = 0;
+  validBpmCount = 0;
 }

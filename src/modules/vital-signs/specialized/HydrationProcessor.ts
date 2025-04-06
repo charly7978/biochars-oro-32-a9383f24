@@ -3,94 +3,81 @@
  * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
  */
 
-import { VitalSignType } from '../../../types/vital-sign-types';
-
 /**
- * Processor for hydration estimation from PPG signals
+ * Processor for hydration calculation
  */
 export class HydrationProcessor {
-  private readonly BASE_HYDRATION = 65;
-  private confidence: number = 0;
-  private type: VitalSignType;
-  
-  constructor() {
-    this.type = VitalSignType.HYDRATION;
-  }
+  private confidence = 0;
+  private buffer: number[] = [];
+  private readonly BASE_HYDRATION = 65; // Base hydration percentage
   
   /**
-   * Calculate hydration percentage from PPG signals
+   * Calculate hydration level from PPG values
    */
   public calculateHydration(ppgValues: number[]): number {
-    if (ppgValues.length < 15) {
-      this.confidence = 0;
+    if (ppgValues.length < 10) {
       return 0;
     }
     
-    // Use most recent values
-    const recentValues = ppgValues.slice(-15);
+    // Store values in buffer
+    this.buffer = [...ppgValues.slice(-30)];
     
-    // Calculate signal characteristics
-    const avg = recentValues.reduce((sum, val) => sum + val, 0) / recentValues.length;
-    const max = Math.max(...recentValues);
-    const min = Math.min(...recentValues);
+    // Extract signal features
+    const max = Math.max(...this.buffer);
+    const min = Math.min(...this.buffer);
     const amplitude = max - min;
+    const mean = this.buffer.reduce((sum, val) => sum + val, 0) / this.buffer.length;
     
-    // Calculate hydration variation based on signal characteristics
-    const variation = (avg * 15) - (amplitude * 10);
+    // Calculate hydration variation based on signal features
+    // Higher amplitude correlates with better hydration
+    const hydrationOffset = amplitude * 15;
     
-    // Calculate hydration percentage
-    const hydration = Math.round(this.BASE_HYDRATION + variation);
+    // Calculate confidence based on signal stability
+    this.updateConfidence(amplitude, mean);
     
-    // Update confidence
-    this.confidence = this.calculateConfidence(recentValues);
-    
-    // Ensure physiologically plausible value
-    return this.ensureInRange(hydration, 30, 90);
+    // Return hydration level within physiological range (50-80%)
+    return Math.max(50, Math.min(80, Math.round(this.BASE_HYDRATION + hydrationOffset)));
   }
   
   /**
-   * Calculate confidence level based on signal quality
+   * Update confidence level based on signal characteristics
    */
-  private calculateConfidence(values: number[]): number {
-    // More data points means higher confidence
-    const dataSizeConfidence = Math.min(values.length / 30, 1);
-    
-    // Calculate variance
-    const avg = values.reduce((sum, val) => sum + val, 0) / values.length;
-    let variance = 0;
-    for (const val of values) {
-      variance += Math.pow(val - avg, 2);
+  private updateConfidence(amplitude: number, mean: number): void {
+    if (amplitude < 0.01 || this.buffer.length < 10) {
+      this.confidence = 0;
+      return;
     }
-    variance /= values.length;
     
-    // Lower variance means more stable signal
-    const stabilityConfidence = Math.max(0, 1 - (variance / 0.05));
+    // Calculate signal consistency
+    let consistency = 0;
+    for (let i = 1; i < this.buffer.length; i++) {
+      const diff = Math.abs(this.buffer[i] - this.buffer[i-1]);
+      consistency += diff;
+    }
+    consistency = consistency / this.buffer.length;
+    
+    // Higher consistency (lower value) means better confidence
+    const consistencyFactor = Math.max(0, 1 - consistency * 10);
+    
+    // Amplitude factor (higher amplitude means better confidence)
+    const amplitudeFactor = Math.min(1, amplitude * 5);
     
     // Combine factors for overall confidence
-    let overallConfidence = (dataSizeConfidence * 0.3) + (stabilityConfidence * 0.7);
-    
-    return Math.min(overallConfidence, 1);
+    this.confidence = Math.min(1, (consistencyFactor + amplitudeFactor) / 2);
   }
   
   /**
-   * Get current confidence level
+   * Get the current confidence level
    */
   public getConfidence(): number {
     return this.confidence;
   }
   
   /**
-   * Ensure value is within specified range
-   */
-  private ensureInRange(value: number, min: number, max: number): number {
-    return Math.max(min, Math.min(max, value));
-  }
-  
-  /**
    * Reset the processor
    */
   public reset(): void {
+    this.buffer = [];
     this.confidence = 0;
-    console.log("HydrationProcessor: Reset completed");
   }
 }

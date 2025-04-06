@@ -4,63 +4,84 @@
  */
 
 /**
- * Interface for blood pressure measurement
- */
-export interface BloodPressureResult {
-  systolic: number;
-  diastolic: number;
-}
-
-/**
- * Processor for blood pressure calculation from PPG signals
+ * Processor for blood pressure calculation
  */
 export class BloodPressureProcessor {
-  private readonly BASE_SYSTOLIC = 120;
-  private readonly BASE_DIASTOLIC = 80;
+  private confidence = 0;
+  private buffer: number[] = [];
+  private readonly BASE_SYSTOLIC = 120; // Base systolic pressure
+  private readonly BASE_DIASTOLIC = 80; // Base diastolic pressure
   
   /**
-   * Calculate blood pressure from PPG signals
+   * Calculate blood pressure from PPG values
    */
-  public calculateBloodPressure(ppgValues: number[]): BloodPressureResult {
-    if (ppgValues.length < 20) {
+  public calculateBloodPressure(ppgValues: number[]): { systolic: number, diastolic: number } {
+    if (ppgValues.length < 10) {
       return { systolic: 0, diastolic: 0 };
     }
     
-    // Use most recent values
-    const recentValues = ppgValues.slice(-20);
+    // Store values in buffer
+    this.buffer = [...ppgValues.slice(-30)];
     
-    // Calculate signal characteristics
-    const avg = recentValues.reduce((sum, val) => sum + val, 0) / recentValues.length;
-    const max = Math.max(...recentValues);
-    const min = Math.min(...recentValues);
+    // Extract signal features
+    const max = Math.max(...this.buffer);
+    const min = Math.min(...this.buffer);
     const amplitude = max - min;
+    const mean = this.buffer.reduce((sum, val) => sum + val, 0) / this.buffer.length;
     
-    // Calculate systolic and diastolic variations
-    const systolicVar = avg * 10;
-    const diastolicVar = amplitude * 5;
+    // Calculate blood pressure variations based on signal features
+    const systolicOffset = mean * 10;
+    const diastolicOffset = amplitude * 5;
     
-    // Calculate blood pressure values
-    const systolic = Math.round(this.BASE_SYSTOLIC + systolicVar);
-    const diastolic = Math.round(this.BASE_DIASTOLIC + diastolicVar);
+    // Update confidence based on signal quality
+    this.updateConfidence(amplitude, mean);
     
-    // Ensure physiologically plausible values
+    // Return blood pressure within physiological ranges
     return {
-      systolic: this.ensureInRange(systolic, 90, 180),
-      diastolic: this.ensureInRange(diastolic, 60, 120)
+      systolic: Math.max(90, Math.min(150, Math.round(this.BASE_SYSTOLIC + systolicOffset))),
+      diastolic: Math.max(60, Math.min(100, Math.round(this.BASE_DIASTOLIC + diastolicOffset)))
     };
   }
   
   /**
-   * Ensure value is within specified range
+   * Update confidence level based on signal characteristics
    */
-  private ensureInRange(value: number, min: number, max: number): number {
-    return Math.max(min, Math.min(max, value));
+  private updateConfidence(amplitude: number, mean: number): void {
+    if (amplitude < 0.01 || this.buffer.length < 10) {
+      this.confidence = 0;
+      return;
+    }
+    
+    // Calculate signal consistency
+    let consistency = 0;
+    for (let i = 1; i < this.buffer.length; i++) {
+      const diff = Math.abs(this.buffer[i] - this.buffer[i-1]);
+      consistency += diff;
+    }
+    consistency = consistency / this.buffer.length;
+    
+    // Higher consistency (lower value) means better confidence
+    const consistencyFactor = Math.max(0, 1 - consistency * 10);
+    
+    // Amplitude factor (higher amplitude means better confidence)
+    const amplitudeFactor = Math.min(1, amplitude * 5);
+    
+    // Combine factors for overall confidence
+    this.confidence = Math.min(1, (consistencyFactor + amplitudeFactor) / 2);
+  }
+  
+  /**
+   * Get the current confidence level
+   */
+  public getConfidence(): number {
+    return this.confidence;
   }
   
   /**
    * Reset the processor
    */
   public reset(): void {
-    console.log("BloodPressureProcessor: Reset completed");
+    this.buffer = [];
+    this.confidence = 0;
   }
 }

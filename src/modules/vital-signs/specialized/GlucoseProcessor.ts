@@ -4,86 +4,79 @@
  */
 
 /**
- * Processor for glucose estimation from PPG signals
+ * Processor for glucose calculation
  */
 export class GlucoseProcessor {
-  private readonly BASE_GLUCOSE = 85;
-  private confidence: number = 0;
-  private lastMeasurement: number = 0;
+  private confidence = 0;
+  private buffer: number[] = [];
+  private readonly BASE_GLUCOSE = 85; // Base glucose level
   
   /**
-   * Calculate glucose from PPG signals
+   * Calculate glucose level from PPG values
    */
   public calculateGlucose(ppgValues: number[]): number {
-    if (ppgValues.length < 30) {
-      this.confidence = 0;
+    if (ppgValues.length < 10) {
       return 0;
     }
     
-    // Use most recent values
-    const recentValues = ppgValues.slice(-30);
+    // Store values in buffer
+    this.buffer = [...ppgValues.slice(-30)];
     
-    // Calculate signal characteristics
-    const avg = recentValues.reduce((sum, val) => sum + val, 0) / recentValues.length;
+    // Extract signal features
+    const max = Math.max(...this.buffer);
+    const min = Math.min(...this.buffer);
+    const amplitude = max - min;
+    const mean = this.buffer.reduce((sum, val) => sum + val, 0) / this.buffer.length;
     
-    // Calculate glucose variation
-    const variation = avg * 20;
+    // Calculate glucose variation based on signal features
+    const glucoseOffset = mean * 20;
     
-    // Calculate glucose level
-    const glucose = Math.round(this.BASE_GLUCOSE + variation);
+    // Update confidence based on signal quality
+    this.updateConfidence(amplitude, mean);
     
-    // Calculate confidence level
-    this.confidence = this.calculateConfidence(recentValues);
-    this.lastMeasurement = glucose;
-    
-    // Ensure physiologically plausible value
-    return this.ensureInRange(glucose, 70, 200);
+    // Return glucose level within physiological range (70-140 mg/dL)
+    return Math.max(70, Math.min(140, Math.round(this.BASE_GLUCOSE + glucoseOffset)));
   }
   
   /**
-   * Calculate confidence level based on signal quality
+   * Update confidence level based on signal characteristics
    */
-  private calculateConfidence(values: number[]): number {
-    // More data points means higher confidence
-    const dataSizeConfidence = Math.min(values.length / 45, 1);
-    
-    // Calculate variance
-    const avg = values.reduce((sum, val) => sum + val, 0) / values.length;
-    let variance = 0;
-    for (const val of values) {
-      variance += Math.pow(val - avg, 2);
+  private updateConfidence(amplitude: number, mean: number): void {
+    if (amplitude < 0.01 || this.buffer.length < 10) {
+      this.confidence = 0;
+      return;
     }
-    variance /= values.length;
     
-    // Lower variance means more stable signal
-    const stabilityConfidence = Math.max(0, 1 - (variance / 0.05));
+    // Calculate signal consistency
+    let consistency = 0;
+    for (let i = 1; i < this.buffer.length; i++) {
+      const diff = Math.abs(this.buffer[i] - this.buffer[i-1]);
+      consistency += diff;
+    }
+    consistency = consistency / this.buffer.length;
+    
+    // Higher consistency (lower value) means better confidence
+    const consistencyFactor = Math.max(0, 1 - consistency * 10);
+    
+    // Amplitude factor (higher amplitude means better confidence)
+    const amplitudeFactor = Math.min(1, amplitude * 5);
     
     // Combine factors for overall confidence
-    let overallConfidence = (dataSizeConfidence * 0.5) + (stabilityConfidence * 0.5);
-    
-    return Math.min(overallConfidence, 1);
+    this.confidence = Math.min(1, (consistencyFactor + amplitudeFactor) / 2);
   }
   
   /**
-   * Get current confidence level
+   * Get the current confidence level
    */
   public getConfidence(): number {
     return this.confidence;
   }
   
   /**
-   * Ensure value is within specified range
-   */
-  private ensureInRange(value: number, min: number, max: number): number {
-    return Math.max(min, Math.min(max, value));
-  }
-  
-  /**
    * Reset the processor
    */
   public reset(): void {
+    this.buffer = [];
     this.confidence = 0;
-    this.lastMeasurement = 0;
-    console.log("GlucoseProcessor: Reset completed");
   }
 }

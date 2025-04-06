@@ -108,14 +108,6 @@ export class AntiSimulationGuard {
   }
   
   /**
-   * Process a value and check for simulation
-   * Returns true if simulation is detected
-   */
-  public processValue(value: number): boolean {
-    return this.detectSimulation(value);
-  }
-  
-  /**
    * Reset the guard
    */
   public reset(): void {

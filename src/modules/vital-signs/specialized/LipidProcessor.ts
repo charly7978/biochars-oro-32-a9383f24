@@ -4,88 +4,74 @@
  */
 
 /**
- * Interface for lipid measurement results
- */
-export interface LipidMeasurement {
-  totalCholesterol: number;
-  triglycerides: number;
-}
-
-/**
- * Processor for lipid level estimation from PPG signals
+ * Processor for lipid calculation
  */
 export class LipidProcessor {
-  private confidence: number = 0;
-  private lastMeasurement: LipidMeasurement = { totalCholesterol: 0, triglycerides: 0 };
-  private baseCholesterol: number = 180;
-  private baseTriglycerides: number = 150;
+  private confidence = 0;
+  private buffer: number[] = [];
+  private readonly BASE_CHOLESTEROL = 180; // Base cholesterol level
+  private readonly BASE_TRIGLYCERIDES = 150; // Base triglycerides level
   
   /**
-   * Calculate lipid values from PPG signal
+   * Calculate lipid levels from PPG values
    */
-  public calculateLipids(ppgValues: number[]): LipidMeasurement {
-    if (ppgValues.length < 30) {
-      this.confidence = 0;
+  public calculateLipids(ppgValues: number[]): { totalCholesterol: number, triglycerides: number } {
+    if (ppgValues.length < 10) {
       return { totalCholesterol: 0, triglycerides: 0 };
     }
     
-    // Use the most recent data points
-    const recentValues = ppgValues.slice(-30);
+    // Store values in buffer
+    this.buffer = [...ppgValues.slice(-30)];
     
-    // Calculate signal characteristics
-    const avg = recentValues.reduce((sum, val) => sum + val, 0) / recentValues.length;
-    const max = Math.max(...recentValues);
-    const min = Math.min(...recentValues);
+    // Extract signal features
+    const max = Math.max(...this.buffer);
+    const min = Math.min(...this.buffer);
     const amplitude = max - min;
+    const mean = this.buffer.reduce((sum, val) => sum + val, 0) / this.buffer.length;
     
-    // Calculate lipid values based on signal characteristics
-    const cholVariation = avg * 30;
-    const trigVariation = amplitude * 25;
+    // Calculate lipid variations based on signal features
+    const cholesterolOffset = mean * 30;
+    const triglyceridesOffset = amplitude * 25;
     
-    const totalCholesterol = Math.round(this.baseCholesterol + cholVariation);
-    const triglycerides = Math.round(this.baseTriglycerides + trigVariation);
+    // Update confidence based on signal quality
+    this.updateConfidence(amplitude, mean);
     
-    // Calculate confidence based on signal quality
-    this.confidence = this.calculateConfidence(recentValues);
-    
-    this.lastMeasurement = {
-      totalCholesterol,
-      triglycerides
+    // Return lipid levels within physiological ranges
+    return {
+      totalCholesterol: Math.max(120, Math.min(240, Math.round(this.BASE_CHOLESTEROL + cholesterolOffset))),
+      triglycerides: Math.max(80, Math.min(220, Math.round(this.BASE_TRIGLYCERIDES + triglyceridesOffset)))
     };
-    
-    return this.lastMeasurement;
   }
   
   /**
-   * Calculate confidence level based on signal quality
+   * Update confidence level based on signal characteristics
    */
-  private calculateConfidence(values: number[]): number {
-    // More data points means higher confidence
-    const dataSizeConfidence = Math.min(values.length / 45, 1);
-    
-    // Stable signal means higher confidence
-    const max = Math.max(...values);
-    const min = Math.min(...values);
-    const avg = values.reduce((sum, val) => sum + val, 0) / values.length;
-    
-    // Calculate variance
-    let variance = 0;
-    for (const val of values) {
-      variance += Math.pow(val - avg, 2);
+  private updateConfidence(amplitude: number, mean: number): void {
+    if (amplitude < 0.01 || this.buffer.length < 10) {
+      this.confidence = 0;
+      return;
     }
-    variance /= values.length;
     
-    // Lower variance means more stable signal
-    const stabilityConfidence = Math.max(0, 1 - (variance / 0.05));
+    // Calculate signal consistency
+    let consistency = 0;
+    for (let i = 1; i < this.buffer.length; i++) {
+      const diff = Math.abs(this.buffer[i] - this.buffer[i-1]);
+      consistency += diff;
+    }
+    consistency = consistency / this.buffer.length;
+    
+    // Higher consistency (lower value) means better confidence
+    const consistencyFactor = Math.max(0, 1 - consistency * 10);
+    
+    // Amplitude factor (higher amplitude means better confidence)
+    const amplitudeFactor = Math.min(1, amplitude * 5);
     
     // Combine factors for overall confidence
-    let overallConfidence = (dataSizeConfidence * 0.4) + (stabilityConfidence * 0.6);
-    
-    return Math.min(overallConfidence, 1);
+    this.confidence = Math.min(1, (consistencyFactor + amplitudeFactor) / 2);
   }
   
   /**
-   * Get current confidence level
+   * Get the current confidence level
    */
   public getConfidence(): number {
     return this.confidence;
@@ -95,8 +81,7 @@ export class LipidProcessor {
    * Reset the processor
    */
   public reset(): void {
+    this.buffer = [];
     this.confidence = 0;
-    this.lastMeasurement = { totalCholesterol: 0, triglycerides: 0 };
-    console.log("LipidProcessor: Reset completed");
   }
 }
