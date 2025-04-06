@@ -1,5 +1,5 @@
+
 import React, { useState, useRef, useEffect } from "react";
-import { Link } from "react-router-dom";
 import VitalSign from "@/components/VitalSign";
 import CameraView from "@/components/CameraView";
 import { useSignalProcessor } from "@/hooks/useSignalProcessor";
@@ -304,9 +304,6 @@ const Index = () => {
             <div className="text-white text-lg">
               {lastSignal?.fingerDetected ? "Huella Detectada" : "Huella No Detectada"}
             </div>
-            <Link to="/diagnostics" className="bg-blue-600/80 px-2 py-1 rounded text-xs text-white">
-              Diagnóstico Técnico
-            </Link>
           </div>
 
           <div className="flex-1">

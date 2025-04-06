@@ -1,4 +1,3 @@
-
 /**
  * Hook for processing vital signs signals
  * Now with diagnostics channel and prioritization system
@@ -8,9 +7,30 @@ import { VitalSignsProcessor } from '../modules/vital-signs'; // Import from cen
 import { ProcessingPriority } from '../modules/extraction'; // Import priority enum
 import type { VitalSignsResult, RRIntervalData } from '../types/vital-signs';
 import type { ArrhythmiaWindow } from './vital-signs/types';
-import { getDiagnosticsData, clearDiagnosticsData } from '../hooks/heart-beat/signal-processing/peak-detection';
 
-// Interfaz para datos de diagnóstico integral
+// Diagnostics data for vital signs processing
+const diagnosticsData: Array<{
+  timestamp: number;
+  value: number;
+  processTime: number;
+  processingPriority: string;
+}> = [];
+
+/**
+ * Get diagnostics data for analysis
+ */
+function getDiagnosticsData() {
+  return [...diagnosticsData];
+}
+
+/**
+ * Clear diagnostics data
+ */
+function clearDiagnosticsData() {
+  diagnosticsData.length = 0;
+}
+
+// Interface for comprehensive diagnostics data
 interface DiagnosticsInfo {
   processedSignals: number;
   signalLog: Array<{ timestamp: number, value: number, result: any, priority: ProcessingPriority }>;
@@ -57,9 +77,7 @@ export function useVitalSignsProcessor() {
       if (processorRef.current) {
         console.log("VitalSignsProcessor cleanup");
         processorRef.current = null;
-        if (typeof clearDiagnosticsData === 'function') {
-          clearDiagnosticsData(); // Limpiar datos de diagnóstico
-        }
+        clearDiagnosticsData(); // Limpiar datos de diagnóstico
       }
     };
   }, [initializeProcessor]);
@@ -72,17 +90,12 @@ export function useVitalSignsProcessor() {
       // Obtener datos de diagnóstico del módulo de detección de picos
       const peakDiagnostics = getDiagnosticsData();
       
-      if (peakDiagnostics && peakDiagnostics.length > 0) {
+      if (peakDiagnostics.length > 0) {
         // Calcular métricas de rendimiento
         const totalTime = peakDiagnostics.reduce((sum, data) => sum + data.processTime, 0);
-        const highPriorityCount = peakDiagnostics.filter(data => 
-          data.processingPriority === 'high' || data.signalStrength >= 0.05).length;
-        const mediumPriorityCount = peakDiagnostics.filter(data => 
-          data.processingPriority === 'medium' || 
-          (data.signalStrength < 0.05 && data.signalStrength >= 0.02)).length;
-        const lowPriorityCount = peakDiagnostics.filter(data => 
-          data.processingPriority === 'low' ||
-          data.signalStrength < 0.02).length;
+        const highPriorityCount = peakDiagnostics.filter(data => data.processingPriority === 'high').length;
+        const mediumPriorityCount = peakDiagnostics.filter(data => data.processingPriority === 'medium').length;
+        const lowPriorityCount = peakDiagnostics.filter(data => data.processingPriority === 'low').length;
         
         // Actualizar métricas en debugInfo
         debugInfo.current.performanceMetrics = {
@@ -208,9 +221,7 @@ export function useVitalSignsProcessor() {
           lowPriorityPercentage: 0
         }
       };
-      if (typeof clearDiagnosticsData === 'function') {
-        clearDiagnosticsData(); // Limpiar datos de diagnóstico
-      }
+      clearDiagnosticsData(); // Limpiar datos de diagnóstico
     }
   }, []);
   
@@ -219,9 +230,7 @@ export function useVitalSignsProcessor() {
     setDiagnosticsEnabled(enabled);
     if (!enabled) {
       // Limpiar datos de diagnóstico si se desactiva
-      if (typeof clearDiagnosticsData === 'function') {
-        clearDiagnosticsData();
-      }
+      clearDiagnosticsData();
     }
     console.log(`Diagnostics channel ${enabled ? 'enabled' : 'disabled'}`);
   }, []);
