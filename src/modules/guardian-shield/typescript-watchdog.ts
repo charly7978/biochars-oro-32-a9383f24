@@ -1,3 +1,4 @@
+
 /**
  * TypeScript Watchdog
  * Automatically detects and corrects common TypeScript errors
@@ -204,9 +205,9 @@ export class TypeScriptWatchdog {
         correctedObj[key] !== null &&
         !Array.isArray(correctedObj[key])
       ) {
-        // Recursively correct nested objects
+        // Fix: Cast the nested expectedShape and object to the correct types for recursion
         const nestedResult = this.correctObject(
-          correctedObj[key], 
+          correctedObj[key] as Record<string, any>, 
           expectedShape[key] as Record<string, any>,
           options
         );
