@@ -1,4 +1,3 @@
-
 /**
  * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
  */
@@ -53,10 +52,21 @@ export class VitalSignsProcessor {
   }
   
   /**
+   * Process data from an object parameter
+   * Added for backward compatibility
+   */
+  public processSignal(data: {
+    value: number, 
+    rrData?: { intervals: number[]; lastPeakTime: number | null }
+  }): VitalSignsResult {
+    return this.process(data.value, data.rrData);
+  }
+  
+  /**
    * Processes the real PPG signal and calculates all vital signs
    * Using ONLY direct measurements with no reference values or simulation
    */
-  public processSignal(
+  public process(
     ppgValue: number,
     rrData?: { intervals: number[]; lastPeakTime: number | null }
   ): VitalSignsResult {
@@ -113,15 +123,9 @@ export class VitalSignsProcessor {
     const glucose = this.glucoseProcessor.calculateGlucose(ppgValues);
     const glucoseConfidence = this.glucoseProcessor.getConfidence();
     
-    // Calculate lipids with real data only - always use hydration instead of triglycerides
+    // Calculate lipids with real data only
     const lipids = this.lipidProcessor.calculateLipids(ppgValues);
     const lipidsConfidence = this.lipidProcessor.getConfidence();
-    
-    // Ensure lipids result has hydration property (fixed type error)
-    const finalLipids = {
-      totalCholesterol: lipids.totalCholesterol,
-      hydration: lipids.hydration || 0 // Ensure hydration is present
-    };
     
     // Calculate overall confidence
     const overallConfidence = this.confidenceCalculator.calculateOverallConfidence(
@@ -131,9 +135,9 @@ export class VitalSignsProcessor {
 
     // Only show values if confidence exceeds threshold
     const finalGlucose = this.confidenceCalculator.meetsThreshold(glucoseConfidence) ? glucose : 0;
-    const adjustedLipids = this.confidenceCalculator.meetsThreshold(lipidsConfidence) ? finalLipids : {
+    const finalLipids = this.confidenceCalculator.meetsThreshold(lipidsConfidence) ? lipids : {
       totalCholesterol: 0,
-      hydration: 0
+      triglycerides: 0
     };
 
     console.log("VitalSignsProcessor: Results with confidence", {
@@ -141,8 +145,6 @@ export class VitalSignsProcessor {
       pressure,
       arrhythmiaStatus: arrhythmiaResult.arrhythmiaStatus,
       glucose: finalGlucose,
-      cholesterol: adjustedLipids.totalCholesterol,
-      hydration: adjustedLipids.hydration,
       glucoseConfidence,
       lipidsConfidence,
       signalAmplitude: amplitude,
@@ -155,7 +157,7 @@ export class VitalSignsProcessor {
       pressure,
       arrhythmiaResult.arrhythmiaStatus,
       finalGlucose,
-      adjustedLipids,
+      finalLipids,
       {
         glucose: glucoseConfidence,
         lipids: lipidsConfidence,
