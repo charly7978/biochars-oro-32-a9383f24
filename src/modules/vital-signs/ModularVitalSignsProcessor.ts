@@ -9,7 +9,7 @@
 import { ProcessedSignal, VitalSignType, ChannelFeedback } from '../../types/signal';
 import { OptimizedSignalDistributor } from '../signal-processing/OptimizedSignalDistributor';
 import { v4 as uuidv4 } from 'uuid';
-import { ProcessedPPGSignal } from '../signal-processing/SignalBus';
+import { ProcessedPPGSignal, SignalPriority } from '../signal-processing/SignalBus';
 
 // Import specialized vital sign processors
 import { GlucoseProcessor } from './specialized/GlucoseProcessor';
@@ -174,7 +174,7 @@ export class ModularVitalSignsProcessor {
         type: SignalType.PPG_SIGNAL,
         timestamp: signal.timestamp,
         sourceId: 'vital-signs-processor',
-        priority: 'MEDIUM',
+        priority: SignalPriority.MEDIUM,
         isValid: true,
         rawValue: signal.rawValue,
         filteredValue: signal.filteredValue,

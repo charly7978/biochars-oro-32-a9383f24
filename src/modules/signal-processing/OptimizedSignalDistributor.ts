@@ -206,8 +206,8 @@ export class OptimizedSignalDistributor {
     this.channels.forEach((channel, type) => {
       channelDiagnostics[type] = {
         quality: channel.getQuality(),
-        amplification: channel.getAmplification(),
-        filterStrength: channel.getFilterStrength()
+        amplification: channel.getAmplification?.() || 1.0,  // Use optional chaining
+        filterStrength: channel.getFilterStrength?.() || 0.5  // Use optional chaining
       };
     });
     

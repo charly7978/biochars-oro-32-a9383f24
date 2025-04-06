@@ -1,5 +1,5 @@
 
-import { SpecializedChannel, ChannelConfig } from './SpecializedChannel';
+import { SpecializedChannel } from './SpecializedChannel';
 import { VitalSignType } from '../../../types/vital-sign-types';
 
 /**
@@ -12,7 +12,7 @@ export class HydrationChannel extends SpecializedChannel {
   
   constructor() {
     // Default configuration optimized for hydration signals
-    const config: ChannelConfig = {
+    const config = {
       initialAmplification: 1.6,
       initialFilterStrength: 0.22,
       frequencyBandMin: 0.01,
@@ -44,5 +44,16 @@ export class HydrationChannel extends SpecializedChannel {
     }
     
     return processedValue;
+  }
+  
+  /**
+   * Override applyChannelProcessing to integrate specialized processing
+   */
+  protected applyChannelProcessing(value: number): number {
+    // Apply base processing first
+    const baseProcessed = super.applyChannelProcessing(value);
+    
+    // Apply specialized processing
+    return this.specializedProcessing(baseProcessed);
   }
 }

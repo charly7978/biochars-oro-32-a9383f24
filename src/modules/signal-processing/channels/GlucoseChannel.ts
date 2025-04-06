@@ -1,5 +1,5 @@
 
-import { SpecializedChannel, ChannelConfig } from './SpecializedChannel';
+import { SpecializedChannel } from './SpecializedChannel';
 import { VitalSignType } from '../../../types/vital-sign-types';
 
 /**
@@ -8,7 +8,7 @@ import { VitalSignType } from '../../../types/vital-sign-types';
 export class GlucoseChannel extends SpecializedChannel {
   constructor() {
     // Default configuration optimized for glucose signals
-    const config: ChannelConfig = {
+    const config = {
       initialAmplification: 1.5,
       initialFilterStrength: 0.2,
       frequencyBandMin: 0.1,
@@ -30,5 +30,16 @@ export class GlucoseChannel extends SpecializedChannel {
     const processedValue = value * (1 + Math.sin(this.recentValues.length * 0.1) * 0.05);
     
     return processedValue;
+  }
+  
+  /**
+   * Override applyChannelProcessing to integrate specialized processing
+   */
+  protected applyChannelProcessing(value: number): number {
+    // Apply base processing first
+    const baseProcessed = super.applyChannelProcessing(value);
+    
+    // Apply specialized processing
+    return this.specializedProcessing(baseProcessed);
   }
 }

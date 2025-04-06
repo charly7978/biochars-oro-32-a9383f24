@@ -48,8 +48,7 @@ export class PPGSignalProcessor {
       quality,
       fingerDetected,
       signalStrength,
-      // Required properties for the ProcessedPPGSignal interface
-      type: SignalType.PPG_SIGNAL,
+      // Required properties for the SignalBus interface
       sourceId: 'ppg-processor',
       priority: 'MEDIUM',
       isValid: fingerDetected && quality > 20
@@ -195,14 +194,9 @@ export class PPGSignalProcessor {
   }
 }
 
-// Required enum for the PPG signal processor
-enum SignalType {
+// Define required enum for SignalBus compatibility
+export enum SignalType {
   PPG_SIGNAL = 'PPG_SIGNAL',
   VALIDATED_SIGNAL = 'VALIDATED_SIGNAL'
 }
 
-// Required priority type
-type Priority = 'HIGH' | 'MEDIUM' | 'LOW';
-
-// Make these available for other importers
-export { SignalType };

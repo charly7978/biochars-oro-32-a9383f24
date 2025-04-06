@@ -1,4 +1,3 @@
-
 /**
  * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
  * 
@@ -6,27 +5,45 @@
  * Provides common functionality for all signal channels
  */
 
-import { OptimizedSignalChannel, ChannelFeedback, VitalSignType } from '../../../types/signal';
+import { ChannelFeedback, VitalSignType } from '../../../types/vital-sign-types';
+
+/**
+ * Configuration for specialized channels
+ */
+export interface ChannelConfig {
+  initialAmplification: number;
+  initialFilterStrength: number;
+  frequencyBandMin: number;
+  frequencyBandMax: number;
+}
 
 /**
  * Base implementation of an optimized signal channel
  */
-export class SpecializedChannel implements OptimizedSignalChannel {
+export class SpecializedChannel {
   private _id: string;
   private _type: VitalSignType;
   private _quality: number = 0;
   private _amplification: number = 1.0;
   private _filterStrength: number = 0.5;
   private _buffer: number[] = [];
+  protected recentValues: number[] = []; // Adding protected recentValues property
   private readonly MAX_BUFFER_SIZE = 100;
   
   /**
    * Constructor
    */
-  constructor(id: string, type: VitalSignType) {
-    this._id = id;
+  constructor(type: VitalSignType, config?: ChannelConfig) {
+    this._id = `channel-${type}-${Date.now().toString(36)}`;
     this._type = type;
-    console.log(`SpecializedChannel: Created channel ${id} for ${type}`);
+    
+    // Apply configuration if provided
+    if (config) {
+      this._amplification = config.initialAmplification;
+      this._filterStrength = config.initialFilterStrength;
+    }
+    
+    console.log(`SpecializedChannel: Created channel ${this._id} for ${type}`);
   }
   
   /**
@@ -53,6 +70,12 @@ export class SpecializedChannel implements OptimizedSignalChannel {
       this._buffer.shift();
     }
     
+    // Update recent values for specialized processing
+    this.recentValues.push(value);
+    if (this.recentValues.length > 10) {
+      this.recentValues.shift();
+    }
+    
     // Apply channel-specific processing
     const processedValue = this.applyChannelProcessing(value);
     
@@ -69,6 +92,15 @@ export class SpecializedChannel implements OptimizedSignalChannel {
   protected applyChannelProcessing(value: number): number {
     // Base implementation just applies amplification
     return value * this._amplification;
+  }
+  
+  /**
+   * Specialized processing method for subclasses to override
+   * This allows subclasses to implement their own processing logic
+   */
+  protected specializedProcessing(value: number): number {
+    // Base implementation returns the value unchanged
+    return value;
   }
   
   /**
@@ -128,6 +160,7 @@ export class SpecializedChannel implements OptimizedSignalChannel {
    */
   public reset(): void {
     this._buffer = [];
+    this.recentValues = [];
     this._quality = 0;
     console.log(`SpecializedChannel: Reset channel ${this._id}`);
   }
@@ -147,15 +180,5 @@ export class SpecializedChannel implements OptimizedSignalChannel {
   }
 }
 
-/**
- * Interface for the optimized signal channel used within the project
- */
-export interface OptimizedSignalChannel {
-  id: string;
-  processValue(value: number): number;
-  applyFeedback(feedback: ChannelFeedback): void;
-  getQuality(): number;
-  reset(): void;
-  getAmplification(): number;
-  getFilterStrength(): number;
-}
+// Remove the duplicate interface declaration and export from types
+export type { OptimizedSignalChannel } from '../../../types/signal';

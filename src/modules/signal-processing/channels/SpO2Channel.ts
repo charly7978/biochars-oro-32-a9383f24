@@ -1,5 +1,5 @@
 
-import { SpecializedChannel, ChannelConfig } from './SpecializedChannel';
+import { SpecializedChannel } from './SpecializedChannel';
 import { VitalSignType } from '../../../types/vital-sign-types';
 
 /**
@@ -12,7 +12,7 @@ export class SpO2Channel extends SpecializedChannel {
   
   constructor() {
     // Default configuration optimized for SpO2 signals
-    const config: ChannelConfig = {
+    const config = {
       initialAmplification: 2.0,
       initialFilterStrength: 0.3,
       frequencyBandMin: 0.5,
@@ -44,5 +44,16 @@ export class SpO2Channel extends SpecializedChannel {
     }
     
     return processedValue;
+  }
+  
+  /**
+   * Override applyChannelProcessing to integrate specialized processing
+   */
+  protected applyChannelProcessing(value: number): number {
+    // Apply base processing first
+    const baseProcessed = super.applyChannelProcessing(value);
+    
+    // Apply specialized processing
+    return this.specializedProcessing(baseProcessed);
   }
 }

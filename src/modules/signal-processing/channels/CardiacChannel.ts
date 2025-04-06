@@ -1,5 +1,5 @@
 
-import { SpecializedChannel, ChannelConfig } from './SpecializedChannel';
+import { SpecializedChannel } from './SpecializedChannel';
 import { VitalSignType } from '../../../types/vital-sign-types';
 
 /**
@@ -12,7 +12,7 @@ export class CardiacChannel extends SpecializedChannel {
   
   constructor() {
     // Default configuration optimized for cardiac signals
-    const config: ChannelConfig = {
+    const config = {
       initialAmplification: 2.2,
       initialFilterStrength: 0.35,
       frequencyBandMin: 0.8,
@@ -42,6 +42,17 @@ export class CardiacChannel extends SpecializedChannel {
     }
     
     return processedValue;
+  }
+  
+  /**
+   * Override applyChannelProcessing to integrate specialized processing
+   */
+  protected applyChannelProcessing(value: number): number {
+    // Apply base processing first
+    const baseProcessed = super.applyChannelProcessing(value);
+    
+    // Apply specialized processing
+    return this.specializedProcessing(baseProcessed);
   }
   
   /**

@@ -1,5 +1,5 @@
 
-import { SpecializedChannel, ChannelConfig } from './SpecializedChannel';
+import { SpecializedChannel } from './SpecializedChannel';
 import { VitalSignType } from '../../../types/vital-sign-types';
 
 /**
@@ -8,7 +8,7 @@ import { VitalSignType } from '../../../types/vital-sign-types';
 export class LipidsChannel extends SpecializedChannel {
   constructor() {
     // Default configuration optimized for lipids signals
-    const config: ChannelConfig = {
+    const config = {
       initialAmplification: 1.8,
       initialFilterStrength: 0.15,
       frequencyBandMin: 0.05,
@@ -36,5 +36,16 @@ export class LipidsChannel extends SpecializedChannel {
     }
     
     return processedValue;
+  }
+  
+  /**
+   * Override applyChannelProcessing to integrate specialized processing
+   */
+  protected applyChannelProcessing(value: number): number {
+    // Apply base processing first
+    const baseProcessed = super.applyChannelProcessing(value);
+    
+    // Apply specialized processing
+    return this.specializedProcessing(baseProcessed);
   }
 }
