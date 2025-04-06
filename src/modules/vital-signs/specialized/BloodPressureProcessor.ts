@@ -13,6 +13,35 @@ export class BloodPressureProcessor {
   private readonly BASE_DIASTOLIC = 80; // Base diastolic pressure
   
   /**
+   * Initialize the processor
+   */
+  public initialize(): void {
+    this.buffer = [];
+    this.confidence = 0;
+    console.log('BloodPressureProcessor initialized');
+  }
+  
+  /**
+   * Process a value and return blood pressure
+   */
+  public processValue(value: number): string {
+    this.addToBuffer(value);
+    const result = this.calculateBloodPressure(this.buffer);
+    return `${result.systolic}/${result.diastolic}`;
+  }
+  
+  /**
+   * Add a value to the buffer
+   */
+  private addToBuffer(value: number): void {
+    this.buffer.push(value);
+    if (this.buffer.length > 30) {
+      this.buffer.shift();
+    }
+    this.updateConfidence();
+  }
+  
+  /**
    * Calculate blood pressure from PPG values
    */
   public calculateBloodPressure(ppgValues: number[]): { systolic: number, diastolic: number } {
@@ -75,6 +104,18 @@ export class BloodPressureProcessor {
    */
   public getConfidence(): number {
     return this.confidence;
+  }
+  
+  /**
+   * Get feedback for the channel
+   */
+  public getFeedback(): any {
+    return {
+      quality: this.confidence,
+      suggestedAdjustments: {
+        amplificationFactor: this.confidence < 0.5 ? 1.2 : 1.0
+      }
+    };
   }
   
   /**
