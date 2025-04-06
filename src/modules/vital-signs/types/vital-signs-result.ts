@@ -32,3 +32,14 @@ export interface VitalSignsResult {
     }
   };
 }
+
+// Adding an interface for the processor parameters for better type safety
+export interface VitalSignsProcessorParams {
+  value: number;
+  rrData?: {
+    intervals: number[];
+    lastPeakTime: number | null;
+  };
+  isWeakSignal?: boolean;
+}
+

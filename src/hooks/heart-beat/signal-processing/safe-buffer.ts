@@ -54,7 +54,11 @@ function getDiagnostics(): SignalProcessingDiagnostics {
 
 export { 
   getErrorHandler, 
-  getDiagnostics,
+  getDiagnostics
+};
+
+// Use "export type" to fix the TS1205 error
+export type { 
   SignalProcessingErrorHandler,
   SignalProcessingDiagnostics
 };

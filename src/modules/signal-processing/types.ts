@@ -88,3 +88,13 @@ export interface ProcessedHeartbeatSignal {
   // Heart rate variability
   heartRateVariability: number | null;
 }
+
+/**
+ * Interface for signal processors
+ * Added to fix missing interface error
+ */
+export interface SignalProcessor {
+  processSignal(value: number): any;
+  reset(): void;
+  configure(options: SignalProcessingOptions): void;
+}

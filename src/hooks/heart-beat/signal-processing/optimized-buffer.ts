@@ -68,6 +68,7 @@ export function createBuffer<T extends TimestampedPPGData>(capacity: number = 10
   function mapBuffer<U extends PPGDataPoint>(mapper: (item: T, index: number) => U): U[] {
     try {
       return buffer.map((item, index) => {
+        // Fix TS2352: Use unknown as intermediate type for safe conversion
         const result = mapper(item, index);
         // Ensure the required time property exists
         if (result.time === undefined) {
@@ -91,14 +92,17 @@ export function createBuffer<T extends TimestampedPPGData>(capacity: number = 10
     try {
       return buffer
         .map((item, index) => {
+          // Use unknown as intermediate type for safe conversion
+          const itemAny = item as unknown as T;
+          
           // Ensure the timestamp and time properties
-          if (!item.timestamp && item.time !== undefined) {
-            (item as any).timestamp = item.time;
+          if (!itemAny.timestamp && itemAny.time !== undefined) {
+            (itemAny as any).timestamp = itemAny.time;
           }
-          if (item.time === undefined && item.timestamp) {
-            (item as any).time = item.timestamp;
+          if (itemAny.time === undefined && itemAny.timestamp) {
+            (itemAny as any).time = itemAny.timestamp;
           }
-          return mapper(item as T, index);
+          return mapper(itemAny, index);
         })
         .filter(filter);
     } catch (error) {

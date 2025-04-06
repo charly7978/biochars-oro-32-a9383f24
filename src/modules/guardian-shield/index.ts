@@ -1,4 +1,3 @@
-
 /**
  * Guardian Shield System
  * 
@@ -154,7 +153,7 @@ export class GuardianShield {
     
     try {
       // Use the anti-simulation guard to detect potential duplications
-      const simulationDetected = this.antiSimulationGuard.detectSimulation(values[values.length - 1]);
+      const simulationDetected = this.antiSimulationGuard.detectSimulation();
       
       if (simulationDetected) {
         return {
