@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
@@ -34,6 +33,10 @@ const VitalSign = ({
           if (value > 126) return 'Hiperglucemia';
           if (value < 70) return 'Hipoglucemia';
           return '';
+        case 'HIDRATACIÓN':
+          if (value < 40) return 'Deshidratación';
+          if (value > 70) return 'Sobrehidratación';
+          return '';
         default:
           return '';
       }
@@ -56,12 +59,6 @@ const VitalSign = ({
           const cholesterol = parseInt(String(value), 10);
           if (!isNaN(cholesterol)) {
             if (cholesterol > 200) return 'Hipercolesterolemia';
-          }
-          return '';
-        case 'TRIGLICÉRIDOS':
-          const triglycerides = parseInt(String(value), 10);
-          if (!isNaN(triglycerides)) {
-            if (triglycerides > 150) return 'Hipertrigliceridemia';
           }
           return '';
         default:
@@ -207,6 +204,22 @@ const VitalSign = ({
           'Hipertensión',
           'Edad avanzada',
           'Apnea del sueño'
+        ];
+        break;
+      case 'HIDRATACIÓN':
+        info.normalRange = '45-65%';
+        info.description = 'La hidratación sanguínea mide el nivel de agua en la sangre. Es un indicador importante del balance de fluidos en el cuerpo.';
+        info.recommendations = [
+          'Beber suficiente agua diariamente (2-3 litros)',
+          'Limitar bebidas con cafeína y alcohol',
+          'Consumir alimentos ricos en agua como frutas y verduras',
+          'Monitorear el color de la orina (debe ser amarillo claro)'
+        ];
+        info.riskFactors = [
+          'Actividad física intensa sin hidratación adecuada',
+          'Exposición a temperaturas altas',
+          'Enfermedades con vómitos o diarrea',
+          'Consumo excesivo de sal'
         ];
         break;
       default:

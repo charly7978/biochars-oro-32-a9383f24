@@ -14,7 +14,7 @@ export interface VitalSignsResult {
   glucose: number;
   lipids: {
     totalCholesterol: number;
-    triglycerides: number;
+    hydration: number;  // Changed from triglycerides to hydration
   };
   confidence?: {
     glucose: number;
