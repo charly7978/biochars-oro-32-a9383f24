@@ -18,7 +18,7 @@ export {
   isFingerDetected
 } from './signal-quality';
 
-// Export peak detection functions but without handlePeakDetection which doesn't exist
+// Export specific functions from peak-detection
 export {
   detectPeaks,
   calculateHeartRate,
@@ -28,7 +28,9 @@ export {
 
 export { 
   updateLastValidBpm, 
-  processLowConfidenceResult 
+  processLowConfidenceResult,
+  getLastValidMeasurements,
+  resetValidMeasurements
 } from './result-processor';
 
 export {

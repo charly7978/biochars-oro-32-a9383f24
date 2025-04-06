@@ -101,6 +101,42 @@ export function calculateHeartRate(
 }
 
 /**
+ * Handle peak detection for signal processing
+ */
+export function handlePeakDetection(
+  result: any,
+  lastPeakTimeRef: React.MutableRefObject<number | null>,
+  requestImmediateBeep?: (value: number) => boolean,
+  isMonitoringRef?: React.MutableRefObject<boolean>,
+  value?: number
+): void {
+  // Check if this is a new peak
+  if (result && result.isPeak) {
+    const now = Date.now();
+    
+    // Calculate time since last peak
+    const timeSinceLastPeak = lastPeakTimeRef.current 
+      ? now - lastPeakTimeRef.current 
+      : null;
+    
+    // Update last peak time
+    lastPeakTimeRef.current = now;
+    
+    // Handle beep request if provided and monitoring is active
+    if (requestImmediateBeep && isMonitoringRef?.current && value) {
+      requestImmediateBeep(value);
+    }
+    
+    // Log peak information
+    console.log('Peak detected', {
+      timestamp: now,
+      timeSinceLastPeak,
+      heartRate: timeSinceLastPeak ? Math.round(60000 / timeSinceLastPeak) : 0
+    });
+  }
+}
+
+/**
  * Get diagnostics data for analysis
  */
 export function getDiagnosticsData(): DiagnosticsData[] {
