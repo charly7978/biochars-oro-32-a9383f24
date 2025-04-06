@@ -5,7 +5,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { 
   diagnosticsInstance, 
-  DiagnosticEvent 
+  DiagnosticEvent,
+  DiagnosticsSubscriber
 } from '../modules/signal-processing/diagnostics';
 
 /**
@@ -28,7 +29,7 @@ export function useDiagnostics(): UseDiagnosticsReturn {
     setEvents(diagnosticsInstance.getEvents());
     
     // Create subscriber
-    const subscriber = {
+    const subscriber: DiagnosticsSubscriber = {
       onDiagnosticEvent: (event: DiagnosticEvent) => {
         setEvents(prev => [...prev, event]);
       }

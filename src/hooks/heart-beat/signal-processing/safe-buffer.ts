@@ -1,5 +1,23 @@
 
 /**
+ * Type definitions for signal processing error handling
+ */
+interface SignalProcessingErrorHandler {
+  handleError: (error: Error, componentName: string, lastValidPoint?: any) => {
+    shouldRetry: boolean;
+    fallbackValue: any;
+  };
+  registerGoodValue: (componentName: string, value: any) => void;
+}
+
+/**
+ * Type definitions for signal processing diagnostics
+ */
+interface SignalProcessingDiagnostics {
+  recordDiagnosticInfo: (info: { validationPassed: boolean; [key: string]: any }) => void;
+}
+
+/**
  * Create a simple error handler
  */
 function getErrorHandler(): SignalProcessingErrorHandler {
@@ -33,3 +51,10 @@ function getDiagnostics(): SignalProcessingDiagnostics {
     }
   };
 }
+
+export { 
+  getErrorHandler, 
+  getDiagnostics,
+  SignalProcessingErrorHandler,
+  SignalProcessingDiagnostics
+};

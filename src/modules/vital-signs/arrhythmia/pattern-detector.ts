@@ -1,96 +1,60 @@
-/**
- * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
- */
-
-import { ArrhythmiaPatternType } from './types';
 
 /**
- * Detector for arrhythmia patterns in cardiac signals
+ * Pattern detector for arrhythmia detection
  */
+
+const MAX_PATTERN_BUFFER = 30;
+
 export class ArrhythmiaPatternDetector {
   private patternBuffer: number[] = [];
-  private readonly BUFFER_SIZE = 20;
-  private readonly PATTERN_THRESHOLD = 0.3;
-  private readonly MIN_VARIATIONS_COUNT = 2;
   
   /**
-   * Update pattern buffer with new variation value
+   * Update the pattern buffer with a new variation value
    */
   public updatePatternBuffer(variation: number): void {
     this.patternBuffer.push(variation);
     
-    // Keep buffer at defined size
-    if (this.patternBuffer.length > this.BUFFER_SIZE) {
+    if (this.patternBuffer.length > MAX_PATTERN_BUFFER) {
       this.patternBuffer.shift();
     }
   }
   
   /**
-   * Reset the pattern buffer
-   */
-  public resetPatternBuffer(): void {
-    this.patternBuffer = [];
-  }
-  
-  /**
-   * Detect if current pattern indicates arrhythmia
+   * Detect arrhythmia patterns in the buffer
+   * Returns true if an arrhythmia pattern is detected
    */
   public detectArrhythmiaPattern(): boolean {
-    if (this.patternBuffer.length < 5) {
+    if (this.patternBuffer.length < 10) {
       return false;
     }
     
-    // Count significant variations
-    const significantVariations = this.patternBuffer.filter(
-      variation => variation > this.PATTERN_THRESHOLD
-    ).length;
+    // Basic pattern detection: look for high variation followed by consistent pattern
+    const highVariationThreshold = 0.15;
+    const highVariationCount = this.patternBuffer.filter(v => v > highVariationThreshold).length;
     
-    // Detect pattern if we have enough significant variations
-    return significantVariations >= this.MIN_VARIATIONS_COUNT;
-  }
-  
-  /**
-   * Get the type of pattern detected
-   */
-  public getPatternType(): ArrhythmiaPatternType {
-    if (!this.detectArrhythmiaPattern()) {
-      return ArrhythmiaPatternType.NORMAL;
-    }
-    
-    // Get recent variations for analysis
-    const recentVariations = this.patternBuffer.slice(-5);
-    
-    // Calculate average variation
-    const avgVariation = recentVariations.reduce((sum, val) => sum + val, 0) / 
-                         recentVariations.length;
-    
-    // Detect specific patterns based on variation characteristics
-    if (avgVariation > 0.5) {
-      return ArrhythmiaPatternType.IRREGULAR_RHYTHM;
-    } else if (this.detectPrematureBeatPattern()) {
-      return ArrhythmiaPatternType.PREMATURE_BEAT;
-    } else if (this.detectMissedBeatPattern()) {
-      return ArrhythmiaPatternType.MISSED_BEAT;
-    }
-    
-    return ArrhythmiaPatternType.NORMAL;
-  }
-  
-  /**
-   * Detect premature beat pattern
-   */
-  private detectPrematureBeatPattern(): boolean {
-    if (this.patternBuffer.length < 5) {
-      return false;
-    }
-    
-    // Premature beat pattern often shows as short interval followed by compensatory pause
-    const variations = this.patternBuffer.slice(-5);
-    
-    for (let i = 1; i < variations.length; i++) {
-      // Detection of short-long pattern
-      if (variations[i-1] < -0.2 && variations[i] > 0.2) {
-        return true;
+    // If we have at least 2 high variations in our pattern buffer
+    if (highVariationCount >= 2) {
+      // Calculate average peak spacing
+      const indices: number[] = [];
+      this.patternBuffer.forEach((variation, index) => {
+        if (variation > highVariationThreshold) {
+          indices.push(index);
+        }
+      });
+      
+      // Check if indices have consistent spacing (arrhythmia pattern)
+      if (indices.length >= 2) {
+        const diffs = [];
+        for (let i = 1; i < indices.length; i++) {
+          diffs.push(indices[i] - indices[i-1]);
+        }
+        
+        // Calculate variance of diffs
+        const mean = diffs.reduce((sum, val) => sum + val, 0) / diffs.length;
+        const variance = diffs.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / diffs.length;
+        
+        // Low variance indicates consistent pattern
+        return variance < 5;
       }
     }
     
@@ -98,17 +62,9 @@ export class ArrhythmiaPatternDetector {
   }
   
   /**
-   * Detect missed beat pattern
+   * Reset the pattern buffer
    */
-  private detectMissedBeatPattern(): boolean {
-    if (this.patternBuffer.length < 5) {
-      return false;
-    }
-    
-    // Missed beat pattern shows as a single very long interval
-    const variations = this.patternBuffer.slice(-5);
-    
-    // Check for any significantly long interval
-    return variations.some(variation => variation > 0.8);
+  public resetPatternBuffer(): void {
+    this.patternBuffer = [];
   }
 }

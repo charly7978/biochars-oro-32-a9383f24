@@ -45,3 +45,7 @@ export {
   applyGaussianProcessModeling,
   applyMixedModelPrediction
 } from './adaptive-control';
+
+// Export buffer utilities
+export * from './optimized-buffer';
+export * from './safe-buffer';

@@ -15,6 +15,13 @@ export interface DiagnosticEvent {
 }
 
 /**
+ * Interface for diagnostics subscribers
+ */
+export interface DiagnosticsSubscriber {
+  onDiagnosticEvent(event: DiagnosticEvent): void;
+}
+
+/**
  * Core diagnostics service
  */
 export class SignalProcessingDiagnostics {
@@ -75,10 +82,34 @@ export class SignalProcessingDiagnostics {
 }
 
 /**
- * Interface for diagnostics subscribers
+ * Create diagnostic info
  */
-export interface DiagnosticsSubscriber {
-  onDiagnosticEvent(event: DiagnosticEvent): void;
+export function createDiagnosticInfo(category: string, message: string, level: 'info' | 'warning' | 'error' | 'debug' = 'info', data?: any): Omit<DiagnosticEvent, 'timestamp'> {
+  return {
+    category,
+    level,
+    message,
+    data
+  };
+}
+
+/**
+ * Log diagnostics
+ */
+export function logDiagnostics(category: string, message: string, level: 'info' | 'warning' | 'error' | 'debug' = 'info', data?: any): void {
+  diagnosticsInstance.logEvent({
+    category,
+    level,
+    message,
+    data
+  });
+}
+
+/**
+ * Get diagnostics service
+ */
+export function getDiagnostics(): SignalProcessingDiagnostics {
+  return diagnosticsInstance;
 }
 
 /**

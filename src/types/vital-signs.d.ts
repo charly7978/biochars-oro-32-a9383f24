@@ -16,7 +16,7 @@ export interface VitalSignsResult {
     totalCholesterol: number;
     triglycerides: number;
   };
-  hydration: number; // Added hydration field
+  hydration: number;
   confidence?: {
     glucose: number;
     lipids: number;
@@ -24,8 +24,8 @@ export interface VitalSignsResult {
   };
   lastArrhythmiaData?: {
     timestamp: number;
-    rmssd: number;
-    rrVariation: number;
+    rmssd?: number;
+    rrVariation?: number;
   } | null;
   calibration?: {
     progress: {
@@ -62,8 +62,8 @@ export interface ArrhythmiaProcessingResult {
   arrhythmiaStatus: string;
   lastArrhythmiaData: { 
     timestamp: number; 
-    rmssd: number; 
-    rrVariation: number; 
+    rmssd?: number; 
+    rrVariation?: number; 
   } | null;
 }
 
@@ -74,6 +74,15 @@ export interface TimestampedPPGData {
   timestamp: number;
   value: number;
   time?: number; // For compatibility
+}
+
+/**
+ * PPGDataPoint interface with required time property
+ */
+export interface PPGDataPoint {
+  timestamp: number;
+  value: number;
+  time: number; // Required property
 }
 
 /**

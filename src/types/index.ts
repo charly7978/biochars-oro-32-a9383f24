@@ -4,13 +4,12 @@
  * Import types from here instead of individual files
  */
 
-// Export all vital sign types
-export * from './vital-signs';
+// Export vital sign types but with explicit naming to avoid conflicts
+import * as VitalSignsTypes from './vital-signs';
+export { VitalSignsTypes };
 
-// Export signal types
+// Export signal types 
 export * from './signal';
 
 // Export screen orientation types
 export * from './screen-orientation';
-
-// Note: media-stream.d.ts defines global interfaces and doesn't export anything
