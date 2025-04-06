@@ -1,284 +1,210 @@
 
 /**
- * Peak detection and arrhythmia analysis module
- * Contains enhanced algorithms for cardiac signal analysis
+ * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
+ *
+ * Functions for peak detection logic, working with real data only
  */
-import React from 'react';
 
-// Diagnostic tracking
-interface DiagnosticEntry {
+// Diagnostics channel integration
+export interface DiagnosticsData {
   timestamp: number;
   processTime: number;
   signalStrength: number;
-  qualityScore: number;
-  isPeak: boolean;
-  rrInterval: number | null;
-  processingPriority?: 'high' | 'medium' | 'low';
+  processorLoad: number;
+  dataPointsProcessed: number;
+  peakDetectionConfidence: number;
+  processingPriority: 'high' | 'medium' | 'low';
 }
 
-const diagnosticHistory: DiagnosticEntry[] = [];
-const qualityDistribution = { high: 0, medium: 0, low: 0 };
-let lastQualityTrend: number[] = [];
+// Global diagnostics collector
+let diagnosticsBuffer: DiagnosticsData[] = [];
+const MAX_DIAGNOSTICS_BUFFER = 100;
 
 /**
- * Handle peak detection with enhanced arrhythmia awareness
+ * Determines if a measurement should be processed based on signal strength
+ * Only processes real measurements
+ * Now with improved prioritization based on signal strength
+ */
+export function shouldProcessMeasurement(value: number): boolean {
+  // Añadir diagnóstico sobre decisión de procesamiento
+  const signalStrength = Math.abs(value);
+  const processingDecision = signalStrength >= 0.008;
+  
+  // Determinar prioridad basada en la fuerza de la señal
+  let priority: 'high' | 'medium' | 'low' = 'low';
+  if (signalStrength >= 0.05) {
+    priority = 'high';
+  } else if (signalStrength >= 0.02) {
+    priority = 'medium';
+  }
+  
+  // Registrar diagnóstico
+  addDiagnosticsData({
+    timestamp: Date.now(),
+    processTime: 0,
+    signalStrength,
+    processorLoad: 0,
+    dataPointsProcessed: 1,
+    peakDetectionConfidence: processingDecision ? signalStrength * 10 : 0,
+    processingPriority: priority
+  });
+  
+  // Umbral más sensible para capturar señales reales mientras filtra ruido
+  return processingDecision; // Reducido aún más para mayor sensibilidad
+}
+
+/**
+ * Creates default signal processing result when signal is too weak
+ * Contains only real data structure with zero values
+ * Now includes diagnostics and priority information
+ */
+export function createWeakSignalResult(arrhythmiaCounter: number = 0): any {
+  // Registrar evento de señal débil en diagnósticos
+  addDiagnosticsData({
+    timestamp: Date.now(),
+    processTime: 0,
+    signalStrength: 0.005, // Valor bajo característico
+    processorLoad: 0,
+    dataPointsProcessed: 1,
+    peakDetectionConfidence: 0,
+    processingPriority: 'low'
+  });
+  
+  return {
+    bpm: 0,
+    confidence: 0,
+    isPeak: false,
+    arrhythmiaCount: arrhythmiaCounter || 0,
+    rrData: {
+      intervals: [],
+      lastPeakTime: null
+    },
+    isArrhythmia: false,
+    // Adding transition state to ensure continuous color rendering
+    transition: {
+      active: false,
+      progress: 0,
+      direction: 'none'
+    },
+    // Add priority information for downstream processing
+    priority: 'low'
+  };
+}
+
+/**
+ * Handle peak detection with improved natural synchronization
+ * Esta función se ha modificado para NO activar el beep - centralizado en PPGSignalMeter
+ * No simulation is used - direct measurement only
+ * Now with priority-based processing and diagnostics
  */
 export function handlePeakDetection(
   result: any, 
   lastPeakTimeRef: React.MutableRefObject<number | null>,
   requestBeepCallback: (value: number) => boolean,
-  isMonitoringRef?: React.MutableRefObject<boolean>,
-  value?: number
+  isMonitoringRef: React.MutableRefObject<boolean>,
+  value: number
 ): void {
-  const now = Date.now();
   const startTime = performance.now();
+  const now = Date.now();
   
-  // Only process peaks with minimum confidence
-  if (result.isPeak && result.confidence > 0.4) {
+  // Determinar prioridad basada en la confianza del resultado
+  let priority: 'high' | 'medium' | 'low' = 'low';
+  if (result.confidence > 0.5) {
+    priority = 'high';
+  } else if (result.confidence > 0.2) {
+    priority = 'medium';
+  }
+  
+  // Solo actualizar tiempo del pico para cálculos de tiempo
+  if (result.isPeak && result.confidence > 0.05) {
+    // Actualizar tiempo del pico para cálculos de tempo solamente
     lastPeakTimeRef.current = now;
     
-    // Detect potential arrhythmia on this beat
-    const isArrhythmia = result.isArrhythmia || false;
+    // Elevar la prioridad si se detecta un pico
+    priority = 'high';
     
-    // If monitoring is active and confidence is high enough, trigger beep
-    if ((!isMonitoringRef || isMonitoringRef.current) && result.confidence > 0.5) {
-      // Pass arrhythmia information to the beep callback
-      // This allows AudioManager to choose appropriate sound/vibration
-      const event = new CustomEvent('cardiac-peak-detected', {
-        detail: {
-          heartRate: result.bpm || 0,
-          source: 'signal-processor',
-          isArrhythmia: isArrhythmia,
-          signalStrength: value || 1,
-          confidence: result.confidence
-        }
-      });
-      window.dispatchEvent(event);
-      
-      // Also call direct callback if provided
-      requestBeepCallback(value || 1);
-    }
-    
-    // Track diagnostics
-    const processingTime = performance.now() - startTime;
-    diagnosticHistory.push({
-      timestamp: now,
-      processTime: processingTime,
-      signalStrength: Math.abs(value || 0),
-      qualityScore: result.confidence,
-      isPeak: true,
-      rrInterval: result.rrData?.intervals?.length > 0 ? 
-        result.rrData.intervals[result.rrData.intervals.length - 1] : null
+    // EL BEEP SOLO SE MANEJA EN PPGSignalMeter CUANDO SE DIBUJA UN CÍRCULO
+    console.log("Peak-detection: Pico detectado SIN solicitar beep - control exclusivo por PPGSignalMeter", {
+      confianza: result.confidence,
+      valor: value,
+      tiempo: new Date(now).toISOString(),
+      // Log transition state if present
+      transicion: result.transition ? {
+        activa: result.transition.active,
+        progreso: result.transition.progress,
+        direccion: result.transition.direction
+      } : 'no hay transición',
+      isArrhythmia: result.isArrhythmia || false,
+      prioridad: priority
     });
-    
-    // Keep diagnostic history bounded
-    if (diagnosticHistory.length > 100) {
-      diagnosticHistory.shift();
-    }
-    
-    // Update quality distribution
-    if (result.confidence > 0.7) qualityDistribution.high++;
-    else if (result.confidence > 0.4) qualityDistribution.medium++;
-    else qualityDistribution.low++;
-    
-    // Update quality trend
-    lastQualityTrend.push(result.confidence * 100);
-    if (lastQualityTrend.length > 10) lastQualityTrend.shift();
   }
+  
+  // Registrar diagnóstico con tiempo de procesamiento real
+  const endTime = performance.now();
+  addDiagnosticsData({
+    timestamp: now,
+    processTime: endTime - startTime,
+    signalStrength: Math.abs(value),
+    processorLoad: isMonitoringRef.current ? 1 : 0,
+    dataPointsProcessed: 1,
+    peakDetectionConfidence: result.confidence || 0,
+    processingPriority: priority
+  });
+  
+  // Añadir información de prioridad al resultado
+  result.priority = priority;
 }
 
 /**
- * Detect arrhythmia based on RR intervals
- * Enhanced algorithm with improved false positive reduction
+ * Add diagnostics data to the buffer
+ * Implements circular buffer to prevent memory leaks
  */
-export function detectArrhythmia(rrIntervals: number[]): boolean {
-  if (rrIntervals.length < 3) return false;
-  
-  // Get recent intervals for analysis
-  const recentIntervals = rrIntervals.slice(-5);
-  
-  // Calculate mean RR interval
-  const meanRR = recentIntervals.reduce((sum, val) => sum + val, 0) / recentIntervals.length;
-  
-  // Calculate variation of each interval from mean
-  const variations = recentIntervals.map(rr => Math.abs(rr - meanRR) / meanRR);
-  
-  // Check the most recent interval for significant variation
-  const latestVariation = variations[variations.length - 1];
-  
-  // Dynamic threshold - more conservative to reduce false positives
-  // Threshold adapts based on signal quality and history
-  const baseThreshold = 0.20; // Increased from typical 0.15
-  
-  // Calculate historical variation for context
-  const historicalVariation = variations.slice(0, -1).reduce((sum, val) => sum + val, 0) / 
-                            Math.max(1, variations.length - 1);
-  
-  // Adjust threshold based on history
-  const adjustedThreshold = baseThreshold + Math.min(0.1, historicalVariation * 0.5);
-  
-  // Require significant deviation from mean
-  if (latestVariation > adjustedThreshold) {
-    // Confirm with secondary check
-    // Check if this is an isolated anomaly (more likely true arrhythmia)
-    // rather than gradual drift (more likely noise)
-    const secondLastVariation = variations.length > 1 ? variations[variations.length - 2] : 0;
-    
-    // True arrhythmia likely shows as isolated spike
-    const isIsolatedAnomaly = secondLastVariation < adjustedThreshold * 0.7;
-    
-    return isIsolatedAnomaly;
+export function addDiagnosticsData(data: DiagnosticsData): void {
+  diagnosticsBuffer.push(data);
+  if (diagnosticsBuffer.length > MAX_DIAGNOSTICS_BUFFER) {
+    diagnosticsBuffer.shift();
   }
-  
-  return false;
 }
 
 /**
- * Calculate arrhythmia risk score based on RR interval pattern
- * Returns a score from 0-100
+ * Get all diagnostics data
+ * Allows external systems to access diagnostics without affecting main processing
  */
-export function calculateArrhythmiaRisk(rrIntervals: number[]): number {
-  if (rrIntervals.length < 5) return 0;
-  
-  // Calculate time-domain HRV metrics
-  
-  // RMSSD (Root Mean Square of Successive Differences)
-  let sumSquaredDiffs = 0;
-  for (let i = 1; i < rrIntervals.length; i++) {
-    const diff = rrIntervals[i] - rrIntervals[i - 1];
-    sumSquaredDiffs += diff * diff;
-  }
-  const rmssd = Math.sqrt(sumSquaredDiffs / (rrIntervals.length - 1));
-  
-  // SDNN (Standard Deviation of NN Intervals)
-  const mean = rrIntervals.reduce((sum, val) => sum + val, 0) / rrIntervals.length;
-  const sumSquaredDeviations = rrIntervals.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0);
-  const sdnn = Math.sqrt(sumSquaredDeviations / rrIntervals.length);
-  
-  // Calculate pNN50 (percentage of successive RR intervals that differ by more than 50ms)
-  let nn50Count = 0;
-  for (let i = 1; i < rrIntervals.length; i++) {
-    if (Math.abs(rrIntervals[i] - rrIntervals[i - 1]) > 50) {
-      nn50Count++;
-    }
-  }
-  const pnn50 = (nn50Count / (rrIntervals.length - 1)) * 100;
-  
-  // Base risk on physiological ranges - typical values:
-  // RMSSD: 15-40ms normal, >100ms potential issue
-  // SDNN: 40-80ms normal, <20ms or >100ms potential issue
-  // pNN50: 3-15% normal, >40% unusual variability
-  
-  let risk = 0;
-  
-  // RMSSD contribution
-  if (rmssd < 10 || rmssd > 150) {
-    risk += 35;
-  } else if (rmssd < 15 || rmssd > 100) {
-    risk += 25;
-  } else if (rmssd < 20 || rmssd > 80) {
-    risk += 15;
-  } else if (rmssd < 30 || rmssd > 60) {
-    risk += 5;
-  }
-  
-  // SDNN contribution
-  if (sdnn < 20 || sdnn > 150) {
-    risk += 30;
-  } else if (sdnn < 30 || sdnn > 120) {
-    risk += 20;
-  } else if (sdnn < 40 || sdnn > 100) {
-    risk += 10;
-  }
-  
-  // pNN50 contribution
-  if (pnn50 > 40) {
-    risk += 35;
-  } else if (pnn50 > 30) {
-    risk += 25;
-  } else if (pnn50 > 20) {
-    risk += 15;
-  } else if (pnn50 < 1) { // Very low variability can also indicate issues
-    risk += 20;
-  }
-  
-  // Cap the risk score at 100
-  return Math.min(100, risk);
+export function getDiagnosticsData(): DiagnosticsData[] {
+  return [...diagnosticsBuffer];
 }
 
 /**
- * Get user-friendly arrhythmia status message
+ * Clear diagnostics buffer
  */
-export function getArrhythmiaStatusMessage(arrhythmiaCount: number, riskScore: number): string {
-  if (arrhythmiaCount === 0) {
-    if (riskScore < 20) {
-      return "Ritmo normal";
-    } else if (riskScore < 40) {
-      return "Ligera variabilidad";
-    } else {
-      return "Variabilidad elevada";
-    }
-  } else if (arrhythmiaCount === 1) {
-    return "1 Arritmia detectada";
-  } else {
-    return `${arrhythmiaCount} Arritmias detectadas`;
-  }
+export function clearDiagnosticsData(): void {
+  diagnosticsBuffer = [];
 }
 
 /**
- * Get aggregated diagnostics data
+ * Get average processing time from diagnostics
+ * Useful for performance monitoring
  */
 export function getAverageDiagnostics(): {
   avgProcessTime: number;
   avgSignalStrength: number;
+  highPriorityPercentage: number;
 } {
-  if (diagnosticHistory.length === 0) {
+  if (diagnosticsBuffer.length === 0) {
     return {
       avgProcessTime: 0,
-      avgSignalStrength: 0
+      avgSignalStrength: 0,
+      highPriorityPercentage: 0
     };
   }
   
-  const avgProcessTime = diagnosticHistory.reduce((sum, entry) => sum + entry.processTime, 0) / 
-                        diagnosticHistory.length;
-                        
-  const avgSignalStrength = diagnosticHistory.reduce((sum, entry) => sum + entry.signalStrength, 0) / 
-                           diagnosticHistory.length;
+  const totalTime = diagnosticsBuffer.reduce((sum, data) => sum + data.processTime, 0);
+  const totalStrength = diagnosticsBuffer.reduce((sum, data) => sum + data.signalStrength, 0);
+  const highPriorityCount = diagnosticsBuffer.filter(data => data.processingPriority === 'high').length;
   
   return {
-    avgProcessTime,
-    avgSignalStrength
+    avgProcessTime: totalTime / diagnosticsBuffer.length,
+    avgSignalStrength: totalStrength / diagnosticsBuffer.length,
+    highPriorityPercentage: (highPriorityCount / diagnosticsBuffer.length) * 100
   };
-}
-
-/**
- * Get detailed quality statistics
- */
-export function getDetailedQualityStats(): {
-  qualityDistribution: typeof qualityDistribution;
-  qualityTrend: number[];
-} {
-  return {
-    qualityDistribution,
-    qualityTrend: [...lastQualityTrend]
-  };
-}
-
-/**
- * Get diagnostic data for detailed analysis
- */
-export function getDiagnosticsData(): DiagnosticEntry[] {
-  return [...diagnosticHistory];
-}
-
-/**
- * Clear diagnostic data history
- * Added to fix the missing export error
- */
-export function clearDiagnosticsData(): void {
-  diagnosticHistory.length = 0;
-  qualityDistribution.high = 0;
-  qualityDistribution.medium = 0;
-  qualityDistribution.low = 0;
-  lastQualityTrend = [];
 }

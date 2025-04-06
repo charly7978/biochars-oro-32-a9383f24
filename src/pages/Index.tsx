@@ -1,5 +1,4 @@
 import React, { useState, useRef, useEffect } from "react";
-import { Link } from "react-router-dom";
 import VitalSign from "@/components/VitalSign";
 import CameraView from "@/components/CameraView";
 import { useSignalProcessor } from "@/hooks/useSignalProcessor";
@@ -8,13 +7,13 @@ import { useVitalSignsProcessor } from "@/hooks/useVitalSignsProcessor";
 import PPGSignalMeter from "@/components/PPGSignalMeter";
 import MonitorButton from "@/components/MonitorButton";
 import AppTitle from "@/components/AppTitle";
-import { UnifiedVitalSignsResult } from "@/types/signal-processing";
+import { VitalSignsResult } from "@/modules/vital-signs";
 
 const Index = () => {
   const [isMonitoring, setIsMonitoring] = useState(false);
   const [isCameraOn, setIsCameraOn] = useState(false);
   const [signalQuality, setSignalQuality] = useState(0);
-  const [vitalSigns, setVitalSigns] = useState<UnifiedVitalSignsResult>({
+  const [vitalSigns, setVitalSigns] = useState<VitalSignsResult>({
     spo2: 0,
     pressure: "--/--",
     arrhythmiaStatus: "--",
@@ -304,9 +303,6 @@ const Index = () => {
             <div className="text-white text-lg">
               {lastSignal?.fingerDetected ? "Huella Detectada" : "Huella No Detectada"}
             </div>
-            <Link to="/diagnostics" className="bg-blue-600/80 px-2 py-1 rounded text-xs text-white">
-              Diagnóstico Técnico
-            </Link>
           </div>
 
           <div className="flex-1">
@@ -317,6 +313,7 @@ const Index = () => {
               onStartMeasurement={startMonitoring}
               onReset={handleReset}
               arrhythmiaStatus={vitalSigns.arrhythmiaStatus}
+              preserveResults={showResults}
               isArrhythmia={isArrhythmia}
             />
           </div>

@@ -1,463 +1,382 @@
 
-import React, { useRef, useEffect, useState, useCallback } from 'react';
-import { setPowerSavingMode, getAdaptiveProcessorStatus } from '../modules/camera/CameraFrameCapture';
+import React, { useRef, useEffect, useState } from 'react';
+import { Fingerprint } from 'lucide-react';
+import { logError, ErrorLevel } from '@/utils/debugUtils';
+import { CameraState, setCameraState } from '@/utils/deviceErrorTracker';
+import { unifiedFingerDetector } from '@/modules/signal-processing/utils/unified-finger-detector';
 
 interface CameraViewProps {
   onStreamReady?: (stream: MediaStream) => void;
   isMonitoring: boolean;
   isFingerDetected?: boolean;
   signalQuality?: number;
+  buttonPosition?: { x: number, y: number } | null;
 }
 
-const CameraView = ({ 
+const CameraView: React.FC<CameraViewProps> = ({ 
   onStreamReady, 
   isMonitoring, 
   isFingerDetected = false, 
   signalQuality = 0,
-}: CameraViewProps) => {
+  buttonPosition 
+}) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [stream, setStream] = useState<MediaStream | null>(null);
-  const [torchEnabled, setTorchEnabled] = useState(false);
-  const [isFocusing, setIsFocusing] = useState(false);
-  const [isAndroid, setIsAndroid] = useState(false);
-  const [isWindows, setIsWindows] = useState(false);
-  const [batteryLevel, setBatteryLevel] = useState(1.0);
-  const [isCharging, setIsCharging] = useState(true);
-  const [powerSavingActive, setPowerSavingActive] = useState(false);
-  const retryAttemptsRef = useRef<number>(0);
+  const [brightnessSamples, setBrightnessSamples] = useState<number[]>([]);
+  const [avgBrightness, setAvgBrightness] = useState<number>(0);
+  const [cameraError, setCameraError] = useState<string | null>(null);
+  const [retryCount, setRetryCount] = useState<number>(0);
+  const brightnessSampleLimit = 10;
   const maxRetryAttempts = 3;
-  const inactivityTimerRef = useRef<number | null>(null);
-  const measurementDurationRef = useRef<number>(0);
-  const longMeasurementThreshold = 60000; // 60 segundos
+  const streamErrorRef = useRef<boolean>(false);
 
-  useEffect(() => {
-    const userAgent = navigator.userAgent.toLowerCase();
-    const androidDetected = /android/i.test(userAgent);
-    const windowsDetected = /windows nt/i.test(userAgent);
-    
-    console.log("Plataforma detectada:", {
-      userAgent,
-      isAndroid: androidDetected,
-      isWindows: windowsDetected,
-      isMobile: /mobile|android|iphone|ipad|ipod/i.test(userAgent)
-    });
-    
-    setIsAndroid(androidDetected);
-    setIsWindows(windowsDetected);
-    
-    // Inicializar monitoreo de batería
-    initBatteryMonitoring();
-    
-    return () => {
-      if (inactivityTimerRef.current) {
-        clearTimeout(inactivityTimerRef.current);
-      }
-    };
-  }, []);
-
-  const initBatteryMonitoring = async () => {
-    try {
-      if ('getBattery' in navigator) {
-        const battery = await (navigator as any).getBattery();
-        
-        // Actualizar estado inicial
-        setBatteryLevel(battery.level);
-        setIsCharging(battery.charging);
-        
-        // Configurar ahorro de energía si es necesario
-        const shouldActivatePowerSaving = !battery.charging && battery.level < 0.3;
-        if (shouldActivatePowerSaving !== powerSavingActive) {
-          setPowerSavingActive(shouldActivatePowerSaving);
-          setPowerSavingMode(shouldActivatePowerSaving);
-        }
-        
-        // Escuchar cambios en la batería
-        battery.addEventListener('levelchange', () => {
-          setBatteryLevel(battery.level);
-          updatePowerSavingMode(battery.level, battery.charging);
-        });
-        
-        battery.addEventListener('chargingchange', () => {
-          setIsCharging(battery.charging);
-          updatePowerSavingMode(battery.level, battery.charging);
-        });
-        
-        console.log("Monitoreo de batería iniciado:", {
-          level: battery.level,
-          charging: battery.charging
-        });
-      } else {
-        console.log("API de batería no disponible en este dispositivo");
-      }
-    } catch (error) {
-      console.error("Error al inicializar monitoreo de batería:", error);
-    }
-  };
-  
-  const updatePowerSavingMode = (level: number, charging: boolean) => {
-    const shouldActivate = !charging && level < 0.3;
-    if (shouldActivate !== powerSavingActive) {
-      setPowerSavingActive(shouldActivate);
-      setPowerSavingMode(shouldActivate);
-      console.log(`Modo de ahorro de energía ${shouldActivate ? 'activado' : 'desactivado'}`);
-    }
-  };
-
-  const stopCamera = async () => {
+  const stopCamera = async (): Promise<void> => {
     if (stream) {
-      console.log("Stopping camera stream and turning off torch");
-      stream.getTracks().forEach(track => {
-        try {
-          if (track.kind === 'video' && track.getCapabilities()?.torch) {
-            track.applyConstraints({
-              advanced: [{ torch: false }]
-            }).catch(err => console.error("Error desactivando linterna:", err));
+      try {
+        stream.getTracks().forEach(track => {
+          try {
+            track.stop();
+          } catch (err) {
+            logError(`Error al detener track: ${err instanceof Error ? err.message : String(err)}`, 
+              ErrorLevel.WARNING, "CameraView");
           }
-          
-          track.stop();
-        } catch (err) {
-          console.error("Error al detener track:", err);
+        });
+        
+        if (videoRef.current) {
+          videoRef.current.srcObject = null;
         }
-      });
-      
-      if (videoRef.current) {
-        videoRef.current.srcObject = null;
-      }
-      
-      setStream(null);
-      setTorchEnabled(false);
-      retryAttemptsRef.current = 0;
-      measurementDurationRef.current = 0;
-      
-      if (inactivityTimerRef.current) {
-        clearTimeout(inactivityTimerRef.current);
-        inactivityTimerRef.current = null;
+        
+        setStream(null);
+        setCameraState(CameraState.INACTIVE);
+        logError("Cámara detenida correctamente", ErrorLevel.INFO, "CameraView");
+      } catch (err) {
+        logError(`Error al detener cámara: ${err instanceof Error ? err.message : String(err)}`, 
+          ErrorLevel.ERROR, "CameraView");
       }
     }
   };
 
-  const startCamera = async () => {
+  const startCamera = async (): Promise<void> => {
     try {
+      setCameraState(CameraState.REQUESTING);
+      setCameraError(null);
+      
       if (!navigator.mediaDevices?.getUserMedia) {
         throw new Error("getUserMedia no está soportado");
       }
 
       const isAndroid = /android/i.test(navigator.userAgent);
-      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
-      const isWindows = /windows nt/i.test(navigator.userAgent);
-
-      // Iniciar medición de duración
-      measurementDurationRef.current = Date.now();
-      
-      // Configurar resolución según nivel de batería y plataforma
-      let idealWidth = 1280;
-      let idealHeight = 720;
-      let targetFrameRate = 30;
-      
-      if (powerSavingActive || (!isCharging && batteryLevel < 0.5)) {
-        console.log("Aplicando configuración de bajo consumo para la cámara");
-        idealWidth = 640;
-        idealHeight = 480;
-        targetFrameRate = 15;
-        
-        if (batteryLevel < 0.2) {
-          idealWidth = 320;
-          idealHeight = 240;
-          targetFrameRate = 10;
-        }
-      }
 
       const baseVideoConstraints: MediaTrackConstraints = {
         facingMode: 'environment',
-        width: { ideal: idealWidth },
-        height: { ideal: idealHeight },
-        frameRate: { ideal: targetFrameRate }
+        width: { ideal: 720 },
+        height: { ideal: 480 }
       };
 
       if (isAndroid) {
-        console.log("Configurando para Android");
-        // La configuración ya ha sido ajustada según energía
-      } else if (isIOS) {
-        console.log("Configurando para iOS");
-        // Ajustar según energía pero manteniendo optimizaciones específicas
-        if (!powerSavingActive && isCharging) {
-          Object.assign(baseVideoConstraints, {
-            frameRate: { ideal: 30 }
-          });
-        }
-      } else if (isWindows) {
-        console.log("Configurando para Windows con resolución adaptativa");
-        // La configuración ya ha sido ajustada según energía
-      } else {
-        console.log("Configurando para escritorio con resolución adaptativa");
-        // La configuración ya ha sido ajustada según energía
+        Object.assign(baseVideoConstraints, {
+          frameRate: { ideal: 25 },
+          resizeMode: 'crop-and-scale'
+        });
       }
 
       const constraints: MediaStreamConstraints = {
-        video: baseVideoConstraints,
-        audio: false
+        video: baseVideoConstraints
       };
 
-      console.log("Intentando acceder a la cámara con configuración:", JSON.stringify(constraints));
+      logError("Intentando obtener acceso a la cámara...", ErrorLevel.INFO, "CameraView");
       const newStream = await navigator.mediaDevices.getUserMedia(constraints);
-      console.log("Cámara inicializada correctamente");
-      
       const videoTrack = newStream.getVideoTracks()[0];
 
-      if (videoTrack) {
+      // Verificar que el track está realmente activo
+      if (!videoTrack || videoTrack.readyState !== 'live') {
+        throw new Error("Video track no está activo");
+      }
+
+      if (videoTrack && isAndroid) {
         try {
           const capabilities = videoTrack.getCapabilities();
-          console.log("Capacidades de la cámara:", capabilities);
+          const advancedConstraints = [];
           
-          await new Promise(resolve => setTimeout(resolve, 500));
-          
-          const advancedConstraints: MediaTrackConstraintSet[] = [];
-          
-          // Solo activar linterna si no estamos en modo de ahorro y batería no está baja
-          const shouldUseTorch = !(powerSavingActive || (batteryLevel < 0.2 && !isCharging));
-          
-          if (isAndroid) {
-            try {
-              if (capabilities.torch && shouldUseTorch) {
-                console.log("Activando linterna en Android");
-                await videoTrack.applyConstraints({
-                  advanced: [{ torch: true }]
-                });
-                setTorchEnabled(true);
-              } else if (!shouldUseTorch) {
-                console.log("Linterna desactivada para ahorrar batería");
-              }
-            } catch (err) {
-              console.error("Error al activar linterna en Android:", err);
-            }
-          } else {
-            if (capabilities.exposureMode) {
-              const exposureConstraint: MediaTrackConstraintSet = { 
-                exposureMode: 'continuous' 
-              };
-              
-              if (capabilities.exposureCompensation?.max) {
-                exposureConstraint.exposureCompensation = capabilities.exposureCompensation.max;
-              }
-              
-              advancedConstraints.push(exposureConstraint);
-            }
-            
-            if (capabilities.focusMode) {
-              advancedConstraints.push({ focusMode: 'continuous' });
-            }
-            
-            if (capabilities.whiteBalanceMode) {
-              advancedConstraints.push({ whiteBalanceMode: 'continuous' });
-            }
-            
-            if (capabilities.brightness && capabilities.brightness.max) {
-              const maxBrightness = capabilities.brightness.max;
-              const brightnessValue = powerSavingActive ? 
-                                     maxBrightness * 0.1 : // Menor brillo para ahorrar batería
-                                     maxBrightness * 0.2;
-              advancedConstraints.push({ brightness: brightnessValue });
-            }
-            
-            if (capabilities.contrast && capabilities.contrast.max) {
-              const maxContrast = capabilities.contrast.max;
-              advancedConstraints.push({ contrast: maxContrast * 0.6 });
-            }
-
-            if (advancedConstraints.length > 0) {
-              console.log("Aplicando configuraciones avanzadas:", advancedConstraints);
-              await videoTrack.applyConstraints({
-                advanced: advancedConstraints
-              });
-            }
-
-            if (capabilities.torch && shouldUseTorch) {
-              console.log("Activando linterna para mejorar la señal PPG");
-              await videoTrack.applyConstraints({
-                advanced: [{ torch: true }]
-              });
-              setTorchEnabled(true);
-            } else if (!shouldUseTorch) {
-              console.log("Linterna desactivada para ahorrar batería");
-            } else {
-              console.log("La linterna no está disponible en este dispositivo");
-            }
+          if (capabilities.exposureMode) {
+            advancedConstraints.push({ exposureMode: 'continuous' });
           }
-          
+          if (capabilities.focusMode) {
+            advancedConstraints.push({ focusMode: 'continuous' });
+          }
+          if (capabilities.whiteBalanceMode) {
+            advancedConstraints.push({ whiteBalanceMode: 'continuous' });
+          }
+
+          if (advancedConstraints.length > 0) {
+            await videoTrack.applyConstraints({
+              advanced: advancedConstraints
+            });
+          }
+
           if (videoRef.current) {
             videoRef.current.style.transform = 'translateZ(0)';
             videoRef.current.style.backfaceVisibility = 'hidden';
           }
-          
         } catch (err) {
-          console.log("No se pudieron aplicar algunas optimizaciones:", err);
+          logError(
+            `No se pudieron aplicar algunas optimizaciones: ${err instanceof Error ? err.message : String(err)}`,
+            ErrorLevel.WARNING,
+            "CameraView"
+          );
         }
       }
 
+      // Configurar video elemento
       if (videoRef.current) {
-        videoRef.current.srcObject = newStream;
-        
-        videoRef.current.style.willChange = 'transform';
-        videoRef.current.style.transform = 'translateZ(0)';
-        videoRef.current.style.imageRendering = 'crisp-edges';
-        
-        videoRef.current.style.backfaceVisibility = 'hidden';
-        videoRef.current.style.perspective = '1000px';
+        try {
+          videoRef.current.srcObject = newStream;
+          
+          if (isAndroid) {
+            videoRef.current.style.willChange = 'transform';
+            videoRef.current.style.transform = 'translateZ(0)';
+          }
+          
+          // Agregar manejadores de errores para el video
+          videoRef.current.onerror = (e) => {
+            const eventType = e instanceof Event && 'type' in e ? e.type : 'unknown';
+            logError(`Error en elemento video: ${eventType}`, ErrorLevel.ERROR, "CameraView");
+            streamErrorRef.current = true;
+            handleCameraError(eventType);
+          };
+        } catch (err) {
+          throw new Error(`Error al configurar video: ${err instanceof Error ? err.message : String(err)}`);
+        }
       }
 
+      // Agregar listener para detectar cuando un track termina inesperadamente
+      videoTrack.onended = () => {
+        logError("Video track terminado inesperadamente", ErrorLevel.WARNING, "CameraView");
+        streamErrorRef.current = true;
+        handleCameraError("Video track terminado inesperadamente");
+      };
+
       setStream(newStream);
+      setCameraState(CameraState.ACTIVE);
+      setRetryCount(0);
+      streamErrorRef.current = false;
       
       if (onStreamReady) {
         onStreamReady(newStream);
       }
       
-      retryAttemptsRef.current = 0;
-      
-      // Configurar temporizador para detectar mediciones prolongadas
-      checkForLongMeasurements();
-      
+      logError("Cámara iniciada correctamente", ErrorLevel.INFO, "CameraView");
     } catch (err) {
-      console.error("Error al iniciar la cámara:", err);
-      
-      retryAttemptsRef.current++;
-      if (retryAttemptsRef.current <= maxRetryAttempts) {
-        console.log(`Reintentando iniciar cámara (intento ${retryAttemptsRef.current} de ${maxRetryAttempts})...`);
-        setTimeout(startCamera, 1000);
-      } else {
-        console.error(`Se alcanzó el máximo de ${maxRetryAttempts} intentos sin éxito`);
-      }
+      setCameraState(CameraState.ERROR);
+      handleCameraError(err instanceof Error ? err.message : String(err));
     }
   };
-  
-  const checkForLongMeasurements = () => {
-    if (inactivityTimerRef.current) {
-      clearTimeout(inactivityTimerRef.current);
-    }
+
+  // Función para manejar errores de cámara
+  const handleCameraError = (error: string | Event) => {
+    const errorMessage = typeof error === 'string' 
+      ? error 
+      : (error instanceof Error ? error.message : 'Error desconocido');
     
-    inactivityTimerRef.current = window.setTimeout(() => {
-      const measurementDuration = Date.now() - measurementDurationRef.current;
+    logError(`Error de cámara: ${errorMessage}`, ErrorLevel.ERROR, "CameraView");
+    
+    setCameraError(errorMessage);
+    
+    // Verificar si debemos reintentar
+    if (retryCount < maxRetryAttempts && isMonitoring) {
+      const nextRetryCount = retryCount + 1;
+      setRetryCount(nextRetryCount);
       
-      // Si la medición ha durado más que el umbral
-      if (measurementDuration > longMeasurementThreshold) {
-        console.log("Medición prolongada detectada, activando ahorro de energía");
-        
-        // Activar modo de ahorro si la batería no está cargando o está por debajo del 50%
-        if (!isCharging || batteryLevel < 0.5) {
-          setPowerSavingActive(true);
-          setPowerSavingMode(true);
-          
-          // Reducir uso de linterna para mediciones largas
-          if (torchEnabled && stream) {
-            const videoTrack = stream.getVideoTracks()[0];
-            if (videoTrack && videoTrack.getCapabilities()?.torch) {
-              console.log("Apagando linterna para ahorrar batería en medición prolongada");
-              videoTrack.applyConstraints({
-                advanced: [{ torch: false }]
-              }).then(() => {
-                setTorchEnabled(false);
-              }).catch(err => {
-                console.error("Error desactivando linterna:", err);
-              });
-            }
-          }
+      logError(`Reintentando iniciar cámara (${nextRetryCount}/${maxRetryAttempts})...`, 
+        ErrorLevel.WARNING, "CameraView");
+      
+      // Esperar antes de reintentar (tiempo incremental)
+      setTimeout(() => {
+        // Verificar que seguimos necesitando la cámara
+        if (isMonitoring) {
+          startCamera();
         }
-      }
-      
-      // Verificar nuevamente después
-      inactivityTimerRef.current = window.setTimeout(checkForLongMeasurements, 10000);
-    }, 10000); // Verificar cada 10 segundos
+      }, 1000 * nextRetryCount); // Tiempo incremental: 1s, 2s, 3s...
+    }
   };
 
-  const refreshAutoFocus = useCallback(async () => {
-    if (stream && !isFocusing && !isAndroid) {
-      const videoTrack = stream.getVideoTracks()[0];
-      if (videoTrack && videoTrack.getCapabilities()?.focusMode) {
-        try {
-          setIsFocusing(true);
-          await videoTrack.applyConstraints({
-            advanced: [{ focusMode: 'manual' }]
-          });
-          await new Promise(resolve => setTimeout(resolve, 100));
-          await videoTrack.applyConstraints({
-            advanced: [{ focusMode: 'continuous' }]
-          });
-          console.log("Auto-enfoque refrescado con éxito");
-        } catch (err) {
-          console.error("Error al refrescar auto-enfoque:", err);
-        } finally {
-          setIsFocusing(false);
+  // Monitor camera brightness to help with finger detection verification
+  useEffect(() => {
+    if (!stream || !videoRef.current || !isMonitoring) return;
+
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    if (!ctx) return;
+
+    canvas.width = 100;
+    canvas.height = 100;
+
+    const checkBrightness = () => {
+      if (!videoRef.current || !videoRef.current.videoWidth) return;
+      
+      try {
+        ctx.drawImage(
+          videoRef.current,
+          0, 0, videoRef.current.videoWidth, videoRef.current.videoHeight,
+          0, 0, 100, 100
+        );
+        
+        const imageData = ctx.getImageData(0, 0, 100, 100);
+        const data = imageData.data;
+        
+        let brightness = 0;
+        // Sample every 4th pixel to improve performance
+        for (let i = 0; i < data.length; i += 16) {
+          const r = data[i];
+          const g = data[i + 1];
+          const b = data[i + 2];
+          brightness += (r + g + b) / 3;
+        }
+        
+        brightness /= (data.length / 16);
+        
+        setBrightnessSamples(prev => {
+          const newSamples = [...prev, brightness];
+          if (newSamples.length > brightnessSampleLimit) {
+            newSamples.shift();
+          }
+          return newSamples;
+        });
+
+        const avgBrightness = brightnessSamples.reduce((sum, val) => sum + val, 0) / 
+                            Math.max(1, brightnessSamples.length);
+        setAvgBrightness(avgBrightness);
+        
+        // Actualizar detector unificado con información de brillo
+        unifiedFingerDetector.updateSource(
+          'brightness', 
+          avgBrightness < 60, // Oscuro sugiere presencia de dedo
+          Math.min(1.0, Math.max(0.0, (120 - avgBrightness) / 120))
+        );
+        
+        // Verificar si el video sigue reproduciéndose correctamente
+        if (videoRef.current && (videoRef.current.paused || videoRef.current.ended)) {
+          logError("Video pausado o terminado inesperadamente", ErrorLevel.WARNING, "CameraView");
+          streamErrorRef.current = true;
+          handleCameraError("Video pausado o terminado");
+        }
+      } catch (err) {
+        logError(`Error al verificar brillo: ${err instanceof Error ? err.message : String(err)}`, 
+          ErrorLevel.ERROR, "CameraView");
+        streamErrorRef.current = true;
+      }
+    };
+
+    const interval = setInterval(checkBrightness, 500);
+    
+    // Health check para el stream
+    const healthCheck = setInterval(() => {
+      // Verificar que el stream sigue activo
+      if (stream) {
+        const videoTracks = stream.getVideoTracks();
+        if (videoTracks.length === 0 || videoTracks[0].readyState !== 'live') {
+          logError("Estado de video track no válido", ErrorLevel.WARNING, "CameraView");
+          streamErrorRef.current = true;
+          handleCameraError("Video track no válido");
         }
       }
-    }
-  }, [stream, isFocusing, isAndroid]);
+      
+      // Si hay error de stream pero no se ha reiniciado, intentar reiniciar
+      if (streamErrorRef.current && isMonitoring) {
+        logError("Reiniciando cámara tras error detectado por health check", 
+          ErrorLevel.WARNING, "CameraView");
+        
+        stopCamera().then(() => startCamera());
+        streamErrorRef.current = false;
+      }
+    }, 3000);
+    
+    return () => {
+      clearInterval(interval);
+      clearInterval(healthCheck);
+    };
+  }, [stream, isMonitoring, isFingerDetected, signalQuality, brightnessSamples, retryCount]);
 
+  // Gestión principal de la cámara
   useEffect(() => {
     if (isMonitoring && !stream) {
-      console.log("Starting camera because isMonitoring=true");
       startCamera();
     } else if (!isMonitoring && stream) {
-      console.log("Stopping camera because isMonitoring=false");
       stopCamera();
     }
     
     return () => {
-      console.log("CameraView component unmounting, stopping camera");
+      logError("CameraView component unmounting, stopping camera", ErrorLevel.INFO, "CameraView");
       stopCamera();
     };
   }, [isMonitoring]);
 
+  // Determine actual finger status using both provided detection and brightness
+  const actualFingerStatus = isFingerDetected && (
+    avgBrightness < 60 || // Dark means finger is likely present
+    signalQuality > 50    // Good quality signal confirms finger
+  );
+  
+  // Actualizar detector unificado con nuestra conclusión sobre el dedo
   useEffect(() => {
-    if (stream && isFingerDetected && !torchEnabled && !powerSavingActive) {
-      const videoTrack = stream.getVideoTracks()[0];
-      if (videoTrack && videoTrack.getCapabilities()?.torch) {
-        console.log("Activando linterna después de detectar dedo");
-        videoTrack.applyConstraints({
-          advanced: [{ torch: true }]
-        }).then(() => {
-          setTorchEnabled(true);
-        }).catch(err => {
-          console.error("Error activando linterna:", err);
-        });
-      }
+    if (isMonitoring) {
+      unifiedFingerDetector.updateSource(
+        'camera-analysis', 
+        actualFingerStatus,
+        signalQuality ? (signalQuality / 100) : 0.5
+      );
     }
-    
-    if (isFingerDetected && !isAndroid) {
-      const focusInterval = setInterval(refreshAutoFocus, 5000);
-      return () => clearInterval(focusInterval);
-    }
-  }, [stream, isFingerDetected, torchEnabled, refreshAutoFocus, isAndroid, powerSavingActive]);
-
-  // Ajustar la tasa de frames según calidad de señal y estado de energía
-  const getFPSForConditions = (): number => {
-    if (powerSavingActive) {
-      return isAndroid ? 5 : 10;
-    }
-    
-    if (isAndroid) {
-      return 10;
-    }
-    
-    if (signalQuality > 70) {
-      return batteryLevel < 0.5 && !isCharging ? 15 : 30;
-    }
-    
-    return 15;
-  };
+  }, [actualFingerStatus, signalQuality, isMonitoring]);
 
   return (
-    <video
-      ref={videoRef}
-      autoPlay
-      playsInline
-      muted
-      className="absolute top-0 left-0 min-w-full min-h-full w-auto h-auto z-0 object-cover"
-      style={{
-        willChange: 'transform',
-        transform: 'translateZ(0)',
-        backfaceVisibility: 'hidden',
-        imageRendering: 'crisp-edges'
-      }}
-    />
+    <>
+      <video
+        ref={videoRef}
+        autoPlay
+        playsInline
+        muted
+        className="absolute top-0 left-0 min-w-full min-h-full w-auto h-auto z-0 object-cover"
+        style={{
+          willChange: 'transform',
+          transform: 'translateZ(0)',
+          backfaceVisibility: 'hidden'
+        }}
+      />
+      
+      {/* Error de cámara */}
+      {cameraError && (
+        <div className="absolute inset-0 bg-black/70 flex items-center justify-center z-30 p-4">
+          <div className="bg-red-900/80 p-4 rounded-lg text-white max-w-md text-center">
+            <h3 className="text-lg font-semibold mb-2">Error de cámara</h3>
+            <p className="mb-4">{cameraError}</p>
+            <p className="text-sm opacity-80">
+              {retryCount < maxRetryAttempts 
+                ? `Reintentando (${retryCount}/${maxRetryAttempts})...` 
+                : "Reintento fallido, compruebe los permisos de la cámara."}
+            </p>
+          </div>
+        </div>
+      )}
+      
+      {isMonitoring && buttonPosition && (
+        <div className="absolute bottom-24 left-1/2 transform -translate-x-1/2 z-20 flex flex-col items-center">
+          <Fingerprint
+            size={48}
+            className={`transition-colors duration-300 ${
+              !actualFingerStatus ? 'text-gray-400' :
+              signalQuality > 75 ? 'text-green-500' :
+              signalQuality > 50 ? 'text-yellow-500' :
+              'text-red-500'
+            }`}
+          />
+          <span className={`text-xs mt-2 transition-colors duration-300 ${
+            actualFingerStatus ? 'text-green-500' : 'text-gray-400'
+          }`}>
+            {actualFingerStatus ? "dedo detectado" : "ubique su dedo en el lente"}
+          </span>
+        </div>
+      )}
+    </>
   );
 };
 

@@ -57,9 +57,7 @@ export function useVitalSignsProcessor() {
       if (processorRef.current) {
         console.log("VitalSignsProcessor cleanup");
         processorRef.current = null;
-        if (typeof clearDiagnosticsData === 'function') {
-          clearDiagnosticsData(); // Limpiar datos de diagnóstico
-        }
+        clearDiagnosticsData(); // Limpiar datos de diagnóstico
       }
     };
   }, [initializeProcessor]);
@@ -75,14 +73,9 @@ export function useVitalSignsProcessor() {
       if (peakDiagnostics.length > 0) {
         // Calcular métricas de rendimiento
         const totalTime = peakDiagnostics.reduce((sum, data) => sum + data.processTime, 0);
-        const highPriorityCount = peakDiagnostics.filter(data => 
-          data.processingPriority === 'high' || data.signalStrength >= 0.05).length;
-        const mediumPriorityCount = peakDiagnostics.filter(data => 
-          data.processingPriority === 'medium' || 
-          (data.signalStrength < 0.05 && data.signalStrength >= 0.02)).length;
-        const lowPriorityCount = peakDiagnostics.filter(data => 
-          data.processingPriority === 'low' ||
-          data.signalStrength < 0.02).length;
+        const highPriorityCount = peakDiagnostics.filter(data => data.processingPriority === 'high').length;
+        const mediumPriorityCount = peakDiagnostics.filter(data => data.processingPriority === 'medium').length;
+        const lowPriorityCount = peakDiagnostics.filter(data => data.processingPriority === 'low').length;
         
         // Actualizar métricas en debugInfo
         debugInfo.current.performanceMetrics = {
@@ -208,9 +201,7 @@ export function useVitalSignsProcessor() {
           lowPriorityPercentage: 0
         }
       };
-      if (typeof clearDiagnosticsData === 'function') {
-        clearDiagnosticsData(); // Limpiar datos de diagnóstico
-      }
+      clearDiagnosticsData(); // Limpiar datos de diagnóstico
     }
   }, []);
   
@@ -219,9 +210,7 @@ export function useVitalSignsProcessor() {
     setDiagnosticsEnabled(enabled);
     if (!enabled) {
       // Limpiar datos de diagnóstico si se desactiva
-      if (typeof clearDiagnosticsData === 'function') {
-        clearDiagnosticsData();
-      }
+      clearDiagnosticsData();
     }
     console.log(`Diagnostics channel ${enabled ? 'enabled' : 'disabled'}`);
   }, []);
