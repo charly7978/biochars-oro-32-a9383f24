@@ -1,4 +1,3 @@
-
 /**
  * TypeScript Watchdog
  * Automatically detects and corrects common TypeScript errors
@@ -18,6 +17,11 @@ export enum TypeScriptErrorType {
 }
 
 /**
+ * Severity levels for errors
+ */
+export type ErrorSeverityLevel = 'low' | 'medium' | 'high' | 'critical';
+
+/**
  * TypeScript error description
  */
 export interface TypeScriptError {
@@ -25,7 +29,7 @@ export interface TypeScriptError {
   message: string;
   location?: string;
   suggestion?: string;
-  severity: 'low' | 'medium' | 'high' | 'critical'; // Added severity level
+  severity: ErrorSeverityLevel; // Use the strictly typed severity level
   timestamp: number; // Added timestamp for tracking
 }
 
@@ -53,7 +57,7 @@ export class TypeScriptWatchdog {
    */
   public static correctObject<T extends Record<string, any>>(
     obj: T, 
-    expectedShape: Partial<T>,
+    expectedShape: Partial<Record<keyof T, any>>,
     options?: {
       strict?: boolean; // When true, use stricter type checking
       preserveExtraProperties?: boolean; // When true, keep extra properties not in expectedShape
@@ -110,11 +114,11 @@ export class TypeScriptWatchdog {
         
         // Create error object
         const errorKey = `missing_${key}`;
-        const errorObj = {
+        const errorObj: TypeScriptError = {
           type: TypeScriptErrorType.MISSING_PROPERTY,
           message: `Missing property '${key}' of type '${expectedType}'`,
           suggestion: `Added default value: ${JSON.stringify(defaultValue)}`,
-          severity: 'medium', // Most missing properties are medium severity
+          severity: 'medium' as ErrorSeverityLevel, // Most missing properties are medium severity
           timestamp: now
         };
         
@@ -152,11 +156,11 @@ export class TypeScriptWatchdog {
         }
         
         const errorKey = `type_mismatch_${key}`;
-        const errorObj = {
+        const errorObj: TypeScriptError = {
           type: TypeScriptErrorType.TYPE_MISMATCH,
           message: `Type mismatch for property '${key}': expected '${expectedType}' but got '${originalType}'`,
           suggestion: `Converted from '${originalType}' to '${expectedType}'`,
-          severity: 'high', // Type mismatches are high severity
+          severity: 'high' as ErrorSeverityLevel, // Type mismatches are high severity
           timestamp: now
         };
         
@@ -176,11 +180,11 @@ export class TypeScriptWatchdog {
         (correctedObj as any)[key] = originalValue != null ? [originalValue] : [];
         
         const errorKey = `array_mismatch_${key}`;
-        const errorObj = {
+        const errorObj: TypeScriptError = {
           type: TypeScriptErrorType.ARRAY_TYPE_MISMATCH,
           message: `Expected array for property '${key}' but got ${typeof originalValue}`,
           suggestion: `Converted to array: [${originalValue}]`,
-          severity: 'high',
+          severity: 'high' as ErrorSeverityLevel,
           timestamp: now
         };
         
@@ -233,10 +237,10 @@ export class TypeScriptWatchdog {
           delete correctedObj[key];
           
           const errorKey = `extra_property_${key}`;
-          const errorObj = {
+          const errorObj: TypeScriptError = {
             type: TypeScriptErrorType.OBJECT_STRUCTURE_MISMATCH,
             message: `Removed extra property '${key}' not in expected shape`,
-            severity: 'medium',
+            severity: 'medium' as ErrorSeverityLevel,
             timestamp: now
           };
           
