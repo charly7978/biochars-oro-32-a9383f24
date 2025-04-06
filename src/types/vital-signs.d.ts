@@ -14,11 +14,7 @@ export interface VitalSignsResult {
   glucose: number;
   lipids: {
     totalCholesterol: number;
-    hydrationPercentage: number;
-  };
-  hydration: {
-    totalCholesterol: number;
-    hydrationPercentage: number;
+    triglycerides: number;
   };
   confidence?: {
     glucose: number;
@@ -40,9 +36,6 @@ export interface SignalProcessingOptions {
   filterStrength?: number;
   qualityThreshold?: number;
   fingerDetectionSensitivity?: number;
-  useAdaptiveControl?: boolean;
-  adaptationRate?: number;
-  predictionHorizon?: number;
 }
 
 /**

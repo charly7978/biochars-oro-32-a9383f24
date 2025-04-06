@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
+import { Link } from "react-router-dom";
 import VitalSign from "@/components/VitalSign";
 import CameraView from "@/components/CameraView";
 import { useSignalProcessor } from "@/hooks/useSignalProcessor";
@@ -7,20 +8,20 @@ import { useVitalSignsProcessor } from "@/hooks/useVitalSignsProcessor";
 import PPGSignalMeter from "@/components/PPGSignalMeter";
 import MonitorButton from "@/components/MonitorButton";
 import AppTitle from "@/components/AppTitle";
-import { VitalSignsResult } from "@/modules/vital-signs";
+import { UnifiedVitalSignsResult } from "@/types/signal-processing";
 
 const Index = () => {
   const [isMonitoring, setIsMonitoring] = useState(false);
   const [isCameraOn, setIsCameraOn] = useState(false);
   const [signalQuality, setSignalQuality] = useState(0);
-  const [vitalSigns, setVitalSigns] = useState<VitalSignsResult>({
+  const [vitalSigns, setVitalSigns] = useState<UnifiedVitalSignsResult>({
     spo2: 0,
     pressure: "--/--",
     arrhythmiaStatus: "--",
     glucose: 0,
     lipids: {
       totalCholesterol: 0,
-      hydrationPercentage: 0
+      triglycerides: 0
     }
   });
   const [heartRate, setHeartRate] = useState(0);
@@ -181,7 +182,7 @@ const Index = () => {
       glucose: 0,
       lipids: {
         totalCholesterol: 0,
-        hydrationPercentage: 0
+        triglycerides: 0
       }
     });
     setSignalQuality(0);
@@ -303,6 +304,9 @@ const Index = () => {
             <div className="text-white text-lg">
               {lastSignal?.fingerDetected ? "Huella Detectada" : "Huella No Detectada"}
             </div>
+            <Link to="/diagnostics" className="bg-blue-600/80 px-2 py-1 rounded text-xs text-white">
+              Diagnóstico Técnico
+            </Link>
           </div>
 
           <div className="flex-1">
@@ -313,7 +317,6 @@ const Index = () => {
               onStartMeasurement={startMonitoring}
               onReset={handleReset}
               arrhythmiaStatus={vitalSigns.arrhythmiaStatus}
-              preserveResults={showResults}
               isArrhythmia={isArrhythmia}
             />
           </div>
@@ -353,9 +356,9 @@ const Index = () => {
                 highlighted={showResults}
               />
               <VitalSign 
-                label="HIDRATACIÓN"
-                value={vitalSigns.lipids?.hydrationPercentage || "--"}
-                unit="%"
+                label="TRIGLICÉRIDOS"
+                value={vitalSigns.lipids?.triglycerides || "--"}
+                unit="mg/dL"
                 highlighted={showResults}
               />
             </div>

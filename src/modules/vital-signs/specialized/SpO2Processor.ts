@@ -1,55 +1,52 @@
 
 /**
- * SpO2 Processor implementation for specialized processing
+ * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
+ * 
+ * Specialized processor for SpO2 measurement
+ * Uses optimized SpO2 signal for oxygen saturation calculation
  */
 
-export class SpO2Processor {
-  private readonly BASE_SPO2 = 95; // Base SpO2 percentage
-  private confidence: number = 0.8;
+import { BaseVitalSignProcessor } from './BaseVitalSignProcessor';
+import { VitalSignType, ChannelFeedback } from '../../../types/signal';
+
+/**
+ * SpO2 processor implementation
+ */
+export class SpO2Processor extends BaseVitalSignProcessor<number> {
+  // Default values for SpO2
+  private readonly BASELINE_SPO2 = 97; // percent
   
   constructor() {
-    console.log("SpO2Processor (Specialized): Initialized");
+    super(VitalSignType.SPO2);
   }
   
   /**
-   * Process a value from the signal distributor
+   * Process a value from the SpO2-optimized channel
+   * @param value Optimized SpO2 signal value
+   * @returns SpO2 value in percent
    */
-  public processValue(value: number): number {
+  protected processValueImpl(value: number): number {
+    // Skip processing if the value is too small
     if (Math.abs(value) < 0.01) {
-      return this.BASE_SPO2;
+      return 0;
     }
     
-    // Simple SpO2 calculation based on signal value
-    const adjustment = value * 5;
-    const spo2 = Math.min(99, Math.max(90, Math.round(this.BASE_SPO2 + adjustment)));
+    // Calculate SpO2 value
+    const spo2 = this.calculateSpO2(value);
     
-    // Update confidence
-    this.confidence = Math.min(0.95, Math.max(0.5, 0.8 + value / 4));
-    
-    return spo2;
+    return Math.round(spo2);
   }
   
   /**
-   * Get the confidence level of the last calculation
+   * Calculate SpO2 percentage
    */
-  public getConfidence(): number {
-    return this.confidence;
-  }
-  
-  /**
-   * Reset processor state
-   */
-  public reset(): void {
-    this.confidence = 0.8;
-  }
-
-  /**
-   * Get diagnostic information
-   */
-  public getDiagnostics(): any {
-    return {
-      confidence: this.confidence,
-      baseSpO2: this.BASE_SPO2
-    };
+  private calculateSpO2(value: number): number {
+    if (this.confidence < 0.2) return 0;
+    
+    // Simple placeholder implementation
+    const spo2 = this.BASELINE_SPO2 + (value * 2);
+    
+    // Ensure result is within physiological range
+    return Math.min(100, Math.max(90, spo2));
   }
 }

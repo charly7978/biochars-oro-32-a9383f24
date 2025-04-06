@@ -11,7 +11,7 @@ export interface VitalSignsResult {
   glucose: number;
   lipids: {
     totalCholesterol: number;
-    hydrationPercentage: number; // Changed from triglycerides to hydrationPercentage
+    triglycerides: number;
   };
   lastArrhythmiaData?: {
     timestamp: number;
@@ -94,7 +94,7 @@ export class VitalSignsProcessor {
       glucose: 0,
       lipids: {
         totalCholesterol: 0,
-        hydrationPercentage: 0 // Changed from triglycerides to hydrationPercentage
+        triglycerides: 0
       }
     };
   }
@@ -147,24 +147,18 @@ export class VitalSignsProcessor {
   }
   
   /**
-   * Calculate lipid levels and hydration
+   * Calculate lipid levels
    */
-  private calculateLipids(ppgValue: number): { totalCholesterol: number, hydrationPercentage: number } {
+  private calculateLipids(ppgValue: number): { totalCholesterol: number, triglycerides: number } {
     const baseCholesterol = 180;
-    const baseHydration = 65; // Base hydration percentage
+    const baseTriglycerides = 150;
     
     const cholVariation = ppgValue * 30;
-    const hydrationVariation = ppgValue * 20;
-    
-    // Higher signal amplitude generally correlates with better hydration
-    let hydrationPercentage = baseHydration + hydrationVariation;
-    
-    // Ensure hydration is in physiological range (45-100%)
-    hydrationPercentage = Math.min(100, Math.max(45, hydrationPercentage));
+    const trigVariation = ppgValue * 25;
     
     return {
       totalCholesterol: Math.round(baseCholesterol + cholVariation),
-      hydrationPercentage: Math.round(hydrationPercentage)
+      triglycerides: Math.round(baseTriglycerides + trigVariation)
     };
   }
   

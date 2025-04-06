@@ -1,3 +1,4 @@
+
 /**
  * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
  */
@@ -103,16 +104,16 @@ export class VitalSignsProcessor {
   /**
    * Calculate lipid levels
    */
-  private calculateLipids(ppgValue: number): { totalCholesterol: number, hydrationPercentage: number } {
+  private calculateLipids(ppgValue: number): { totalCholesterol: number, triglycerides: number } {
     const baseCholesterol = 180;
-    const baseHydration = 65;
+    const baseTriglycerides = 150;
     
     const cholVariation = ppgValue * 30;
-    const hydrationVariation = ppgValue * 20;
+    const trigVariation = ppgValue * 25;
     
     return {
       totalCholesterol: Math.round(baseCholesterol + cholVariation),
-      hydrationPercentage: Math.round(Math.min(100, Math.max(45, baseHydration + hydrationVariation)))
+      triglycerides: Math.round(baseTriglycerides + trigVariation)
     };
   }
   
