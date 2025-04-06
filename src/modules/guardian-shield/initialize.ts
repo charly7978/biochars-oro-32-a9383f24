@@ -8,7 +8,6 @@ import { getGuardianShield } from './index';
 import { TypeScriptWatchdog } from './typescript-watchdog';
 import { DuplicationDetector } from './duplication-detector';
 import { VitalSignType } from '../../types/vital-sign-types';
-import { AntiSimulationGuard } from '../signal-processing/security/anti-simulation-guard';
 
 /**
  * Initialize the Guardian Shield system
@@ -38,4 +37,3 @@ export function getTypeScriptWatchdog(): TypeScriptWatchdog {
 export function getDuplicationDetector(): DuplicationDetector {
   return new DuplicationDetector();
 }
-

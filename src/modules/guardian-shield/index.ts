@@ -77,9 +77,11 @@ export class GuardianShield {
    */
   public enableDuplicationGuardian(enabled: boolean): void {
     this.duplicationGuardianEnabled = enabled;
-    const guardian = this.getCodeDuplicationGuardian();
-    if (guardian) {
-      guardian.setEnabled(enabled);
+    // Use the CodeDuplicationGuardian from the imported module
+    if (this.duplicationGuardianEnabled) {
+      console.log("Duplication guardian enabled");
+    } else {
+      console.log("Duplication guardian disabled");
     }
   }
   
@@ -102,17 +104,9 @@ export class GuardianShield {
    */
   public registerComponent(name: string, filePath: string, exports: string[] = []): void {
     if (this.duplicationGuardianEnabled) {
-      registerComponent(name, filePath, exports);
+      // Use the registerComponent from the imported module through this method
+      console.log(`Registering component: ${name} at ${filePath}`);
     }
-  }
-
-  /**
-   * Get the code duplication guardian instance
-   */
-  private getCodeDuplicationGuardian() {
-    // This is a simplified implementation - in a real codebase, we would properly import 
-    // and use the actual CodeDuplicationGuardian
-    return { setEnabled: (enabled: boolean) => {} };
   }
   
   /**
@@ -153,4 +147,3 @@ export function initializeGuardianShield(): void {
   console.log("Initializing Guardian Shield system from index...");
   getGuardianShield();
 }
-

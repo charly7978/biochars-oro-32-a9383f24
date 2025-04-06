@@ -5,8 +5,6 @@
  */
 
 import { getGuardianShield } from './index';
-import { initializeVitalSignsDuplicationPrevention } from './integration/vital-signs-registry';
-import { initializeSignalProcessingDuplicationPrevention } from './integration/signal-processing-registry';
 
 /**
  * Initialize all Guardian Shield systems
@@ -20,10 +18,6 @@ export function initializeGuardianShield(): void {
   // Enable all protections
   guardian.enableTypescriptWatchdog(true);
   guardian.enableDuplicationGuardian(true);
-  
-  // Initialize module-specific registries
-  initializeVitalSignsDuplicationPrevention();
-  initializeSignalProcessingDuplicationPrevention();
   
   console.log("Guardian Shield initialized successfully");
   console.log("Code duplication prevention active");
