@@ -1,3 +1,4 @@
+
 /**
  * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
  * 
@@ -10,6 +11,7 @@ import { PrecisionVitalSignsProcessor, PrecisionVitalSignsResult } from '../modu
 import { CalibrationReference } from '../modules/vital-signs/calibration/CalibrationManager';
 import { useSignalProcessing } from './useSignalProcessing';
 import type { ProcessedSignal } from '../types/signal';
+import type { ProcessedPPGSignal } from '../modules/signal-processing/types';
 
 /**
  * Estado del hook de signos vitales de precisión
@@ -103,20 +105,20 @@ export function usePrecisionVitalSigns() {
     }
     
     try {
-      // Convertir ProcessedSignal a número o ProcessedPPGSignal como espera PrecisionVitalSignsProcessor
-      const signalValue = {
+      // Convert ProcessedSignal to ProcessedPPGSignal for the PrecisionVitalSignsProcessor
+      const ppgSignal: ProcessedPPGSignal = {
         timestamp: signal.timestamp,
         rawValue: signal.rawValue,
         filteredValue: signal.filteredValue,
-        normalizedValue: 0, // Add required properties
-        amplifiedValue: signal.filteredValue * 1.5, // Approximate amplification
-        signalStrength: signal.quality, // Map quality to signalStrength
+        normalizedValue: signal.filteredValue, // Use filteredValue as normalizedValue
+        amplifiedValue: signal.filteredValue * 1.2, // Apply a simple amplification
         quality: signal.quality,
-        fingerDetected: signal.fingerDetected
+        fingerDetected: signal.fingerDetected,
+        signalStrength: signal.quality // Use quality as signal strength
       };
       
       // Procesar señal con precisión mejorada
-      const result = processorRef.current.processSignal(signalValue);
+      const result = processorRef.current.processSignal(ppgSignal);
       
       // Actualizar estado con el resultado
       setState(prev => ({
@@ -146,7 +148,7 @@ export function usePrecisionVitalSigns() {
       return;
     }
     
-    // Crear objeto de señal procesada completo con todos los campos requeridos
+    // Crear objeto de señal procesada completo
     const processedSignal: ProcessedSignal = {
       timestamp: Date.now(),
       rawValue: signalProcessing.lastResult?.rawValue || 0,

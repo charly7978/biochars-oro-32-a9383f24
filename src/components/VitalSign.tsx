@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
@@ -217,6 +216,39 @@ const VitalSign = ({
   };
 
   const displayValue = (label: string, value: string | number) => {
+    if (value === null || value === undefined || value === "--" || value === "--/--") {
+      return "--";
+    }
+    
+    if (typeof value === 'number') {
+      switch(label) {
+        case 'FRECUENCIA CARDÍACA':
+          return Math.round(value);
+        case 'SPO2':
+          return Math.round(value);
+        case 'GLUCOSA':
+          return Math.round(value);
+        case 'COLESTEROL':
+        case 'TRIGLICÉRIDOS':
+          return Math.round(value);
+        case 'HIDRATACIÓN':
+          return Math.round(value);
+        default:
+          return Math.round(value);
+      }
+    }
+    
+    if (label === 'PRESIÓN ARTERIAL' && typeof value === 'string') {
+      const parts = value.split('/');
+      if (parts.length === 2) {
+        const systolic = parseInt(parts[0], 10);
+        const diastolic = parseInt(parts[1], 10);
+        if (!isNaN(systolic) && !isNaN(diastolic)) {
+          return `${Math.round(systolic)}/${Math.round(diastolic)}`;
+        }
+      }
+    }
+    
     return value;
   };
 

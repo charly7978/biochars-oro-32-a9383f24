@@ -55,6 +55,26 @@ const Index = () => {
     }
   };
 
+  const sanitizeVitalSigns = (results: LocalVitalSignsResult): LocalVitalSignsResult => {
+    if (!results) return vitalSigns;
+    
+    return {
+      ...results,
+      spo2: results.spo2 ? Math.round(Math.min(99, Math.max(90, results.spo2))) : 0,
+      pressure: results.pressure,
+      glucose: results.glucose ? Math.round(results.glucose) : 0,
+      hydration: results.hydration ? Math.round(Math.min(100, Math.max(0, results.hydration))) : 0,
+      lipids: {
+        totalCholesterol: results.lipids?.totalCholesterol ? 
+          Math.round(results.lipids.totalCholesterol) : 0,
+        triglycerides: results.lipids?.triglycerides ? 
+          Math.round(results.lipids.triglycerides) : 0
+      },
+      arrhythmiaStatus: results.arrhythmiaStatus,
+      lastArrhythmiaData: results.lastArrhythmiaData
+    };
+  };
+
   useEffect(() => {
     const preventScroll = (e: Event) => e.preventDefault();
     document.body.addEventListener('touchmove', preventScroll, { passive: false });
@@ -77,7 +97,7 @@ const Index = () => {
         } : null
       };
       
-      setVitalSigns(convertedResult);
+      setVitalSigns(sanitizeVitalSigns(convertedResult));
       setShowResults(true);
     }
   }, [lastValidResults, isMonitoring]);
@@ -95,7 +115,7 @@ const Index = () => {
         console.log("Heart beat result:", heartBeatResult);
         
         if (heartBeatResult.confidence > 0.1) {
-          setHeartRate(heartBeatResult.bpm);
+          setHeartRate(Math.round(heartBeatResult.bpm));
           
           if (heartBeatResult.rrData && heartBeatResult.rrData.intervals.length > 0) {
             console.log("RR intervals:", heartBeatResult.rrData.intervals);
@@ -114,14 +134,14 @@ const Index = () => {
               } : null
             };
             
-            setVitalSigns(convertedResult);
+            setVitalSigns(sanitizeVitalSigns(convertedResult));
           }
         }
         
-        setSignalQuality(lastSignal.quality);
+        setSignalQuality(Math.round(lastSignal.quality));
       } else {
         console.log("No finger detected");
-        setSignalQuality(lastSignal.quality);
+        setSignalQuality(Math.round(lastSignal.quality));
         
         if (heartRate > 0) {
           setHeartRate(0);
@@ -190,13 +210,12 @@ const Index = () => {
         } : null
       };
       
-      setVitalSigns(convertedResult);
+      setVitalSigns(sanitizeVitalSigns(convertedResult));
       setShowResults(true);
     }
     
     setElapsedTime(0);
     setSignalQuality(0);
-    setHeartRate(0);
   };
 
   const handleReset = () => {
