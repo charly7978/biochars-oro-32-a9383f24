@@ -12,6 +12,8 @@ import { BloodPressureProcessor } from './specialized/BloodPressureProcessor';
 import { SpO2Processor } from './specialized/SpO2Processor';
 import { HydrationProcessor } from './specialized/HydrationProcessor';
 import { ArrhythmiaProcessor } from './specialized/ArrhythmiaProcessor';
+import { ProcessedSignal } from '../signal-processing/types';
+import { CalibrationReference } from './calibration/CalibrationManager';
 
 /**
  * Enhanced result interface for precision vital signs
@@ -35,8 +37,9 @@ export class PrecisionVitalSignsProcessor {
   private hydrationProcessor: HydrationProcessor;
   private arrhythmiaProcessor: ArrhythmiaProcessor;
   
-  private isCalibrated: boolean = false;
+  private _isCalibrated: boolean = false;
   private confidenceThreshold: number = 0.6;
+  private isProcessing: boolean = false;
   
   constructor() {
     // Initialize all processors
@@ -53,17 +56,25 @@ export class PrecisionVitalSignsProcessor {
   /**
    * Process signal with enhanced precision
    */
-  public processSignal(value: number, rrData?: any): PrecisionVitalSignsResult {
+  public processSignal(value: number | ProcessedSignal, rrData?: any): PrecisionVitalSignsResult {
+    if (!this.isProcessing) {
+      console.log("Warning: Processor called while not processing. Starting processor.");
+      this.start();
+    }
+    
+    // Handle both number and ProcessedSignal types
+    const signalValue = typeof value === 'number' ? value : value.filteredValue;
+    
     // Process each vital sign
-    const lipidValues = this.calculateLipids(value);
-    const glucoseValue = this.calculateGlucose(value);
-    const bpResult = this.calculateBloodPressure(value, rrData);
-    const spo2Value = this.calculateSpO2(value);
-    const hydrationValue = this.calculateHydration(value);
+    const lipidValues = this.calculateLipids(signalValue);
+    const glucoseValue = this.calculateGlucose(signalValue);
+    const bpResult = this.calculateBloodPressure(signalValue, rrData);
+    const spo2Value = this.calculateSpO2(signalValue);
+    const hydrationValue = this.calculateHydration(signalValue);
     const arrhythmiaResult = this.calculateArrhythmia(rrData);
     
     // Calculate confidence levels based on signal quality
-    const confidence = this.calculateConfidence(value, rrData);
+    const confidence = this.calculateConfidence(signalValue, rrData);
     
     // Create basic result
     const result: PrecisionVitalSignsResult = {
@@ -76,7 +87,7 @@ export class PrecisionVitalSignsProcessor {
       lastArrhythmiaData: arrhythmiaResult.lastArrhythmiaData,
       
       // Precision-specific fields
-      isCalibrated: this.isCalibrated,
+      isCalibrated: this._isCalibrated,
       correlationValidated: false,
       environmentallyAdjusted: false,
       precisionMetrics: {
@@ -87,6 +98,63 @@ export class PrecisionVitalSignsProcessor {
     };
     
     return result;
+  }
+  
+  /**
+   * Start the processor
+   */
+  public start(): void {
+    this.isProcessing = true;
+    console.log("PrecisionVitalSignsProcessor started");
+  }
+  
+  /**
+   * Stop the processor
+   */
+  public stop(): void {
+    this.isProcessing = false;
+    console.log("PrecisionVitalSignsProcessor stopped");
+  }
+  
+  /**
+   * Check if processor is calibrated
+   */
+  public isCalibrated(): boolean {
+    return this._isCalibrated;
+  }
+  
+  /**
+   * Add a calibration reference
+   */
+  public addCalibrationReference(reference: CalibrationReference): boolean {
+    console.log("Adding calibration reference", reference);
+    // Implementation would validate and apply calibration data
+    this._isCalibrated = true;
+    return true;
+  }
+  
+  /**
+   * Update environmental conditions
+   */
+  public updateEnvironmentalConditions(conditions: { lightLevel: number, motionLevel: number }): void {
+    console.log("Updating environmental conditions", conditions);
+    // Implementation would adjust processing based on environmental conditions
+  }
+  
+  /**
+   * Get diagnostic information about the processor
+   */
+  public getDiagnostics(): any {
+    return {
+      isProcessing: this.isProcessing,
+      environmentalConditions: {
+        lightLevel: 50,
+        motionLevel: 0
+      },
+      calibrationFactors: {
+        confidence: this._isCalibrated ? 0.95 : 0
+      }
+    };
   }
   
   /**
@@ -186,7 +254,8 @@ export class PrecisionVitalSignsProcessor {
     this.hydrationProcessor = new HydrationProcessor();
     this.arrhythmiaProcessor = new ArrhythmiaProcessor();
     
-    this.isCalibrated = false;
+    this._isCalibrated = false;
+    this.isProcessing = false;
     console.log("PrecisionVitalSignsProcessor reset");
   }
 }

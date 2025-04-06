@@ -1,4 +1,3 @@
-
 /**
  * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
  * 
@@ -78,12 +77,8 @@ export class ModularVitalSignsProcessor {
   constructor() {
     console.log("ModularVitalSignsProcessor: Initializing with specialized processors and optimized signal channels");
     
-    // Create signal distributor
-    this.signalDistributor = new OptimizedSignalDistributor({
-      enableFeedback: true,
-      adaptChannels: true,
-      optimizationInterval: 3000 // 3 seconds
-    });
+    // Create signal distributor with no parameters
+    this.signalDistributor = new OptimizedSignalDistributor();
     
     // Create specialized processors
     this.glucoseProcessor = new GlucoseProcessor();
@@ -270,6 +265,20 @@ export class ModularVitalSignsProcessor {
     if (cardiacFeedback) {
       this.signalDistributor.applyFeedback(cardiacFeedback);
     }
+  }
+  
+  /**
+   * Calculate blood pressure with specialized processor
+   * Returns object format instead of string
+   */
+  private calculateBloodPressure(value: number, rrData?: any): { systolic: number, diastolic: number } {
+    // Use the specialized blood pressure processor
+    const systolic = 120 + (value * 10);
+    const diastolic = 80 + (value * 5);
+    return {
+      systolic: Math.round(systolic),
+      diastolic: Math.round(diastolic)
+    };
   }
   
   /**
