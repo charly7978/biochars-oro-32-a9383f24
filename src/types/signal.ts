@@ -1,4 +1,3 @@
-
 /**
  * Interface for PPG data point with timestamp
  */
@@ -139,6 +138,8 @@ export interface OptimizedSignalChannel {
   applyFeedback: (feedback: ChannelFeedback) => void;  // Apply feedback from algorithm
   getQuality: () => number;       // Get channel quality (0-1)
   reset: () => void;              // Reset channel state
+  getAmplification: () => number; // Get current amplification factor
+  getFilterStrength: () => number; // Get current filter strength
 }
 
 /**

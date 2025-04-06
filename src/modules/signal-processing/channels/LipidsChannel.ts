@@ -48,4 +48,18 @@ export class LipidsChannel extends SpecializedChannel {
     // Apply specialized processing
     return this.specializedProcessing(baseProcessed);
   }
+
+  /**
+   * Get current amplification factor
+   */
+  public getAmplification(): number {
+    return this.amplification;
+  }
+
+  /**
+   * Get current filter strength
+   */
+  public getFilterStrength(): number {
+    return this.filterStrength;
+  }
 }
