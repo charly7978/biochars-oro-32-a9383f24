@@ -46,4 +46,14 @@ export type { SignalDistributorConfig } from '../../types/signal';
 export { AntiSimulationGuard } from './security/anti-simulation-guard';
 
 // Guardian Shield system
-export { GuardianShield, getGuardianShield } from '../guardian-shield/index';
+export { 
+  GuardianShield, 
+  getGuardianShield,
+  // New exports for duplication prevention
+  CodeDuplicationGuardian,
+  getCodeDuplicationGuardian,
+  initializeGuardianShield
+} from '../guardian-shield/index';
+
+// Export initialization function
+export { default as initializeGuardianSystems } from '../guardian-shield/initialize-guardian';
