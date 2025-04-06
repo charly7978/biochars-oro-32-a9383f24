@@ -283,7 +283,7 @@ export const useHeartBeatProcessor = (): UseHeartBeatReturn => {
           avgProcessTime: avgDiagnostics.avgProcessTime,
           avgSignalStrength: avgDiagnostics.avgSignalStrength,
           qualityDistribution: qualityStats.qualityDistribution,
-          qualityTrend: qualityStats.qualityTrend
+          qualityTrend: JSON.stringify(qualityStats.qualityTrend)
         };
       }
       
