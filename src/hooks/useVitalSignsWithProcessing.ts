@@ -109,14 +109,14 @@ export function useVitalSignsWithProcessing() {
         
         // Actualizar desde el extractor PPG
         unifiedFingerDetector.updateSource(
-          'ppg-extractor', 
+          'extraction', 
           extraction.lastResult.fingerDetected, 
           extraction.lastResult.quality / 100
         );
         
         // Actualizar desde el procesador de señal
         unifiedFingerDetector.updateSource(
-          'signal-quality-amplitude', 
+          'signalProcessor', 
           processedSignal.fingerDetected, 
           processedSignal.quality / 100
         );
