@@ -51,9 +51,9 @@ export {
   getGuardianShield,
   // New exports for duplication prevention
   CodeDuplicationGuardian,
-  getCodeDuplicationGuardian,
-  initializeGuardianShield
+  registerComponent,
 } from '../guardian-shield/index';
 
 // Export initialization function
 export { default as initializeGuardianSystems } from '../guardian-shield/initialize-guardian';
+
