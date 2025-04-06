@@ -1,37 +1,24 @@
 
 /**
- * Módulo central de procesamiento de señal
- * Proporciona funcionalidades avanzadas para el procesamiento de señales PPG y cardíacas
+ * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
+ * 
+ * Signal processing module
+ * Central export for all signal processing utilities
  */
 
-// Exportar procesadores principales
-export * from './ppg-processor';
-export * from './heartbeat-processor';
+// Export signal distributor
+export { OptimizedSignalDistributor } from './OptimizedSignalDistributor';
 
-// Exportar utilidades de procesamiento, eliminando las exportaciones duplicadas
-export * from './utils/finger-detector';
-export * from './utils/signal-normalizer';
-export * from './utils/adaptive-predictor';
-export * from './utils/bayesian-optimization';
-export * from './utils/gaussian-process';
-export * from './utils/mixed-model';
+// Export channel types
+export { VitalSignType, type ChannelFeedback } from '../../types/signal';
 
-// Exportar utilidad de quality-detector sin incluir calculateVariance
-export { 
-  evaluateSignalQuality, 
-  isWeakSignal, 
-  calculateSignalStrength 
-} from './utils/quality-detector';
+// Export specialized channels
+export { SpecializedChannel } from './channels/SpecializedChannel';
+export { GlucoseChannel } from './channels/GlucoseChannel';
+export { LipidsChannel } from './channels/LipidsChannel';
+export { BloodPressureChannel } from './channels/BloodPressureChannel';
+export { SpO2Channel } from './channels/SpO2Channel';
+export { CardiacChannel } from './channels/CardiacChannel';
 
-// Exportar tipos
-export * from './types';
-
-// Export a function to reset finger detector 
-export function resetFingerDetector() {
-  console.log("Finger detector has been reset");
-  // This function exists to satisfy imports
-  // Actual implementation is in finger-detector.ts
-}
-
-// Export the VitalSignsProcessor
-export { VitalSignsProcessor } from '../vital-signs/VitalSignsProcessor';
+// Re-export utility types
+export type { SignalDistributorConfig } from '../../types/signal';
