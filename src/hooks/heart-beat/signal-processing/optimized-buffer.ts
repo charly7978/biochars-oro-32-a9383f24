@@ -5,7 +5,7 @@
  */
 
 import { CircularBuffer } from '../../../utils/CircularBuffer';
-import { PPGDataPoint, TimestampedPPGData } from '../../../types/signal';
+import { TimestampedPPGData } from '../../../types/vital-signs';
 
 /**
  * Buffer circular optimizado para datos PPG
@@ -150,15 +150,15 @@ export class OptimizedPPGBuffer<T extends TimestampedPPGData = TimestampedPPGDat
     const optimizedBuffer = new OptimizedPPGBuffer<U>(Math.max(points.length, 10));
     
     // Transferir los datos al nuevo buffer
-    points.forEach(point => {
+    points.forEach((point: U) => {
       // Ensure point has all required properties
       const enhancedPoint = { ...point } as U;
       
       // Garantizar que tanto time como timestamp existan
-      if ('timestamp' in enhancedPoint && !('time' in enhancedPoint)) {
+      if (enhancedPoint.timestamp && !('time' in enhancedPoint)) {
         (enhancedPoint as any).time = enhancedPoint.timestamp;
-      } else if ('time' in enhancedPoint && !('timestamp' in enhancedPoint)) {
-        (enhancedPoint as any).timestamp = enhancedPoint.time;
+      } else if ('time' in enhancedPoint && !enhancedPoint.timestamp) {
+        enhancedPoint.timestamp = (enhancedPoint as any).time;
       }
       
       optimizedBuffer.push(enhancedPoint);
@@ -185,10 +185,10 @@ export class CircularBufferAdapter<T extends TimestampedPPGData = TimestampedPPG
     const enhancedItem = { ...item } as T;
     
     // Garantizar que tanto time como timestamp existan
-    if ('timestamp' in enhancedItem && !('time' in enhancedItem)) {
+    if (enhancedItem.timestamp && !('time' in enhancedItem)) {
       (enhancedItem as any).time = enhancedItem.timestamp;
-    } else if ('time' in enhancedItem && !('timestamp' in enhancedItem)) {
-      (enhancedItem as any).timestamp = enhancedItem.time;
+    } else if ('time' in enhancedItem && !enhancedItem.timestamp) {
+      enhancedItem.timestamp = (enhancedItem as any).time;
     }
     
     super.push(enhancedItem);
@@ -223,3 +223,4 @@ export class CircularBufferAdapter<T extends TimestampedPPGData = TimestampedPPG
     return this.optimizedBuffer;
   }
 }
+

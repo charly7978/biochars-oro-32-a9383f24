@@ -1,117 +1,84 @@
-/**
- * Diagnostics tools for signal processing
- */
-import { SignalDiagnosticInfo } from '../../types/signal';
 
 /**
- * Global diagnostics store
+ * Signal processing diagnostics module
  */
-const diagnosticsStore: {
-  infos: SignalDiagnosticInfo[];
-  maxEntries: number;
-} = {
-  infos: [],
-  maxEntries: 500
-};
 
 /**
- * Create diagnostic information for signal processing
+ * Interface for diagnostic events
  */
-export function createDiagnosticInfo(
-  stage: string, 
-  validationPassed: boolean, 
-  metrics?: Record<string, any>
-): SignalDiagnosticInfo {
-  return {
-    processingStage: stage,
-    validationPassed,
-    timestamp: Date.now(),
-    ...(metrics || {})
-  };
+export interface DiagnosticEvent {
+  timestamp: number;
+  category: string;
+  level: 'info' | 'warning' | 'error' | 'debug';
+  message: string;
+  data?: any;
 }
 
 /**
- * Log diagnostic information
+ * Core diagnostics service
  */
-export function logDiagnostics(info: SignalDiagnosticInfo): void {
-  diagnosticsStore.infos.push(info);
+export class SignalProcessingDiagnostics {
+  private events: DiagnosticEvent[] = [];
+  private subscribers: DiagnosticsSubscriber[] = [];
+  private maxEvents: number;
   
-  // Keep the size bounded
-  if (diagnosticsStore.infos.length > diagnosticsStore.maxEntries) {
-    diagnosticsStore.infos = diagnosticsStore.infos.slice(-diagnosticsStore.maxEntries);
-  }
-}
-
-/**
- * Get all stored diagnostic information
- */
-export function getDiagnostics(): SignalDiagnosticInfo[] {
-  return [...diagnosticsStore.infos];
-}
-
-/**
- * Get the most recent diagnostic information
- */
-export function getLatestDiagnostics(count: number = 10): SignalDiagnosticInfo[] {
-  return diagnosticsStore.infos.slice(-count);
-}
-
-/**
- * Get diagnostic information for a specific stage
- */
-export function getDiagnosticsForStage(stage: string): SignalDiagnosticInfo[] {
-  return diagnosticsStore.infos.filter(info => info.processingStage.includes(stage));
-}
-
-/**
- * Clear all diagnostic information
- */
-export function clearDiagnostics(): void {
-  diagnosticsStore.infos = [];
-}
-
-/**
- * Signal processing diagnostics singleton
- */
-class SignalProcessingDiagnostics {
-  private readonly maxHistorySize: number;
-  
-  constructor(maxHistorySize: number = 500) {
-    this.maxHistorySize = maxHistorySize;
+  constructor(maxEvents: number = 1000) {
+    this.maxEvents = maxEvents;
   }
   
   /**
-   * Record diagnostic information
+   * Log a diagnostic event
    */
-  public recordDiagnosticInfo(info: SignalDiagnosticInfo): void {
-    // Add timestamp if not present
-    if (!info.timestamp) {
-      info.timestamp = Date.now();
+  public logEvent(event: Omit<DiagnosticEvent, 'timestamp'>): void {
+    const fullEvent: DiagnosticEvent = {
+      ...event,
+      timestamp: Date.now()
+    };
+    
+    this.events.push(fullEvent);
+    
+    if (this.events.length > this.maxEvents) {
+      this.events.shift();
     }
     
-    logDiagnostics(info);
+    // Notify subscribers
+    this.subscribers.forEach(sub => sub.onDiagnosticEvent(fullEvent));
   }
   
   /**
-   * Get all diagnostic information
+   * Get all events
    */
-  public getAllDiagnosticInfo(): SignalDiagnosticInfo[] {
-    return getDiagnostics();
+  public getEvents(): DiagnosticEvent[] {
+    return [...this.events];
   }
   
   /**
-   * Get recent diagnostic information
+   * Clear all events
    */
-  public getRecentDiagnosticInfo(count: number = 10): SignalDiagnosticInfo[] {
-    return getLatestDiagnostics(count);
+  public clearEvents(): void {
+    this.events = [];
   }
   
   /**
-   * Clear all diagnostic information
+   * Add a subscriber
    */
-  public clearDiagnosticInfo(): void {
-    clearDiagnostics();
+  public subscribe(subscriber: DiagnosticsSubscriber): void {
+    this.subscribers.push(subscriber);
   }
+  
+  /**
+   * Remove a subscriber
+   */
+  public unsubscribe(subscriber: DiagnosticsSubscriber): void {
+    this.subscribers = this.subscribers.filter(sub => sub !== subscriber);
+  }
+}
+
+/**
+ * Interface for diagnostics subscribers
+ */
+export interface DiagnosticsSubscriber {
+  onDiagnosticEvent(event: DiagnosticEvent): void;
 }
 
 /**
@@ -119,9 +86,4 @@ class SignalProcessingDiagnostics {
  */
 const diagnosticsInstance = new SignalProcessingDiagnostics();
 
-/**
- * Get the diagnostics instance
- */
-export function getDiagnosticsInstance(): SignalProcessingDiagnostics {
-  return diagnosticsInstance;
-}
+export { diagnosticsInstance };

@@ -23,7 +23,8 @@ export {
   detectPeaks,
   calculateHeartRate,
   getDiagnosticsData,
-  clearDiagnosticsData
+  clearDiagnosticsData,
+  handlePeakDetection
 } from './peak-detection';
 
 export { 

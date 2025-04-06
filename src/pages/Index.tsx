@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect } from "react";
 import VitalSign from "@/components/VitalSign";
 import CameraView from "@/components/CameraView";
@@ -7,7 +8,7 @@ import { useVitalSignsProcessor } from "@/hooks/useVitalSignsProcessor";
 import PPGSignalMeter from "@/components/PPGSignalMeter";
 import MonitorButton from "@/components/MonitorButton";
 import AppTitle from "@/components/AppTitle";
-import { VitalSignsResult } from "@/modules/vital-signs";
+import { VitalSignsResult } from "@/types/vital-signs";
 
 const Index = () => {
   const [isMonitoring, setIsMonitoring] = useState(false);
@@ -18,6 +19,7 @@ const Index = () => {
     pressure: "--/--",
     arrhythmiaStatus: "--",
     glucose: 0,
+    hydration: 0,
     lipids: {
       totalCholesterol: 0,
       triglycerides: 0
@@ -179,6 +181,7 @@ const Index = () => {
       pressure: "--/--",
       arrhythmiaStatus: "--",
       glucose: 0,
+      hydration: 0,
       lipids: {
         totalCholesterol: 0,
         triglycerides: 0

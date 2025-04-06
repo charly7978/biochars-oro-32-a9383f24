@@ -66,3 +66,21 @@ export interface ArrhythmiaProcessingResult {
     rrVariation: number; 
   } | null;
 }
+
+/**
+ * TimestampedPPGData interface for buffer usage
+ */
+export interface TimestampedPPGData {
+  timestamp: number;
+  value: number;
+  time?: number; // For compatibility
+}
+
+/**
+ * SignalProcessor interface
+ */
+export interface SignalProcessor {
+  processSignal(value: number): any;
+  reset(): void;
+  configure(options: SignalProcessingOptions): void;
+}

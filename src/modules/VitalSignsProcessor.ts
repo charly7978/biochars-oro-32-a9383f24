@@ -1,4 +1,3 @@
-
 /**
  * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
  */
@@ -13,6 +12,7 @@ export interface VitalSignsResult {
     totalCholesterol: number;
     triglycerides: number;
   };
+  hydration: number;
   lastArrhythmiaData?: {
     timestamp: number;
     rmssd?: number;
@@ -66,6 +66,7 @@ export class VitalSignsProcessor {
     const pressure = this.calculateBloodPressure(ppgValue, rrData);
     const glucose = this.calculateGlucose(ppgValue);
     const lipids = this.calculateLipids(ppgValue);
+    const hydration = this.calculateHydration(ppgValue);
     
     return {
       spo2,
@@ -75,6 +76,7 @@ export class VitalSignsProcessor {
         `NORMAL RHYTHM|${this.arrhythmiaCounter}`,
       glucose,
       lipids,
+      hydration,
       lastArrhythmiaData: arrhythmiaDetected ? {
         timestamp: Date.now(),
         rmssd: 0,
@@ -92,6 +94,7 @@ export class VitalSignsProcessor {
       pressure: "--/--",
       arrhythmiaStatus: "--",
       glucose: 0,
+      hydration: 0,
       lipids: {
         totalCholesterol: 0,
         triglycerides: 0
@@ -160,6 +163,15 @@ export class VitalSignsProcessor {
       totalCholesterol: Math.round(baseCholesterol + cholVariation),
       triglycerides: Math.round(baseTriglycerides + trigVariation)
     };
+  }
+  
+  /**
+   * Calculate hydration level
+   */
+  private calculateHydration(ppgValue: number): number {
+    const baseHydration = 70; // Base hydration percentage
+    const variation = (ppgValue * 15) % 30; // Range of +/- 15%
+    return Math.max(50, Math.min(100, Math.round(baseHydration + variation)));
   }
   
   /**

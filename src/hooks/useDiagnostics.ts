@@ -1,108 +1,62 @@
 
 /**
- * Hook to access the diagnostics system from React components
+ * Hook for accessing and using diagnostics service
  */
 import { useState, useEffect, useCallback } from 'react';
-import { SignalDiagnosticInfo } from '../types/signal';
 import { 
-  SignalProcessingDiagnostics, 
-  DiagnosticsSubscriber 
+  diagnosticsInstance, 
+  DiagnosticEvent 
 } from '../modules/signal-processing/diagnostics';
 
-export interface DiagnosticsState {
-  history: SignalDiagnosticInfo[];
-  enabled: boolean;
-  performanceMetrics: Record<string, { 
-    avg: number, 
-    min: number, 
-    max: number,
-    current: number 
-  }>;
-  errorCount: number;
-  lastError?: {
-    code?: string;
-    message?: string;
-    timestamp: number;
-  };
+/**
+ * Interface for diagnostics hook
+ */
+export interface UseDiagnosticsReturn {
+  events: DiagnosticEvent[];
+  clearEvents: () => void;
+  logEvent: (event: Omit<DiagnosticEvent, 'timestamp'>) => void;
 }
 
-export function useDiagnostics() {
-  const [state, setState] = useState<DiagnosticsState>({
-    history: [],
-    enabled: true,
-    performanceMetrics: {},
-    errorCount: 0
-  });
-
-  const diagnostics = SignalProcessingDiagnostics.getInstance();
-
-  // Update state when new diagnostic info is received
+/**
+ * Implementation of diagnostics hook
+ */
+export function useDiagnostics(): UseDiagnosticsReturn {
+  const [events, setEvents] = useState<DiagnosticEvent[]>([]);
+  
   useEffect(() => {
-    const subscriber: DiagnosticsSubscriber = {
-      onDiagnosticUpdate: (info: SignalDiagnosticInfo) => {
-        setState(prev => {
-          // Check if this is an error
-          const isError = !info.validationPassed;
-          
-          return {
-            ...prev,
-            history: [...prev.history.slice(-99), info], // Keep last 100 items
-            errorCount: isError ? prev.errorCount + 1 : prev.errorCount,
-            lastError: isError ? {
-              code: info.errorCode,
-              message: info.errorMessage,
-              timestamp: Date.now()
-            } : prev.lastError,
-            performanceMetrics: diagnostics.getPerformanceMetrics()
-          };
-        });
+    // Get initial events
+    setEvents(diagnosticsInstance.getEvents());
+    
+    // Create subscriber
+    const subscriber = {
+      onDiagnosticEvent: (event: DiagnosticEvent) => {
+        setEvents(prev => [...prev, event]);
       }
     };
-
-    // Subscribe to diagnostics updates
-    diagnostics.subscribe(subscriber);
-
-    // Initial state
-    setState({
-      history: diagnostics.getDiagnosticHistory().slice(-100),
-      enabled: true,
-      performanceMetrics: diagnostics.getPerformanceMetrics(),
-      errorCount: 0
-    });
-
-    // Cleanup
+    
+    // Subscribe
+    diagnosticsInstance.subscribe(subscriber);
+    
+    // Unsubscribe on cleanup
     return () => {
-      diagnostics.unsubscribe(subscriber);
+      diagnosticsInstance.unsubscribe(subscriber);
     };
   }, []);
-
-  // Toggle diagnostics
-  const toggleDiagnostics = useCallback((enabled: boolean) => {
-    diagnostics.setEnabled(enabled);
-    setState(prev => ({ ...prev, enabled }));
+  
+  const clearEvents = useCallback(() => {
+    diagnosticsInstance.clearEvents();
+    setEvents([]);
   }, []);
-
-  // Clear diagnostic data
-  const clearDiagnostics = useCallback(() => {
-    diagnostics.clearDiagnosticData();
-    setState({
-      history: [],
-      enabled: state.enabled,
-      performanceMetrics: {},
-      errorCount: 0
-    });
-  }, [state.enabled]);
-
-  // Get diagnostics for a specific stage
-  const getStageData = useCallback((stage: string) => {
-    return diagnostics.getStageHistory(stage);
+  
+  const logEvent = useCallback((event: Omit<DiagnosticEvent, 'timestamp'>) => {
+    diagnosticsInstance.logEvent(event);
   }, []);
-
+  
   return {
-    ...state,
-    toggleDiagnostics,
-    clearDiagnostics,
-    getStageData
+    events,
+    clearEvents,
+    logEvent
   };
 }
 
+export default useDiagnostics;
