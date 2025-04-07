@@ -28,4 +28,5 @@ export interface HeartBeatResult {
   isPeak: boolean;
   arrhythmiaCount: number;
   rrData: RRIntervalData;
+  isArrhythmia?: boolean;
 }
