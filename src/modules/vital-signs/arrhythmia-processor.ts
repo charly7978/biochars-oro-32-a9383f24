@@ -1,16 +1,11 @@
+
 /**
  * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
  */
 
 import { ArrhythmiaPatternDetector } from './arrhythmia/pattern-detector';
 import { calculateRMSSD, calculateRRVariation } from './arrhythmia/calculations';
-import { ArrhythmiaProcessingResult } from './arrhythmia/types';
-
-// Define RRIntervalData locally if not imported
-interface RRIntervalData {
-  intervals: number[];
-  lastPeakTime: number | null;
-}
+import { RRIntervalData, ArrhythmiaProcessingResult } from './arrhythmia/types';
 
 /**
  * Consolidated arrhythmia detection system
