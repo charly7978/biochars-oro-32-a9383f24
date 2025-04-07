@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
@@ -33,20 +34,11 @@ const VitalSign = ({
           if (value > 126) return 'Hiperglucemia';
           if (value < 70) return 'Hipoglucemia';
           return '';
-        case 'HYDRATION':
-          const hydration = parseInt(String(value), 10);
-          if (!isNaN(hydration)) {
-            if (hydration < 50) return 'Deshidratación';
-            if (hydration > 85) return 'Hidratación óptima';
-            if (hydration > 70) return 'Buena hidratación';
-            if (hydration > 60) return 'Hidratación moderada';
-          }
-          return '';
         default:
           return '';
       }
     }
-
+    
     if (typeof value === 'string') {
       switch(label) {
         case 'PRESIÓN ARTERIAL':
@@ -72,13 +64,11 @@ const VitalSign = ({
             if (triglycerides > 150) return 'Hipertrigliceridemia';
           }
           return '';
-        case 'ARRITMIAS':
-          return value; // Assuming value is a string describing arrhythmia type
         default:
           return '';
       }
     }
-
+    
     return '';
   };
 
@@ -90,15 +80,11 @@ const VitalSign = ({
       case 'Hipertensión':
       case 'Hipercolesterolemia':
       case 'Hipertrigliceridemia':
-      case 'Deshidratación':
         return 'text-[#ea384c]';
       case 'Bradicardia':
       case 'Hipoglucemia':
       case 'Hipotensión':
-      case 'Hidratación óptima':
-      case 'Buena hidratación':
-      case 'Hidratación moderada':
-        return 'text-[#22c55e]';
+        return 'text-[#F97316]';
       default:
         return '';
     }
@@ -207,21 +193,6 @@ const VitalSign = ({
           'Genética'
         ];
         break;
-      case 'HYDRATION':
-        info.normalRange = '50-85%';
-        info.description = 'La hidratación corporal es esencial para el buen funcionamiento del organismo.';
-        info.recommendations = [
-          'Beber suficiente agua a lo largo del día',
-          'Consumir alimentos ricos en agua',
-          'Escuchar las señales de tu cuerpo'
-        ];
-        info.riskFactors = [
-          'Ejercicio intenso',
-          'Clima cálido',
-          'Enfermedades',
-          'Diarrea'
-        ];
-        break;
       case 'ARRITMIAS':
         info.normalRange = 'Sin arritmias';
         info.description = 'Las arritmias son alteraciones del ritmo cardíaco normal. Pueden ser inofensivas o indicar problemas cardíacos subyacentes.';
@@ -241,7 +212,7 @@ const VitalSign = ({
       default:
         break;
     }
-
+    
     return info;
   };
 
@@ -261,7 +232,7 @@ const VitalSign = ({
           <div className="text-[11px] font-medium uppercase tracking-wider text-black/70 mb-1">
             {label}
           </div>
-
+          
           <div className="font-bold text-xl sm:text-2xl transition-all duration-300">
             <span className="text-gradient-soft">
               {formattedValue}
@@ -274,7 +245,7 @@ const VitalSign = ({
               {riskLabel}
             </div>
           )}
-
+          
           {calibrationProgress !== undefined && (
             <div className="absolute inset-0 bg-transparent overflow-hidden pointer-events-none border-0">
               <div 
@@ -288,13 +259,13 @@ const VitalSign = ({
               </div>
             </div>
           )}
-
+          
           <div className="absolute bottom-0 left-0 right-0 flex justify-center">
             <ChevronUp size={16} className="text-gray-400" />
           </div>
         </div>
       </SheetTrigger>
-
+      
       <SheetContent side="bottom" className="h-[70vh] rounded-t-2xl">
         <SheetHeader className="border-b pb-4">
           <SheetTitle className="text-2xl font-bold flex items-center justify-between">
@@ -312,7 +283,7 @@ const VitalSign = ({
             </div>
           </SheetTitle>
         </SheetHeader>
-
+        
         <div className="py-6 overflow-y-auto max-h-full">
           <div className="space-y-6">
             <Card>
@@ -337,7 +308,7 @@ const VitalSign = ({
                 </div>
                 <p className="text-gray-700 mt-2">
                   {riskLabel ? 
-                    `Su lectura está ${riskLabel.includes('hiper') || riskLabel.includes('taqui') || riskLabel.includes('Deshidratación') ? 'por encima' : 'por debajo'} del rango normal.` : 
+                    `Su lectura está ${riskLabel.includes('hiper') || riskLabel.includes('taqui') ? 'por encima' : 'por debajo'} del rango normal.` : 
                     'Su lectura está dentro del rango normal.'}
                 </p>
               </CardContent>

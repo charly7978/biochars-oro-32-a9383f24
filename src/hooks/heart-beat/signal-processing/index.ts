@@ -19,12 +19,16 @@ export {
 } from './signal-quality';
 
 export { 
-  handlePeakDetection 
+  handlePeakDetection,
+  detectArrhythmia,
+  calculateArrhythmiaRisk,
+  getArrhythmiaStatusMessage
 } from './peak-detection';
 
 export { 
   updateLastValidBpm, 
-  processLowConfidenceResult 
+  processLowConfidenceResult,
+  enhanceDiagnosticData
 } from './result-processor';
 
 export {

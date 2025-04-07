@@ -27,7 +27,7 @@ export interface ProcessedSignal {
   filteredValue: number;    // Filtered value for analysis
   quality: number;          // Signal quality (0-100)
   fingerDetected: boolean;  // Whether a finger is detected on the sensor
-  roi: {                    // Region of interest in the image
+  roi?: {                   // Region of interest in the image
     x: number;
     y: number;
     width: number;
@@ -140,28 +140,36 @@ export interface OptimizedSignalChannel {
  * Types of vital sign measurements
  */
 export enum VitalSignType {
-  CARDIAC = 'cardiac',
+  GLUCOSE = 'glucose',
+  LIPIDS = 'lipids',
   BLOOD_PRESSURE = 'blood_pressure',
   SPO2 = 'spo2',
-  GLUCOSE = 'glucose',
-  HYDRATION = 'hydration',
+  CARDIAC = 'cardiac'
 }
 
 /**
  * Feedback from vital sign algorithms to adjust signal processing
  */
 export interface ChannelFeedback {
-  channelId: string;              // Channel ID
-  signalQuality: number;          // Estimated signal quality (0-1)
-  suggestedAdjustments: {
-    amplificationFactor?: number; // Suggested amplification
-    filterStrength?: number;      // Suggested filter strength
-    baselineCorrection?: number;  // Baseline correction
-    frequencyRangeMin?: number;   // Frequency range minimum
-    frequencyRangeMax?: number;   // Frequency range maximum
+  channelId: string;
+  success: boolean;
+  signalQuality: number;
+  timestamp: number;
+  suggestedAdjustments?: {
+    amplificationFactor?: number;
+    filterStrength?: number;
+    baselineCorrection?: number;
+    frequencyRangeMin?: number;
+    frequencyRangeMax?: number;
+    peakDetectionThreshold?: number;
+    [key: string]: number | undefined;
   };
-  timestamp: number;              // Feedback timestamp
-  success: boolean;               // Whether last processing was successful
+  mlFeedback?: {
+    isArrhythmia?: boolean;
+    confidence?: number;
+    prediction?: number;
+    [key: string]: boolean | number | undefined;
+  };
 }
 
 /**
@@ -173,10 +181,10 @@ export interface SignalDistributorConfig {
   optimizationInterval: number;   // Interval for optimization (ms)
   channels: {                     // Channel-specific configurations
     [key in VitalSignType]?: {
-      initialAmplification: number;
-      initialFilterStrength: number;
-      frequencyBandMin: number;
-      frequencyBandMax: number;
+      initialAmplification?: number;
+      initialFilterStrength?: number;
+      frequencyBandMin?: number;
+      frequencyBandMax?: number;
     }
   };
 }
