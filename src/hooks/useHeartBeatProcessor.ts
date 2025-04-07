@@ -2,16 +2,18 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { HeartBeatProcessor } from '../modules/HeartBeatProcessor';
 import { toast } from 'sonner';
-import { RRAnalysisResult } from './arrhythmia/types';
+import { RRIntervalData } from '../types/vital-signs';
 import { useBeepProcessor } from './heart-beat/beep-processor';
 import { useArrhythmiaDetector } from './heart-beat/arrhythmia-detector';
-import { useSignalProcessor } from './heart-beat/signal-processor';
+import { useSignalProcessor } from './heart-beat/signal-processing';
 import { HeartBeatResult, UseHeartBeatReturn } from './heart-beat/types';
+import { ArrhythmiaWindow } from '../types/signal';
 
 export const useHeartBeatProcessor = (): UseHeartBeatReturn => {
   const processorRef = useRef<HeartBeatProcessor | null>(null);
   const [currentBPM, setCurrentBPM] = useState<number>(0);
   const [confidence, setConfidence] = useState<number>(0);
+  const [arrhythmiaWindows, setArrhythmiaWindows] = useState<ArrhythmiaWindow[]>([]);
   const sessionId = useRef<string>(Math.random().toString(36).substring(2, 9));
   
   const missedBeepsCounter = useRef<number>(0);
@@ -30,13 +32,15 @@ export const useHeartBeatProcessor = (): UseHeartBeatReturn => {
   } = useBeepProcessor();
   
   const {
+    processRRIntervals,
     detectArrhythmia,
+    reset: resetArrhythmiaDetector,
+    getArrhythmiaWindows,
     heartRateVariabilityRef,
     stabilityCounterRef,
     lastRRIntervalsRef,
     lastIsArrhythmiaRef,
-    currentBeatIsArrhythmiaRef,
-    reset: resetArrhythmiaDetector
+    currentBeatIsArrhythmiaRef
   } = useArrhythmiaDetector();
   
   const {
@@ -93,6 +97,18 @@ export const useHeartBeatProcessor = (): UseHeartBeatReturn => {
     };
   }, []);
 
+  // Update arrhythmia windows
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      const windows = getArrhythmiaWindows();
+      if (windows && windows.length > 0) {
+        setArrhythmiaWindows(windows);
+      }
+    }, 500);
+    
+    return () => clearInterval(intervalId);
+  }, [getArrhythmiaWindows]);
+
   // Esta función ahora no hace nada, el beep está centralizado en PPGSignalMeter
   const requestBeep = useCallback((value: number): boolean => {
     console.log('useHeartBeatProcessor: Beep ELIMINADO - Todo el sonido SOLO en PPGSignalMeter', {
@@ -112,6 +128,8 @@ export const useHeartBeatProcessor = (): UseHeartBeatReturn => {
         confidence: 0,
         isPeak: false,
         arrhythmiaCount: 0,
+        isArrhythmia: false,
+        arrhythmiaWindows: [],
         rrData: {
           intervals: [],
           lastPeakTime: null
@@ -140,6 +158,12 @@ export const useHeartBeatProcessor = (): UseHeartBeatReturn => {
       currentBeatIsArrhythmiaRef.current = arrhythmiaResult.isArrhythmia;
       
       result.isArrhythmia = currentBeatIsArrhythmiaRef.current;
+      result.arrhythmiaWindows = arrhythmiaResult.arrhythmiaWindows || [];
+      
+      // Update state with latest windows
+      if (arrhythmiaResult.arrhythmiaWindows && arrhythmiaResult.arrhythmiaWindows.length > 0) {
+        setArrhythmiaWindows(arrhythmiaResult.arrhythmiaWindows);
+      }
     }
 
     return result;
@@ -167,6 +191,7 @@ export const useHeartBeatProcessor = (): UseHeartBeatReturn => {
     
     setCurrentBPM(0);
     setConfidence(0);
+    setArrhythmiaWindows([]);
     
     resetArrhythmiaDetector();
     resetSignalProcessor();
@@ -211,6 +236,7 @@ export const useHeartBeatProcessor = (): UseHeartBeatReturn => {
     
     setCurrentBPM(0);
     setConfidence(0);
+    setArrhythmiaWindows([]);
   }, [cleanupBeepProcessor]);
 
   return {
@@ -219,6 +245,7 @@ export const useHeartBeatProcessor = (): UseHeartBeatReturn => {
     processSignal,
     reset,
     isArrhythmia: currentBeatIsArrhythmiaRef.current,
+    arrhythmiaWindows,
     requestBeep,
     startMonitoring,
     stopMonitoring

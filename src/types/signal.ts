@@ -10,7 +10,8 @@ export enum VitalSignType {
   BLOOD_PRESSURE = 'BLOOD_PRESSURE',
   GLUCOSE = 'GLUCOSE',
   LIPIDS = 'LIPIDS',
-  HYDRATION = 'HYDRATION'
+  HYDRATION = 'HYDRATION',
+  CARDIAC = 'CARDIAC'
 }
 
 // Feedback channel for signal optimization
@@ -37,4 +38,62 @@ export interface SignalDistributorConfig {
   initialAmplification?: number;
   filterStrength?: number;
   useAdaptiveControl?: boolean;
+}
+
+// Processed signal interface
+export interface ProcessedSignal {
+  timestamp: number;
+  rawValue: number;
+  filteredValue: number;
+  quality: number;
+  fingerDetected: boolean;
+  isPeak?: boolean;
+  arrhythmiaDetected?: boolean;
+}
+
+// Processing error interface
+export interface ProcessingError {
+  code: string;
+  message: string;
+  timestamp: number;
+  data?: any;
+}
+
+// Signal processor interface
+export interface SignalProcessor {
+  processSignal: (value: number) => any;
+  reset: () => void;
+}
+
+// Signal validation interfaces
+export interface SignalValidationResult {
+  isValid: boolean;
+  quality: number;
+  fingerDetected: boolean;
+  errorCode?: string;
+}
+
+export interface SignalValidationConfig {
+  minQuality: number;
+  minAmplitude: number;
+  maxNoiseRatio: number;
+}
+
+// PPG data point interfaces
+export interface PPGDataPoint {
+  timestamp: number;
+  value: number;
+  time: number;
+}
+
+export interface TimestampedPPGData {
+  timestamp: number;
+  value: number;
+  time?: number;
+}
+
+// Arrhythmia window for visualization
+export interface ArrhythmiaWindow {
+  start: number;
+  end: number;
 }

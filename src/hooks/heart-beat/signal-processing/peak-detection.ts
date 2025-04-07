@@ -1,76 +1,80 @@
+import { useRef } from 'react';
+
 /**
- * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
+ * Detect peaks in a signal
  */
-
-// Diagnostics data storage
-const diagnosticsData: Array<{ 
-  timestamp: number,
-  quality: number,
-  processingPriority: 'high' | 'medium' | 'low',
-  processTime: number
-}> = [];
-
-// Quality statistics storage
-const qualityStats = {
-  qualityDistribution: { high: 0, medium: 0, low: 0 },
-  qualityTrend: [] as number[]
+export const detectPeak = (
+  value: number,
+  threshold: number,
+  minTimeBetweenPeaks: number,
+  lastPeakTime: number | null
+): boolean => {
+  const now = Date.now();
+  
+  // Check if enough time has passed since last peak
+  if (lastPeakTime !== null && (now - lastPeakTime) < minTimeBetweenPeaks) {
+    return false;
+  }
+  
+  // Simple threshold-based peak detection
+  return value >= threshold;
 };
 
 /**
- * Get detailed quality statistics
+ * Calculate heart rate from peaks
  */
-export function getDetailedQualityStats() {
-  return { ...qualityStats };
-}
-
-/**
- * Clear diagnostics data
- */
-export function clearDiagnosticsData() {
-  diagnosticsData.length = 0;
-  qualityStats.qualityDistribution = { high: 0, medium: 0, low: 0 };
-  qualityStats.qualityTrend = [];
-}
-
-/**
- * Add diagnostics data
- */
-export function addDiagnosticsData(
-  quality: number,
-  processingPriority: 'high' | 'medium' | 'low',
-  processTime: number
-) {
-  diagnosticsData.push({
-    timestamp: Date.now(),
-    quality,
-    processingPriority,
-    processTime
-  });
-  
-  // Keep diagnostics data manageable
-  if (diagnosticsData.length > 100) {
-    diagnosticsData.shift();
+export const calculateHeartRate = (peakTimes: number[], minBpm: number = 40, maxBpm: number = 180): number => {
+  if (peakTimes.length < 3) {
+    return 0;
   }
   
-  // Update quality distribution
-  if (quality >= 70) {
-    qualityStats.qualityDistribution.high++;
-  } else if (quality >= 40) {
-    qualityStats.qualityDistribution.medium++;
-  } else {
-    qualityStats.qualityDistribution.low++;
+  // Calculate intervals
+  const intervals: number[] = [];
+  for (let i = 1; i < peakTimes.length; i++) {
+    intervals.push(peakTimes[i] - peakTimes[i-1]);
   }
   
-  // Update quality trend
-  qualityStats.qualityTrend.push(quality);
-  if (qualityStats.qualityTrend.length > 30) {
-    qualityStats.qualityTrend.shift();
-  }
-}
+  // Calculate average interval
+  const avgInterval = intervals.reduce((a, b) => a + b, 0) / intervals.length;
+  
+  // Convert to BPM
+  const bpm = Math.round(60000 / avgInterval);
+  
+  // Ensure it's in physiological range
+  return Math.min(maxBpm, Math.max(minBpm, bpm));
+};
 
 /**
- * Get diagnostics data
+ * Handle peak detection and update state
  */
-export function getDiagnosticsData() {
-  return [...diagnosticsData];
-}
+export const handlePeakDetection = (
+  value: number,
+  threshold: number,
+  minTimeBetweenPeaks: number,
+  lastPeakTimeRef: React.MutableRefObject<number | null>,
+  peakTimesRef: React.MutableRefObject<number[]>,
+  callback?: () => void
+): boolean => {
+  const now = Date.now();
+  
+  // Check if it's a peak
+  const isPeak = detectPeak(value, threshold, minTimeBetweenPeaks, lastPeakTimeRef.current);
+  
+  if (isPeak) {
+    // Update last peak time
+    lastPeakTimeRef.current = now;
+    
+    // Add to peak times array
+    peakTimesRef.current.push(now);
+    
+    // Keep array size manageable
+    if (peakTimesRef.current.length > 20) {
+      peakTimesRef.current.shift();
+    }
+    
+    // Execute callback if provided
+    if (callback) callback();
+  }
+  
+  return isPeak;
+};

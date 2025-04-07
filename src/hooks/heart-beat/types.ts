@@ -1,27 +1,24 @@
 
-import { RRAnalysisResult } from '../arrhythmia/types';
-
-export interface RRIntervalData {
-  intervals: number[];
-  lastPeakTime: number | null;
-}
+import { RRIntervalData } from '../../types/vital-signs';
+import { ArrhythmiaWindow } from '../../types/signal';
 
 export interface HeartBeatResult {
   bpm: number;
   confidence: number;
   isPeak: boolean;
-  filteredValue?: number;
-  arrhythmiaCount: number;
   isArrhythmia?: boolean;
-  rrData?: RRIntervalData;
+  arrhythmiaCount: number;
+  arrhythmiaWindows?: ArrhythmiaWindow[];
+  rrData: RRIntervalData;
 }
 
 export interface UseHeartBeatReturn {
   currentBPM: number;
   confidence: number;
+  isArrhythmia: boolean;
+  arrhythmiaWindows?: ArrhythmiaWindow[];
   processSignal: (value: number) => HeartBeatResult;
   reset: () => void;
-  isArrhythmia: boolean;
   requestBeep: (value: number) => boolean;
   startMonitoring: () => void;
   stopMonitoring: () => void;

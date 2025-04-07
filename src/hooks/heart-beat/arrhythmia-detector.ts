@@ -1,9 +1,13 @@
-
 /**
  * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
  */
 
 import { useCallback, useRef } from 'react';
+import { ArrhythmiaWindow } from '../../types/signal';
+
+// Constants for arrhythmia detection
+const MIN_RR_INTERVALS = 5;
+const ARRHYTHMIA_VARIATION_THRESHOLD = 0.2;
 
 /**
  * Hook for detecting arrhythmias from RR intervals
@@ -21,16 +25,28 @@ export function useArrhythmiaDetector() {
   // Arrhythmia counter
   const arrhythmiaCountRef = useRef<number>(0);
   
+  // Heart rate variability
+  const heartRateVariabilityRef = useRef<number>(0);
+  
+  // Stability counter
+  const stabilityCounterRef = useRef<number>(0);
+  
+  // Previous arrhythmia state
+  const lastIsArrhythmiaRef = useRef<boolean>(false);
+  
+  // Arrhythmia windows for visualization
+  const arrhythmiaWindowsRef = useRef<ArrhythmiaWindow[]>([]);
+  
   /**
    * Process RR intervals to detect arrhythmia
    */
   const processRRIntervals = useCallback((rrIntervals: number[]): boolean => {
-    if (rrIntervals.length < 3) {
+    if (rrIntervals.length < MIN_RR_INTERVALS) {
       return false;
     }
     
     // Get the most recent intervals
-    const recentIntervals = rrIntervals.slice(-5);
+    const recentIntervals = rrIntervals.slice(-MIN_RR_INTERVALS);
     rrIntervalsRef.current = recentIntervals;
     lastRRIntervalsRef.current = recentIntervals;
     
@@ -41,22 +57,67 @@ export function useArrhythmiaDetector() {
     const variations = recentIntervals.map(interval => Math.abs(interval - avgInterval) / avgInterval);
     const maxVariation = Math.max(...variations);
     
+    // Calculate heart rate variability (RMSSD)
+    let sumSquaredDiffs = 0;
+    for (let i = 1; i < recentIntervals.length; i++) {
+      const diff = recentIntervals[i] - recentIntervals[i-1];
+      sumSquaredDiffs += diff * diff;
+    }
+    heartRateVariabilityRef.current = Math.sqrt(sumSquaredDiffs / (recentIntervals.length - 1));
+    
     // Check for arrhythmia - high variation indicates arrhythmia
     // Medical threshold is typically around 0.2 or 20% variation
-    const isArrhythmia = maxVariation > 0.2;
+    const isArrhythmia = maxVariation > ARRHYTHMIA_VARIATION_THRESHOLD;
     
     // Update arrhythmia status
     if (isArrhythmia && !currentBeatIsArrhythmiaRef.current) {
       // New arrhythmia detected
       arrhythmiaCountRef.current++;
       currentBeatIsArrhythmiaRef.current = true;
+      
+      // Create arrhythmia window for visualization
+      const now = Date.now();
+      arrhythmiaWindowsRef.current.push({
+        start: now - 300,
+        end: now + 300
+      });
+      
+      // Keep only recent windows
+      if (arrhythmiaWindowsRef.current.length > 5) {
+        arrhythmiaWindowsRef.current.shift();
+      }
+      
+      // Reset stability counter
+      stabilityCounterRef.current = 0;
     } else if (!isArrhythmia) {
-      // Reset current arrhythmia flag
-      currentBeatIsArrhythmiaRef.current = false;
+      // Increment stability counter
+      stabilityCounterRef.current++;
+      
+      // Reset current arrhythmia flag after consistent normal rhythm
+      if (stabilityCounterRef.current > 10) {
+        currentBeatIsArrhythmiaRef.current = false;
+      }
     }
+    
+    // Update previous arrhythmia state
+    lastIsArrhythmiaRef.current = isArrhythmia;
     
     return isArrhythmia;
   }, []);
+  
+  /**
+   * Detect arrhythmia from intervals and return result
+   */
+  const detectArrhythmia = useCallback((rrIntervals: number[]) => {
+    const isArrhythmia = processRRIntervals(rrIntervals);
+    return {
+      isArrhythmia,
+      rrIntervals: lastRRIntervalsRef.current,
+      heartRateVariability: heartRateVariabilityRef.current,
+      arrhythmiaCount: arrhythmiaCountRef.current,
+      arrhythmiaWindows: arrhythmiaWindowsRef.current
+    };
+  }, [processRRIntervals]);
   
   /**
    * Reset the detector
@@ -66,6 +127,10 @@ export function useArrhythmiaDetector() {
     currentBeatIsArrhythmiaRef.current = false;
     lastRRIntervalsRef.current = [];
     arrhythmiaCountRef.current = 0;
+    heartRateVariabilityRef.current = 0;
+    stabilityCounterRef.current = 0;
+    lastIsArrhythmiaRef.current = false;
+    arrhythmiaWindowsRef.current = [];
   }, []);
   
   /**
@@ -75,11 +140,23 @@ export function useArrhythmiaDetector() {
     return arrhythmiaCountRef.current;
   }, []);
   
+  /**
+   * Get arrhythmia windows for visualization
+   */
+  const getArrhythmiaWindows = useCallback(() => {
+    return arrhythmiaWindowsRef.current;
+  }, []);
+  
   return {
     processRRIntervals,
+    detectArrhythmia,
     reset,
     getArrhythmiaCount,
+    getArrhythmiaWindows,
     currentBeatIsArrhythmiaRef,
-    lastRRIntervalsRef
+    lastRRIntervalsRef,
+    heartRateVariabilityRef,
+    stabilityCounterRef,
+    lastIsArrhythmiaRef
   };
 }
