@@ -1,3 +1,4 @@
+
 /**
  * Hook for processing vital signs signals
  * Now with diagnostics channel and prioritization system
@@ -103,7 +104,7 @@ export function useVitalSignsProcessor() {
         glucose: 0,
         lipids: {
           totalCholesterol: 0,
-          hydrationPercentage: 0
+          triglycerides: 0
         }
       };
     }
@@ -127,7 +128,10 @@ export function useVitalSignsProcessor() {
     const startTime = performance.now();
     
     // Procesar señal
-    const result = processorRef.current.process(value, rrData);
+    const result = processorRef.current.processSignal({
+      value,
+      rrData
+    });
     
     // Calcular tiempo de procesamiento
     const processingTime = performance.now() - startTime;
@@ -151,8 +155,7 @@ export function useVitalSignsProcessor() {
         signalStrength,
         arrhythmiaCount: processorRef.current.getArrhythmiaCounter(),
         spo2: result.spo2,
-        pressure: result.pressure,
-        hydration: result.lipids.hydrationPercentage
+        pressure: result.pressure
       });
     }
     

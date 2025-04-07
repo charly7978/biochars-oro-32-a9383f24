@@ -1,0 +1,151 @@
+
+/* Optimizaciones CSS para dispositivos móviles */
+
+:root {
+  --enable-animations: 1;
+  --enable-shadows: 1;
+  --enable-blur: 1;
+}
+
+/* Contenedor principal para vista móvil */
+.mobile-optimized {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+  overflow-x: hidden;
+}
+
+/* Optimizaciones de renderizado */
+.mobile-view {
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Modo de bajo consumo */
+.low-power-mode * {
+  transition: none !important;
+  animation: none !important;
+  box-shadow: none !important;
+  text-shadow: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+/* Media queries específicas para diferentes tamaños de móviles */
+@media (max-width: 320px) {
+  html {
+    font-size: 14px;
+  }
+  
+  .responsive-container {
+    padding: 0.5rem;
+  }
+}
+
+@media (min-width: 321px) and (max-width: 480px) {
+  html {
+    font-size: 15px;
+  }
+  
+  .responsive-container {
+    padding: 0.75rem;
+  }
+}
+
+@media (min-width: 481px) and (max-width: 768px) {
+  html {
+    font-size: 16px;
+  }
+  
+  .responsive-container {
+    padding: 1rem;
+  }
+}
+
+/* Optimizaciones para componentes específicos */
+.mobile-view .pagination-container {
+  padding: 0.5rem;
+  margin: 0.5rem 0;
+}
+
+.mobile-view .pagination-item {
+  margin: 0 0.25rem;
+}
+
+.mobile-view .pagination-link {
+  min-width: 32px;
+  min-height: 32px;
+  padding: 0.25rem;
+  font-size: 0.875rem;
+}
+
+.mobile-view .pagination-ellipsis {
+  min-width: 24px;
+  min-height: 24px;
+}
+
+/* Adaptaciones para cuando el teclado está abierto */
+.keyboard-open {
+  padding-bottom: 40vh;
+}
+
+/* Renderizado optimizado para dispositivos con menos rendimiento */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Optimizaciones para componentes con animaciones */
+.mobile-optimized .animate-fade,
+.mobile-optimized .animate-slide {
+  animation-duration: calc(var(--enable-animations) * var(--animation-duration, 300ms));
+  animation-fill-mode: both;
+}
+
+/* Prevenir deslizamiento para componentes de selección en móvil */
+.mobile-view select,
+.mobile-view .select-container {
+  -webkit-appearance: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%23007CB2%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.7rem top 50%;
+  background-size: 0.65rem auto;
+}
+
+/* Optimizaciones para tablas en móvil */
+.mobile-view table {
+  display: block;
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Ajustes de mapa de bits para evitar escalado borroso */
+.mobile-view img,
+.mobile-view canvas {
+  image-rendering: -webkit-optimize-contrast;
+  image-rendering: crisp-edges;
+}
+
+/* Optimizaciones para formularios */
+.mobile-view input,
+.mobile-view textarea,
+.mobile-view button {
+  font-size: 16px; /* Prevenir zoom automático en iOS */
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  border-radius: 0;
+  appearance: none;
+  -webkit-appearance: none;
+}

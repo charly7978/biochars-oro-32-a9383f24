@@ -1,13 +1,29 @@
 
-import React from "react";
+import React from 'react';
+import { Text, StyleSheet } from 'react-native';
 
-const AppTitle: React.FC = () => {
+const AppTitle = () => {
   return (
-    <h1 className="text-lg font-bold mt-4" style={{ marginLeft: "-4mm", marginTop: "8mm" }}>
-      <span className="text-white">Chars</span>
-      <span className="text-red-500">Healt</span>
-    </h1>
+    <Text style={styles.title}>
+      <Text style={styles.white}>Chars</Text>
+      <Text style={styles.red}>Healt</Text>
+    </Text>
   );
 };
+
+const styles = StyleSheet.create({
+  title: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginTop: 32,
+    marginLeft: -16,
+  },
+  white: {
+    color: '#fff',
+  },
+  red: {
+    color: '#ef4444',
+  },
+});
 
 export default AppTitle;
