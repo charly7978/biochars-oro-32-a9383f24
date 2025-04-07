@@ -1,4 +1,3 @@
-
 import React, { useEffect, useRef, useCallback, useState, memo } from 'react';
 import { Fingerprint, AlertCircle } from 'lucide-react';
 import { CircularBuffer, PPGDataPoint } from '../utils/CircularBuffer';
@@ -13,8 +12,8 @@ interface PPGSignalMeterProps {
   arrhythmiaStatus?: string;
   rawArrhythmiaData?: {
     timestamp: number;
-    rmssd: number;
-    rrVariation: number;
+    rmssd?: number;
+    rrVariation?: number;
   } | null;
   preserveResults?: boolean;
   isArrhythmia?: boolean;
@@ -279,17 +278,15 @@ const PPGSignalMeter = memo(({
   }, []);
 
   const drawGrid = useCallback((ctx: CanvasRenderingContext2D) => {
-    // Create a more sophisticated gradient background
     const gradient = ctx.createLinearGradient(0, 0, 0, CANVAS_HEIGHT);
-    gradient.addColorStop(0,'#c1ff82'); // Soft purple (top)
-    gradient.addColorStop(0.3, '#ffbddd'); // Soft peach (upper middle)
-    gradient.addColorStop(0.5, '#afd7ff'); // Soft green (lower middle)
-    gradient.addColorStop(1, '#4d4c6c'); // Soft blue (bottom)
+    gradient.addColorStop(0,'#c1ff82');
+    gradient.addColorStop(0.3, '#ffbddd');
+    gradient.addColorStop(0.5, '#afd7ff');
+    gradient.addColorStop(1, '#4d4c6c');
     
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
     
-    // Add subtle texture pattern
     ctx.globalAlpha = 0.03;
     for (let i = 0; i < CANVAS_WIDTH; i += 20) {
       for (let j = 0; j < CANVAS_HEIGHT; j += 20) {
@@ -299,12 +296,10 @@ const PPGSignalMeter = memo(({
     }
     ctx.globalAlpha = 1.0;
     
-    // Draw improved grid lines
     ctx.beginPath();
-    ctx.strokeStyle = 'rgba(60, 60, 60, 0.2)'; // More subtle grid lines
+    ctx.strokeStyle = 'rgba(60, 60, 60, 0.2)';
     ctx.lineWidth = 0.5;
     
-    // Draw vertical grid lines
     for (let x = 0; x <= CANVAS_WIDTH; x += GRID_SIZE_X) {
       ctx.moveTo(x, 0);
       ctx.lineTo(x, CANVAS_HEIGHT);
@@ -316,7 +311,6 @@ const PPGSignalMeter = memo(({
       }
     }
     
-    // Draw horizontal grid lines
     for (let y = 0; y <= CANVAS_HEIGHT; y += GRID_SIZE_Y) {
       ctx.moveTo(0, y);
       ctx.lineTo(CANVAS_WIDTH, y);
@@ -329,22 +323,19 @@ const PPGSignalMeter = memo(({
     }
     ctx.stroke();
     
-    // Draw center line (baseline) with improved style
     ctx.beginPath();
     ctx.strokeStyle = 'rgba(40, 40, 40, 0.4)';
     ctx.lineWidth = 1.5;
-    ctx.setLineDash([5, 3]); // Dashed line for the center
+    ctx.setLineDash([5, 3]);
     ctx.moveTo(0, CANVAS_HEIGHT / 2);
     ctx.lineTo(CANVAS_WIDTH, CANVAS_HEIGHT / 2);
     ctx.stroke();
-    ctx.setLineDash([]); // Reset to solid line
+    ctx.setLineDash([]);
     
-    // Draw arrhythmia status if present
     if (arrhythmiaStatus) {
       const [status, count] = arrhythmiaStatus.split('|');
       
-      if (status.includes("ARRITMIA") && count === "1" && !showArrhythmiaAlert) {
-        // Create a highlight box for the first arrhythmia
+      if (status.includes("ARRHYTHMIA") || status.includes("ARRITMIA")) {
         ctx.fillStyle = 'rgba(239, 68, 68, 0.1)';
         ctx.fillRect(30, 70, 350, 40);
         ctx.strokeStyle = 'rgba(239, 68, 68, 0.3)';
@@ -354,21 +345,38 @@ const PPGSignalMeter = memo(({
         ctx.fillStyle = '#ef4444';
         ctx.font = 'bold 24px Inter';
         ctx.textAlign = 'left';
-        ctx.fillText('¡PRIMERA ARRITMIA DETECTADA!', 45, 95);
-        setShowArrhythmiaAlert(true);
-      } else if (status.includes("ARRITMIA") && Number(count) > 1) {
-        // Create a highlight box for multiple arrhythmias
-        ctx.fillStyle = 'rgba(239, 68, 68, 0.1)';
-        ctx.fillRect(30, 70, 250, 40);
-        ctx.strokeStyle = 'rgba(239, 68, 68, 0.3)';
-        ctx.lineWidth = 2;
-        ctx.strokeRect(30, 70, 250, 40);
         
-        ctx.fillStyle = '#ef4444';
-        ctx.font = 'bold 24px Inter';
-        ctx.textAlign = 'left';
-        const redPeaksCount = peaksRef.current.filter(peak => peak.isArrhythmia).length;
-        ctx.fillText(`Arritmias detectadas: ${count}`, 45, 95);
+        if (count === "1" && !showArrhythmiaAlert) {
+          ctx.fillText('¡PRIMERA ARRITMIA DETECTADA!', 45, 95);
+          setShowArrhythmiaAlert(true);
+        } else if (Number(count) > 1) {
+          const redPeaksCount = peaksRef.current.filter(peak => peak.isArrhythmia).length;
+          ctx.fillText(`Arritmias detectadas: ${count}`, 45, 95);
+        }
+        
+        const now = Date.now();
+        const visibleSegments = arrhythmiaSegmentsRef.current.filter(seg => 
+          now - (seg.endTime || now) < WINDOW_WIDTH_MS
+        );
+        
+        if (visibleSegments.length > 0) {
+          ctx.fillStyle = 'rgba(239, 68, 68, 0.08)';
+          ctx.strokeStyle = 'rgba(239, 68, 68, 0.2)';
+          ctx.lineWidth = 1;
+          
+          for (const segment of visibleSegments) {
+            const startX = canvas.width - ((now - segment.startTime) * canvas.width / WINDOW_WIDTH_MS);
+            const endX = segment.endTime 
+              ? canvas.width - ((now - segment.endTime) * canvas.width / WINDOW_WIDTH_MS)
+              : canvas.width;
+            
+            if (startX < canvas.width && endX > 0) {
+              const segmentWidth = Math.min(endX, canvas.width) - Math.max(startX, 0);
+              ctx.fillRect(Math.max(startX, 0), 0, segmentWidth, canvas.height);
+              ctx.strokeRect(Math.max(startX, 0), 0, segmentWidth, canvas.height);
+            }
+          }
+        }
       }
     }
   }, [arrhythmiaStatus, showArrhythmiaAlert]);
@@ -496,7 +504,7 @@ const PPGSignalMeter = memo(({
     
     let currentIsArrhythmia = false;
     if (rawArrhythmiaData && 
-        arrhythmiaStatus?.includes("ARRITMIA") && 
+        arrhythmiaStatus?.includes("ARRHYTHMIA") && 
         now - rawArrhythmiaData.timestamp < 1000) {
       currentIsArrhythmia = true;
       lastArrhythmiaTime.current = now;
@@ -520,7 +528,7 @@ const PPGSignalMeter = memo(({
     
     if (points.length > 1) {
       let firstPoint = true;
-      let currentPathColor = '#0EA5E9'; // Default blue color
+      let currentPathColor = '#0EA5E9';
       
       for (let i = 1; i < points.length; i++) {
         const prevPoint = points[i - 1];
@@ -543,25 +551,20 @@ const PPGSignalMeter = memo(({
           currentPathColor = prevPoint.isArrhythmia ? '#DC2626' : '#0EA5E9';
         }
         
-        // If current point has different arrhythmia status than current path
         if ((point.isArrhythmia && currentPathColor === '#0EA5E9') || 
             (!point.isArrhythmia && currentPathColor === '#DC2626')) {
-          // Complete current path
           renderCtx.lineTo(x2, y2);
           renderCtx.stroke();
           
-          // Start new path with different color
           renderCtx.beginPath();
           currentPathColor = point.isArrhythmia ? '#DC2626' : '#0EA5E9';
           renderCtx.strokeStyle = currentPathColor;
           renderCtx.moveTo(x2, y2);
         } else {
-          // Continue current path
           renderCtx.lineTo(x2, y2);
         }
       }
       
-      // Complete the last path if needed
       if (!firstPoint) {
         renderCtx.stroke();
       }
@@ -583,13 +586,13 @@ const PPGSignalMeter = memo(({
             renderCtx.lineWidth = 3;
             renderCtx.stroke();
             
-            renderCtx.font = 'bold 18px Inter'; // Increased from 14px to 18px
+            renderCtx.font = 'bold 18px Inter';
             renderCtx.fillStyle = '#F97316';
             renderCtx.textAlign = 'center';
             renderCtx.fillText('ARRITMIA', x, y - 25);
           }
           
-          renderCtx.font = 'bold 16px Inter'; // Increased from 14px to 16px
+          renderCtx.font = 'bold 16px Inter';
           renderCtx.fillStyle = '#000000';
           renderCtx.textAlign = 'center';
           renderCtx.fillText(Math.abs(peak.value / verticalScale).toFixed(2), x, y - 15);
@@ -654,6 +657,12 @@ const PPGSignalMeter = memo(({
           imageRendering: 'crisp-edges'
         }}
       />
+
+      {(isArrhythmia || showArrhythmiaAlert) && (
+        <div className="absolute top-20 right-5 animate-pulse">
+          <AlertCircle size={36} className="text-red-500" />
+        </div>
+      )}
 
       <div className="absolute top-0 left-0 right-0 p-1 flex justify-between items-center bg-transparent z-10 pt-3">
         <div className="flex items-center gap-2 ml-2">

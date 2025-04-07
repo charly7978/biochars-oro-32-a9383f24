@@ -40,4 +40,9 @@ export interface SignalProcessingOptions {
   minPeakDistance?: number;
   windowSize?: number;
   threshold?: number;
+  adaptationRate?: number;
+  amplificationFactor?: number;
+  qualityThreshold?: number;
+  fingerDetectionSensitivity?: number;
+  predictionHorizon?: number;
 }
