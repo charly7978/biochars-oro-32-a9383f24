@@ -1,11 +1,11 @@
 
 /**
- * Utility functions for arrhythmia calculations
+ * Calculations for arrhythmia detection
  */
 
 /**
  * Calculate RMSSD (Root Mean Square of Successive Differences)
- * A common measure for heart rate variability
+ * Measures short-term variability in RR intervals
  */
 export function calculateRMSSD(intervals: number[]): number {
   if (intervals.length < 2) return 0;
@@ -20,46 +20,21 @@ export function calculateRMSSD(intervals: number[]): number {
 }
 
 /**
- * Calculate coefficient of variation for RR intervals
- * Higher values indicate more variability
+ * Calculate RR variation as coefficient of variation
+ * Measures overall variability in RR intervals
  */
 export function calculateRRVariation(intervals: number[]): number {
   if (intervals.length < 2) return 0;
   
   const mean = intervals.reduce((sum, val) => sum + val, 0) / intervals.length;
-  
   let sumSquaredDeviations = 0;
+  
   for (let i = 0; i < intervals.length; i++) {
     const deviation = intervals[i] - mean;
     sumSquaredDeviations += deviation * deviation;
   }
   
+  // Calculate coefficient of variation
   const standardDeviation = Math.sqrt(sumSquaredDeviations / intervals.length);
   return (standardDeviation / mean) * 100;
-}
-
-/**
- * Check if heart rate is outside normal range
- */
-export function isAbnormalHeartRate(bpm: number): boolean {
-  return bpm < 40 || bpm > 150;
-}
-
-/**
- * Detect if intervals show premature beats
- */
-export function detectPrematureBeats(intervals: number[]): boolean {
-  if (intervals.length < 3) return false;
-  
-  const mean = intervals.reduce((sum, val) => sum + val, 0) / intervals.length;
-  
-  for (let i = 0; i < intervals.length; i++) {
-    // A premature beat typically causes one interval to be much shorter
-    // and the next one to be longer
-    if (intervals[i] < mean * 0.7) {
-      return true;
-    }
-  }
-  
-  return false;
 }
