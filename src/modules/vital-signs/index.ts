@@ -1,4 +1,3 @@
-
 /**
  * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
  * 
@@ -7,7 +6,7 @@
 
 // Export the traditional processor
 export { VitalSignsProcessor } from './VitalSignsProcessor';
-export type { VitalSignsResult } from './VitalSignsProcessor';
+export type { VitalSignsResult as TraditionalVitalSignsResult } from './types/vital-signs-result';
 
 // Export the new modular processor
 export { ModularVitalSignsProcessor } from './ModularVitalSignsProcessor';
@@ -39,7 +38,8 @@ export * from './specialized/CardiacProcessor';
 
 // Export shared signal utils and arrhythmia types
 export * from './arrhythmia/types';
-export * from './shared-signal-utils';
+export * from './processors/signal-quality';
+export * from './processors/heart-rate-detector';
 
 // Export specific utility functions
 export { 
@@ -62,5 +62,6 @@ export {
   calculatePerfusionIndex
 } from './utils';
 
-// Export the blood pressure processor for direct access
-export { BloodPressureProcessor } from './blood-pressure-processor';
+// Ensure other necessary exports remain
+export * from './types/vital-signs-result';
+export * from './arrhythmia/types';

@@ -1,3 +1,4 @@
+
 /**
  * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
  * 
@@ -9,6 +10,7 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 import { PrecisionVitalSignsProcessor, PrecisionVitalSignsResult } from '../modules/vital-signs/PrecisionVitalSignsProcessor';
 import { CalibrationReference } from '../modules/vital-signs/calibration/CalibrationManager';
 import { useSignalProcessing } from './useSignalProcessing';
+import type { ProcessedSignal } from '../types/signal';
 
 /**
  * Estado del hook de signos vitales de precisión
@@ -96,20 +98,14 @@ export function usePrecisionVitalSigns() {
   }, [signalProcessing]);
   
   // Procesar señal
-  const processSignal = useCallback((signalValue: number): PrecisionVitalSignsResult | null => {
+  const processSignal = useCallback((signal: ProcessedSignal): PrecisionVitalSignsResult | null => {
     if (!processorRef.current || !state.isProcessing) {
       return null;
     }
     
     try {
-      // Create signal object with required properties
-      const signalObject = {
-        quality: signalProcessing.signalQuality,
-        filteredValue: signalValue
-      };
-      
       // Procesar señal con precisión mejorada
-      const result = processorRef.current.processSignal(signalObject);
+      const result = processorRef.current.processSignal(signal);
       
       // Actualizar estado con el resultado
       setState(prev => ({
@@ -131,7 +127,7 @@ export function usePrecisionVitalSigns() {
       console.error("usePrecisionVitalSigns: Error procesando señal", error);
       return null;
     }
-  }, [state.isProcessing, signalProcessing.signalQuality]);
+  }, [state.isProcessing]);
   
   // Escuchar cambios en la señal procesada
   useEffect(() => {
@@ -139,15 +135,24 @@ export function usePrecisionVitalSigns() {
       return;
     }
     
-    // Process the signal with the current filtered value
-    if (signalProcessing.lastResult) {
-      processSignal(signalProcessing.lastResult.filteredValue);
-    }
+    // Crear objeto de señal procesada
+    const processedSignal: ProcessedSignal = {
+      timestamp: Date.now(),
+      rawValue: signalProcessing.rawValue || 0,
+      filteredValue: signalProcessing.filteredValue || 0,
+      quality: signalProcessing.signalQuality,
+      fingerDetected: signalProcessing.fingerDetected,
+      perfusionIndex: 0,
+      roi: { x: 0, y: 0, width: 0, height: 0 }
+    };
+    
+    // Procesar señal
+    processSignal(processedSignal);
     
   }, [
     state.isProcessing,
+    signalProcessing.filteredValue,
     signalProcessing.fingerDetected,
-    signalProcessing.lastResult,
     signalProcessing.signalQuality,
     processSignal
   ]);
@@ -197,7 +202,7 @@ export function usePrecisionVitalSigns() {
     if (!processorRef.current) return;
     
     processorRef.current.reset();
-    // Removed signalProcessing.reset() call as it doesn't exist
+    signalProcessing.reset();
     
     setState({
       isProcessing: false,
@@ -214,7 +219,7 @@ export function usePrecisionVitalSigns() {
     });
     
     console.log("usePrecisionVitalSigns: Estado reiniciado");
-  }, []);
+  }, [signalProcessing]);
   
   // Obtener diagnósticos
   const getDiagnostics = useCallback(() => {
