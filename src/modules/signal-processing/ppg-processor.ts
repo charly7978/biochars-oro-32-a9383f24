@@ -148,8 +148,8 @@ export class PPGSignalProcessor implements SignalProcessor<ProcessedPPGSignal> {
    * Configura el procesador con opciones personalizadas
    */
   public configure(options: SignalProcessingOptions): void {
-    if (options.amplification !== undefined || options.amplificationFactor !== undefined) {
-      this.amplificationFactor = options.amplification || options.amplificationFactor || 1.2;
+    if (options.amplificationFactor !== undefined) {
+      this.amplificationFactor = options.amplificationFactor;
     }
     
     if (options.filterStrength !== undefined) {

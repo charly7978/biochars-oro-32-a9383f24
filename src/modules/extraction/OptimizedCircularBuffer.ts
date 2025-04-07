@@ -1,412 +1,230 @@
 
 /**
- * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
- * 
- * Optimized circular buffer implementation for signal extraction and processing
- * Provides efficient storage and retrieval of time-series data with error prevention
+ * Buffer circular optimizado para procesamiento de señales PPG
+ * Mejora el rendimiento y reduce la presión sobre el recolector de basura
  */
 
-import { logError, ErrorLevel } from '@/utils/debugUtils';
-
-// Type definitions for buffer entries
-export interface BufferEntry {
-  value: number;
-  timestamp: number;
-}
+import { PPGDataPoint, TimestampedPPGData } from '../../types/signal';
 
 /**
- * Optimized circular buffer for efficient time-series data storage
- * with built-in error prevention and anomaly detection
+ * Buffer circular optimizado para datos PPG
+ * Implementa un buffer de tamaño fijo preasignado en memoria
  */
-export class OptimizedCircularBuffer {
-  private buffer: BufferEntry[];
+export class OptimizedCircularBuffer<T extends TimestampedPPGData = TimestampedPPGData> {
+  private buffer: Array<T | null>;
   private head: number = 0;
   private tail: number = 0;
-  private count: number = 0;
+  private _size: number = 0;
   private readonly capacity: number;
-  private readonly name: string;
-  
-  // Statistics for error detection
-  private maxValue: number = -Infinity;
-  private minValue: number = Infinity;
-  private sum: number = 0;
-  private sumSquared: number = 0;
-  
-  // Error prevention
-  private errorCount: number = 0;
-  private readonly MAX_ERRORS: number = 10;
-  private lastErrorTime: number = 0;
-  private readonly ERROR_RESET_INTERVAL: number = 60000; // 1 minute
-  
-  // Error handlers
-  private onBufferOverflow?: () => void;
-  private onAnomalyDetected?: (entry: BufferEntry, stats: BufferStats) => void;
-  private onErrorThresholdReached?: () => void;
   
   /**
-   * Create a new optimized circular buffer with error prevention
+   * Constructor del buffer optimizado
+   * @param capacity Capacidad máxima del buffer
    */
-  constructor(capacity: number, name: string = "DefaultBuffer") {
-    this.capacity = Math.max(1, capacity);
-    this.buffer = new Array<BufferEntry>(this.capacity);
-    this.name = name;
+  constructor(capacity: number) {
+    if (capacity <= 0) {
+      throw new Error('La capacidad del buffer debe ser mayor que cero');
+    }
     
-    logError(`Created OptimizedCircularBuffer: ${name} with capacity ${capacity} and error prevention`, 
-      ErrorLevel.INFO, 
-      "OptimizedBuffer"
-    );
+    // Preasignar el array completo
+    this.buffer = new Array<T | null>(capacity).fill(null);
+    this.capacity = capacity;
   }
   
   /**
-   * Add a value to the buffer with error prevention
+   * Añade un dato al buffer
+   * Si el buffer está lleno, sobrescribe el dato más antiguo
    */
-  public push(value: number): boolean {
-    const timestamp = Date.now();
-    return this.pushWithTimestamp(value, timestamp);
-  }
-  
-  /**
-   * Add a value with a specific timestamp with error prevention
-   * Returns true if successful, false if value was rejected as anomaly
-   */
-  public pushWithTimestamp(value: number, timestamp: number): boolean {
-    // Create entry
-    const entry: BufferEntry = { value, timestamp };
-    
-    // Basic validation
-    if (isNaN(value) || !isFinite(value)) {
-      this.registerError(`Invalid value: ${value}`);
-      return false;
-    }
-    
-    // Check for extreme values (prevent crashes)
-    if (Math.abs(value) > 1e6) {
-      this.registerError(`Extreme value detected: ${value}`);
-      return false;
-    }
-    
-    // Check for anomalies before adding
-    if (this.count > 5) {
-      const stats = this.getStats();
-      const isAnomaly = this.detectAnomaly(entry, stats);
-      
-      if (isAnomaly) {
-        if (this.onAnomalyDetected) {
-          this.onAnomalyDetected(entry, stats);
-        }
-        
-        // Log anomaly detection
-        logError(`Anomaly rejected in ${this.name}: value=${value}, avg=${stats.average.toFixed(2)}, stddev=${stats.stdDev.toFixed(2)}`,
-          ErrorLevel.WARNING,
-          "OptimizedBuffer"
-        );
-        
-        return false;
-      }
-    }
-    
-    // Check if buffer is full
-    if (this.count === this.capacity) {
-      // Remove oldest entry and update statistics
-      const oldEntry = this.buffer[this.tail];
-      if (oldEntry) {
-        this.updateStatsRemove(oldEntry.value);
-      }
-      
-      // Notify about overflow if handler is set
-      if (this.onBufferOverflow) {
-        this.onBufferOverflow();
-      }
-      
-      // Move tail pointer
-      this.tail = (this.tail + 1) % this.capacity;
-      this.count--;
-    }
-    
-    // Add new entry
-    this.buffer[this.head] = entry;
+  public push(item: T): void {
+    this.buffer[this.head] = item;
     this.head = (this.head + 1) % this.capacity;
-    this.count++;
     
-    // Update statistics
-    this.updateStatsAdd(value);
-    
-    return true;
+    if (this._size === this.capacity) {
+      this.tail = (this.tail + 1) % this.capacity;
+    } else {
+      this._size++;
+    }
   }
   
   /**
-   * Get all values as array with error prevention
+   * Obtiene un elemento en una posición específica
+   * @param index Índice relativo al elemento más antiguo (0 es el más antiguo)
    */
-  public getValues(): number[] {
-    const result: number[] = [];
+  public get(index: number): T | null {
+    if (index < 0 || index >= this._size) {
+      return null;
+    }
     
-    if (this.count === 0) return result;
+    const actualIndex = (this.tail + index) % this.capacity;
+    return this.buffer[actualIndex];
+  }
+  
+  /**
+   * Obtiene todos los elementos válidos del buffer como un array
+   */
+  public getPoints(): T[] {
+    const result: T[] = [];
+    let current = this.tail;
     
-    try {
-      let current = this.tail;
-      for (let i = 0; i < this.count; i++) {
-        const entry = this.buffer[current];
-        if (entry) {
-          result.push(entry.value);
-        }
-        current = (current + 1) % this.capacity;
+    for (let i = 0; i < this._size; i++) {
+      const item = this.buffer[current];
+      if (item !== null) {
+        result.push(item);
       }
-    } catch (error) {
-      this.registerError(`Error retrieving values: ${error}`);
-      return [];
+      current = (current + 1) % this.capacity;
     }
     
     return result;
   }
   
   /**
-   * Get all entries as array with error prevention
-   */
-  public getEntries(): BufferEntry[] {
-    const result: BufferEntry[] = [];
-    
-    if (this.count === 0) return result;
-    
-    try {
-      let current = this.tail;
-      for (let i = 0; i < this.count; i++) {
-        const entry = this.buffer[current];
-        if (entry) {
-          result.push({...entry}); // Return copy to prevent external modification
-        }
-        current = (current + 1) % this.capacity;
-      }
-    } catch (error) {
-      this.registerError(`Error retrieving entries: ${error}`);
-      return [];
-    }
-    
-    return result;
-  }
-  
-  /**
-   * Get newest N entries with error prevention
-   */
-  public getNewestN(n: number): BufferEntry[] {
-    if (this.count === 0 || n <= 0) return [];
-    
-    try {
-      const count = Math.min(n, this.count);
-      const result: BufferEntry[] = [];
-      
-      let current = this.head - 1;
-      if (current < 0) current = this.capacity - 1;
-      
-      for (let i = 0; i < count; i++) {
-        const entry = this.buffer[current];
-        if (entry) {
-          result.unshift({...entry}); // Add to front to maintain chronological order
-        }
-        current = (current - 1 + this.capacity) % this.capacity;
-      }
-      
-      return result;
-    } catch (error) {
-      this.registerError(`Error retrieving newest entries: ${error}`);
-      return [];
-    }
-  }
-  
-  /**
-   * Register an error and handle error threshold
-   */
-  private registerError(message: string): void {
-    const now = Date.now();
-    
-    // Reset error count if enough time has passed
-    if (now - this.lastErrorTime > this.ERROR_RESET_INTERVAL) {
-      this.errorCount = 0;
-    }
-    
-    this.errorCount++;
-    this.lastErrorTime = now;
-    
-    // Log the error
-    logError(`Buffer error (${this.errorCount}/${this.MAX_ERRORS}) in ${this.name}: ${message}`, 
-      ErrorLevel.ERROR, 
-      "OptimizedBuffer"
-    );
-    
-    // Check if error threshold reached
-    if (this.errorCount >= this.MAX_ERRORS) {
-      logError(`Error threshold reached in ${this.name}, taking corrective action`, 
-        ErrorLevel.CRITICAL, 
-        "OptimizedBuffer"
-      );
-      
-      // Execute error threshold handler if exists
-      if (this.onErrorThresholdReached) {
-        this.onErrorThresholdReached();
-      }
-      
-      // Reset buffer as a last resort
-      this.clear();
-    }
-  }
-  
-  /**
-   * Set handler for error threshold reached
-   */
-  public setErrorThresholdHandler(handler: () => void): void {
-    this.onErrorThresholdReached = handler;
-  }
-  
-  /**
-   * Clear the buffer and reset statistics
+   * Limpia el buffer
    */
   public clear(): void {
+    this.buffer.fill(null);
     this.head = 0;
     this.tail = 0;
-    this.count = 0;
-    this.maxValue = -Infinity;
-    this.minValue = Infinity;
-    this.sum = 0;
-    this.sumSquared = 0;
-    this.errorCount = 0;
-    
-    logError(`Cleared buffer: ${this.name}`, 
-      ErrorLevel.INFO, 
-      "OptimizedBuffer"
-    );
+    this._size = 0;
   }
   
   /**
-   * Set callback for buffer overflow
+   * Retorna el número de elementos en el buffer
    */
-  public setOverflowHandler(handler: () => void): void {
-    this.onBufferOverflow = handler;
+  public size(): number {
+    return this._size;
   }
   
   /**
-   * Set callback for anomaly detection
+   * Comprueba si el buffer está vacío
    */
-  public setAnomalyHandler(handler: (entry: BufferEntry, stats: BufferStats) => void): void {
-    this.onAnomalyDetected = handler;
+  public isEmpty(): boolean {
+    return this._size === 0;
   }
   
   /**
-   * Get count of entries in buffer
+   * Comprueba si el buffer está lleno
    */
-  public getCount(): number {
-    return this.count;
+  public isFull(): boolean {
+    return this._size === this.capacity;
   }
   
   /**
-   * Get capacity of buffer
+   * Obtiene la capacidad del buffer
    */
   public getCapacity(): number {
     return this.capacity;
   }
   
   /**
-   * Get buffer statistics
+   * Obtiene los valores de los datos en el buffer como un array
    */
-  public getStats(): BufferStats {
-    if (this.count === 0) {
-      return {
-        count: 0,
-        min: 0,
-        max: 0,
-        range: 0,
-        average: 0,
-        variance: 0,
-        stdDev: 0
-      };
+  public getValues(): number[] {
+    return this.getPoints().map(point => point.value);
+  }
+  
+  /**
+   * Obtiene los últimos N elementos del buffer
+   */
+  public getLastN(n: number): T[] {
+    const count = Math.min(n, this._size);
+    const result: T[] = [];
+    
+    for (let i = 0; i < count; i++) {
+      const index = (this.head - 1 - i + this.capacity) % this.capacity;
+      const item = this.buffer[index];
+      if (item !== null) {
+        result.unshift(item); // Añadir al principio para mantener el orden
+      }
     }
     
-    const average = this.sum / this.count;
-    const variance = (this.sumSquared / this.count) - (average * average);
-    const stdDev = Math.sqrt(Math.max(0, variance));
+    return result;
+  }
+  
+  /**
+   * Crea un buffer optimizado a partir de un buffer circular estándar
+   * @param circularBuffer Buffer circular estándar
+   */
+  public static fromCircularBuffer<U extends TimestampedPPGData>(circularBuffer: any): OptimizedCircularBuffer<U> {
+    const points = circularBuffer.getPoints ? circularBuffer.getPoints() : [];
+    const optimizedBuffer = new OptimizedCircularBuffer<U>(Math.max(points.length, 10));
     
+    // Transferir los datos al nuevo buffer
+    points.forEach((point: any) => {
+      if (!point) return;
+      
+      // Ensure point has all required properties
+      const enhancedPoint = { ...point } as U;
+      
+      // Garantizar que tanto time como timestamp existan
+      if ('timestamp' in point && !('time' in point)) {
+        (enhancedPoint as unknown as { time: number }).time = point.timestamp;
+      } else if ('time' in point && !('timestamp' in point)) {
+        (enhancedPoint as unknown as { timestamp: number }).timestamp = point.time;
+      }
+      
+      optimizedBuffer.push(enhancedPoint);
+    });
+    
+    return optimizedBuffer;
+  }
+  
+  /**
+   * Transfiere los datos del buffer a un ArrayBuffer para transferencia eficiente
+   * Implementa el patrón Transferable Objects para mejorar rendimiento
+   */
+  public toTransferable(): { buffer: ArrayBuffer, metadata: { head: number, tail: number, size: number, capacity: number } } {
+    const points = this.getPoints();
+    
+    // Crear un buffer tipado para la transferencia
+    const bufferSize = points.length * 2; // 2 valores por punto (timestamp y value)
+    const buffer = new ArrayBuffer(bufferSize * Float64Array.BYTES_PER_ELEMENT);
+    const view = new Float64Array(buffer);
+    
+    // Llenar el buffer con los datos
+    points.forEach((point, i) => {
+      view[i * 2] = point.timestamp;
+      view[i * 2 + 1] = point.value;
+    });
+    
+    // Devolver el buffer y metadata para reconstrucción
     return {
-      count: this.count,
-      min: this.minValue,
-      max: this.maxValue,
-      range: this.maxValue - this.minValue,
-      average,
-      variance,
-      stdDev
+      buffer,
+      metadata: {
+        head: this.head,
+        tail: this.tail,
+        size: this._size,
+        capacity: this.capacity
+      }
     };
   }
   
   /**
-   * Detect anomalies in the data
+   * Crea un buffer a partir de un ArrayBuffer transferido
    */
-  private detectAnomaly(entry: BufferEntry, stats: BufferStats): boolean {
-    if (this.count < 5) return false; // Need enough data for detection
+  public static fromTransferable<T extends TimestampedPPGData>(
+    buffer: ArrayBuffer, 
+    metadata: { head: number, tail: number, size: number, capacity: number }
+  ): OptimizedCircularBuffer<T> {
+    const view = new Float64Array(buffer);
+    const result = new OptimizedCircularBuffer<T>(metadata.capacity);
     
-    const { value } = entry;
-    const { average, stdDev } = stats;
+    // Reconstruir el estado
+    result.head = metadata.head;
+    result.tail = metadata.tail;
+    result._size = metadata.size;
     
-    // Z-score based anomaly detection
-    const zScore = Math.abs(value - average) / (stdDev || 1);
-    const isAnomaly = zScore > 3.5; // More than 3.5 standard deviations
-    
-    return isAnomaly;
-  }
-  
-  /**
-   * Update statistics when adding a value
-   */
-  private updateStatsAdd(value: number): void {
-    this.maxValue = Math.max(this.maxValue, value);
-    this.minValue = Math.min(this.minValue, value);
-    this.sum += value;
-    this.sumSquared += value * value;
-  }
-  
-  /**
-   * Update statistics when removing a value
-   */
-  private updateStatsRemove(value: number): void {
-    this.sum -= value;
-    this.sumSquared -= value * value;
-    
-    // Recalculate min/max if the removed value was min or max
-    if (value === this.minValue || value === this.maxValue) {
-      this.recalculateMinMax();
-    }
-  }
-  
-  /**
-   * Recalculate min and max values from buffer
-   */
-  private recalculateMinMax(): void {
-    this.minValue = Infinity;
-    this.maxValue = -Infinity;
-    
-    let current = this.tail;
-    for (let i = 0; i < this.count; i++) {
-      const entry = this.buffer[current];
-      if (entry) {
-        this.minValue = Math.min(this.minValue, entry.value);
-        this.maxValue = Math.max(this.maxValue, entry.value);
-      }
-      current = (current + 1) % this.capacity;
+    // Llenar el buffer con los datos del ArrayBuffer
+    for (let i = 0; i < view.length / 2; i++) {
+      const point = {
+        timestamp: view[i * 2],
+        value: view[i * 2 + 1],
+        time: view[i * 2] // Add time property to satisfy PPGDataPoint constraint
+      } as T;
+      
+      const index = (result.tail + i) % result.capacity;
+      result.buffer[index] = point;
     }
     
-    // Reset to defaults if buffer is empty
-    if (this.count === 0) {
-      this.minValue = Infinity;
-      this.maxValue = -Infinity;
-    }
+    return result;
   }
-}
-
-/**
- * Buffer statistics interface
- */
-export interface BufferStats {
-  count: number;
-  min: number;
-  max: number;
-  range: number;
-  average: number;
-  variance: number;
-  stdDev: number;
 }

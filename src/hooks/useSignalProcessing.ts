@@ -7,8 +7,8 @@
  */
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { 
-  createPPGSignalProcessor, 
-  createHeartbeatProcessor,
+  PPGSignalProcessor, 
+  HeartbeatProcessor,
   ProcessedPPGSignal,
   ProcessedHeartbeatSignal,
   SignalProcessingOptions,
@@ -43,7 +43,11 @@ export interface ProcessedSignalResult {
  * Hook para el procesamiento central de señales
  */
 export function useSignalProcessing() {
-  // State de procesamiento
+  // Instancias de procesadores
+  const ppgProcessorRef = useRef<PPGSignalProcessor | null>(null);
+  const heartbeatProcessorRef = useRef<HeartbeatProcessor | null>(null);
+  
+  // Estado de procesamiento
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [signalQuality, setSignalQuality] = useState<number>(0);
   const [fingerDetected, setFingerDetected] = useState<boolean>(false);
@@ -56,20 +60,16 @@ export function useSignalProcessing() {
   // Contador de frames procesados
   const processedFramesRef = useRef<number>(0);
   
-  // Refs para procesadores
-  const ppgProcessorRef = useRef<any>(null);
-  const heartbeatProcessorRef = useRef<any>(null);
-
   // Crear procesadores si no existen
   useEffect(() => {
     if (!ppgProcessorRef.current) {
       console.log("useSignalProcessing: Creando procesador PPG");
-      ppgProcessorRef.current = createPPGSignalProcessor();
+      ppgProcessorRef.current = new PPGSignalProcessor();
     }
     
     if (!heartbeatProcessorRef.current) {
       console.log("useSignalProcessing: Creando procesador de latidos");
-      heartbeatProcessorRef.current = createHeartbeatProcessor();
+      heartbeatProcessorRef.current = new HeartbeatProcessor();
     }
     
     return () => {
@@ -110,22 +110,37 @@ export function useSignalProcessing() {
         if (recentBpmValues.current.length > 10) {
           recentBpmValues.current.shift();
         }
+      }
+      
+      // Calcular BPM promedio (con filtrado de valores extremos)
+      let averageBPM: number | null = null;
+      
+      if (recentBpmValues.current.length >= 3) {
+        // Ordenar para eliminar extremos
+        const sortedBPMs = [...recentBpmValues.current].sort((a, b) => a - b);
         
-        // Calcular promedio de BPM
-        if (recentBpmValues.current.length > 0) {
-          const sum = recentBpmValues.current.reduce((acc, val) => acc + val, 0);
-          const avgBpm = sum / recentBpmValues.current.length;
+        // Usar el 80% central de los valores
+        const startIdx = Math.floor(sortedBPMs.length * 0.1);
+        const endIdx = Math.ceil(sortedBPMs.length * 0.9);
+        const centralBPMs = sortedBPMs.slice(startIdx, endIdx);
+        
+        // Calcular promedio
+        if (centralBPMs.length > 0) {
+          const sum = centralBPMs.reduce((a, b) => a + b, 0);
+          averageBPM = Math.round(sum / centralBPMs.length);
           
-          // Actualizar estado de heartRate
-          setHeartRate(avgBpm);
+          // Actualizar estado de BPM si tenemos valor y buena calidad
+          if (averageBPM > 0 && ppgResult.quality > 40) {
+            setHeartRate(averageBPM);
+          }
         }
       }
       
-      // Crear resultado integrado
+      // Generar resultado combinado
       const result: ProcessedSignalResult = {
         timestamp: ppgResult.timestamp,
         
-        // Valores de PPG
+        // Valores de señal PPG
         rawValue: ppgResult.rawValue,
         filteredValue: ppgResult.filteredValue,
         normalizedValue: ppgResult.normalizedValue,
@@ -140,7 +155,7 @@ export function useSignalProcessing() {
         isPeak: heartbeatResult.isPeak,
         peakConfidence: heartbeatResult.peakConfidence,
         instantaneousBPM: heartbeatResult.instantaneousBPM,
-        averageBPM: heartbeatResult.averageBPM,
+        averageBPM,
         rrInterval: heartbeatResult.rrInterval,
         heartRateVariability: heartbeatResult.heartRateVariability
       };
@@ -150,56 +165,76 @@ export function useSignalProcessing() {
       
       return result;
     } catch (error) {
-      console.error("Error en procesamiento de señal:", error);
+      console.error("Error procesando valor:", error);
       return null;
     }
   }, [isProcessing]);
   
   /**
-   * Inicia el procesamiento de señales
+   * Inicia el procesamiento de señal
    */
   const startProcessing = useCallback(() => {
+    if (!ppgProcessorRef.current || !heartbeatProcessorRef.current) {
+      console.error("No se pueden iniciar los procesadores");
+      return;
+    }
+    
     console.log("useSignalProcessing: Iniciando procesamiento");
     
-    // Resetear detectores y procesadores
+    // Resetear procesadores
+    ppgProcessorRef.current.reset();
+    heartbeatProcessorRef.current.reset();
     resetFingerDetector();
-    if (ppgProcessorRef.current) {
-      ppgProcessorRef.current.reset();
-    }
-    if (heartbeatProcessorRef.current) {
-      heartbeatProcessorRef.current.reset();
-    }
     
-    // Resetear estado
+    // Limpiar estados
+    setSignalQuality(0);
+    setFingerDetected(false);
+    setHeartRate(0);
     recentBpmValues.current = [];
     processedFramesRef.current = 0;
     
+    // Iniciar procesamiento
     setIsProcessing(true);
-    setSignalQuality(0);
-    setHeartRate(0);
   }, []);
   
   /**
-   * Detiene el procesamiento de señales
+   * Detiene el procesamiento de señal
    */
   const stopProcessing = useCallback(() => {
     console.log("useSignalProcessing: Deteniendo procesamiento");
     setIsProcessing(false);
   }, []);
   
+  /**
+   * Configura los procesadores con opciones personalizadas
+   */
+  const configureProcessors = useCallback((options: SignalProcessingOptions) => {
+    if (ppgProcessorRef.current) {
+      ppgProcessorRef.current.configure(options);
+    }
+    
+    if (heartbeatProcessorRef.current) {
+      heartbeatProcessorRef.current.configure(options);
+    }
+  }, []);
+  
   return {
+    // Estados
     isProcessing,
-    lastResult,
     signalQuality,
-    heartRate,
     fingerDetected,
+    heartRate,
+    lastResult,
     processedFrames: processedFramesRef.current,
     
-    // Métodos
+    // Acciones
     processValue,
     startProcessing,
-    stopProcessing
+    stopProcessing,
+    configureProcessors,
+    
+    // Procesadores
+    ppgProcessor: ppgProcessorRef.current,
+    heartbeatProcessor: heartbeatProcessorRef.current
   };
 }
-
-export default useSignalProcessing;

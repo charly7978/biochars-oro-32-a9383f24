@@ -2,93 +2,84 @@
 /**
  * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
  * 
- * Signal processing types
+ * Type definitions for signal processing module
  */
 
 /**
- * Signal processing options
+ * Options for signal processors
  */
 export interface SignalProcessingOptions {
-  windowSize?: number;
-  sampleRate?: number;
-  filterCutoff?: number;
-  amplification?: number;
+  // Signal amplification factor
+  amplificationFactor?: number;
+  
+  // Filter strength (0-1)
+  filterStrength?: number;
+  
+  // Quality threshold for detection
+  qualityThreshold?: number;
+  
+  // Sensitivity for finger detection
+  fingerDetectionSensitivity?: number;
+  
+  // Use adaptive control for processing
   useAdaptiveControl?: boolean;
-  adaptationRate?: number;
+  
+  // Use prediction to enhance quality
+  qualityEnhancedByPrediction?: boolean;
+  
+  // Prediction horizon in samples
   predictionHorizon?: number;
   
-  // Additional properties used by processors
-  amplificationFactor?: number;
-  filterStrength?: number;
-  qualityThreshold?: number;
-  fingerDetectionSensitivity?: number;
-  qualityEnhancedByPrediction?: boolean;
+  // Adaptation rate
+  adaptationRate?: number;
 }
 
 /**
- * Processed PPG Signal
+ * Generic interface for signal processors
+ */
+export interface SignalProcessor<T> {
+  processSignal(value: number): T;
+  configure(options: Partial<SignalProcessingOptions>): void;
+  reset(): void;
+}
+
+/**
+ * Result from PPG signal processing
  */
 export interface ProcessedPPGSignal {
+  // Timestamp
   timestamp: number;
+  
+  // Signal values
   rawValue: number;
   filteredValue: number;
   normalizedValue: number;
   amplifiedValue: number;
+  
+  // Quality metrics
   quality: number;
   fingerDetected: boolean;
   signalStrength: number;
 }
 
 /**
- * Processed Heartbeat Signal
+ * Result from heartbeat processing
  */
 export interface ProcessedHeartbeatSignal {
+  // Timestamp
   timestamp: number;
+  
+  // Input value
   value: number;
+  
+  // Peak detection
   isPeak: boolean;
   peakConfidence: number;
+  
+  // Heart rate
   instantaneousBPM: number | null;
-  averageBPM: number | null;
+  
+  // HRV metrics
   rrInterval: number | null;
   heartRateVariability: number | null;
-}
-
-/**
- * Detection state from the detector
- */
-export interface DetectionState {
-  isFingerDetected: boolean;
-  confidence: number;
-  sources: Record<string, { detected: boolean, confidence: number }>;
-}
-
-/**
- * Interface for signal processors
- */
-export interface SignalProcessor<T = any> {
-  processSignal(value: number): T;
-  configure(options: SignalProcessingOptions): void;
-  reset(): void;
-}
-
-/**
- * Adaptive predictor interface
- */
-export interface AdaptivePredictor {
-  update(timestamp: number, value: number, confidence: number): void;
-  predict(timestamp?: number): { predictedValue: number; confidence: number };
-  getState(): any;
-  reset(): void;
-  configure(options: SignalProcessingOptions): void;
-}
-
-/**
- * Circular buffer state
- */
-export interface CircularBufferState<T> {
-  capacity: number;
-  items: T[];
-  head: number;
-  tail: number;
-  size: number;
 }
