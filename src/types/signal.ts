@@ -1,39 +1,40 @@
 
 /**
- * Signal processing types
+ * Signal type definitions for the application
  */
 
-export interface ArrhythmiaWindow {
-  start: number;
-  end: number;
+// Vital sign type enum
+export enum VitalSignType {
+  HEARTBEAT = 'HEARTBEAT',
+  SPO2 = 'SPO2',
+  BLOOD_PRESSURE = 'BLOOD_PRESSURE',
+  GLUCOSE = 'GLUCOSE',
+  LIPIDS = 'LIPIDS',
+  HYDRATION = 'HYDRATION'
 }
 
-export interface ProcessedSignal {
-  timestamp: number;
-  rawValue: number;
-  filteredValue: number;
+// Feedback channel for signal optimization
+export interface ChannelFeedback {
   quality: number;
-  fingerDetected: boolean;
-  perfusionIndex?: number;
-  spectrumData?: {
-    frequencies: number[];
-    amplitudes: number[];
-    dominantFrequency: number;
+  suggestedAdjustments?: {
+    amplificationFactor?: number;
+    filterStrength?: number;
+    baselineCorrection?: number;
   };
 }
 
-export interface ProcessingError {
-  code: string;
-  message: string;
-  timestamp: number;
+// Signal channel interface
+export interface OptimizedSignalChannel {
+  processSignal: (value: number) => number;
+  reset: () => void;
+  getQuality: () => number;
+  getFeedback: () => ChannelFeedback;
+  applyFeedback: (feedback: ChannelFeedback) => void;
 }
 
-export interface SignalProcessor {
-  initialize(): Promise<void>;
-  start(): void;
-  stop(): void;
-  processFrame(imageData: ImageData): void;
-  calibrate(): Promise<boolean>;
-  onSignalReady?: (signal: ProcessedSignal) => void;
-  onError?: (error: ProcessingError) => void;
+// Signal distributor configuration
+export interface SignalDistributorConfig {
+  initialAmplification?: number;
+  filterStrength?: number;
+  useAdaptiveControl?: boolean;
 }

@@ -7,16 +7,24 @@ import { useVitalSignsProcessor } from "@/hooks/useVitalSignsProcessor";
 import PPGSignalMeter from "@/components/PPGSignalMeter";
 import MonitorButton from "@/components/MonitorButton";
 import AppTitle from "@/components/AppTitle";
-import { VitalSignsResult } from "@/types/vital-signs";
+import { VitalSignsTypes } from "@/types";
+
+type LocalVitalSignsResult = VitalSignsTypes.VitalSignsResult;
 
 const Index = () => {
   const [isMonitoring, setIsMonitoring] = useState(false);
   const [isCameraOn, setIsCameraOn] = useState(false);
   const [signalQuality, setSignalQuality] = useState(0);
-  const [vitalSigns, setVitalSigns] = useState<VitalSignsResult>({
+  const [vitalSigns, setVitalSigns] = useState<LocalVitalSignsResult>({
     spo2: 0,
     pressure: "--/--",
-    arrhythmiaStatus: "--"
+    arrhythmiaStatus: "--",
+    glucose: 0,
+    hydration: 0,
+    lipids: {
+      totalCholesterol: 0,
+      triglycerides: 0
+    }
   });
   const [heartRate, setHeartRate] = useState(0);
   const [elapsedTime, setElapsedTime] = useState(0);
@@ -60,7 +68,16 @@ const Index = () => {
 
   useEffect(() => {
     if (lastValidResults && !isMonitoring) {
-      setVitalSigns(lastValidResults);
+      const convertedResult: LocalVitalSignsResult = {
+        ...lastValidResults,
+        lastArrhythmiaData: lastValidResults.lastArrhythmiaData ? {
+          timestamp: lastValidResults.lastArrhythmiaData.timestamp,
+          rmssd: lastValidResults.lastArrhythmiaData.rmssd || 0,
+          rrVariation: lastValidResults.lastArrhythmiaData.rrVariation || 0
+        } : null
+      };
+      
+      setVitalSigns(convertedResult);
       setShowResults(true);
     }
   }, [lastValidResults, isMonitoring]);
@@ -87,7 +104,17 @@ const Index = () => {
           const vitals = processVitalSigns(lastSignal.filteredValue, heartBeatResult.rrData);
           if (vitals) {
             console.log("Vital signs processed:", vitals);
-            setVitalSigns(vitals);
+            
+            const convertedResult: LocalVitalSignsResult = {
+              ...vitals,
+              lastArrhythmiaData: vitals.lastArrhythmiaData ? {
+                timestamp: vitals.lastArrhythmiaData.timestamp,
+                rmssd: vitals.lastArrhythmiaData.rmssd || 0,
+                rrVariation: vitals.lastArrhythmiaData.rrVariation || 0
+              } : null
+            };
+            
+            setVitalSigns(convertedResult);
           }
         }
         
@@ -154,7 +181,16 @@ const Index = () => {
     
     const savedResults = resetVitalSigns();
     if (savedResults) {
-      setVitalSigns(savedResults);
+      const convertedResult: LocalVitalSignsResult = {
+        ...savedResults,
+        lastArrhythmiaData: savedResults.lastArrhythmiaData ? {
+          timestamp: savedResults.lastArrhythmiaData.timestamp,
+          rmssd: savedResults.lastArrhythmiaData.rmssd || 0,
+          rrVariation: savedResults.lastArrhythmiaData.rrVariation || 0
+        } : null
+      };
+      
+      setVitalSigns(convertedResult);
       setShowResults(true);
     }
     
@@ -183,7 +219,13 @@ const Index = () => {
     setVitalSigns({ 
       spo2: 0, 
       pressure: "--/--",
-      arrhythmiaStatus: "--"
+      arrhythmiaStatus: "--",
+      glucose: 0,
+      hydration: 0,
+      lipids: {
+        totalCholesterol: 0,
+        triglycerides: 0
+      }
     });
     setSignalQuality(0);
   };
@@ -342,8 +384,21 @@ const Index = () => {
                 highlighted={showResults}
               />
               <VitalSign 
-                label="ARRITMIAS"
-                value={vitalSigns.arrhythmiaStatus.split('|')[0] || '--'}
+                label="GLUCOSA"
+                value={vitalSigns.glucose || "--"}
+                unit="mg/dL"
+                highlighted={showResults}
+              />
+              <VitalSign 
+                label="COLESTEROL"
+                value={vitalSigns.lipids?.totalCholesterol || "--"}
+                unit="mg/dL"
+                highlighted={showResults}
+              />
+              <VitalSign 
+                label="HIDRATACIÓN"
+                value={vitalSigns.hydration || "--"}
+                unit="%"
                 highlighted={showResults}
               />
             </div>

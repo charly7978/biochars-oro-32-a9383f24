@@ -13,10 +13,10 @@ const ResponsiveContainer: React.FC<ResponsiveContainerProps> = ({
   className = '',
   optimizeForMedicalData = false
 }) => {
-  const { isMobile, isLowPowerMode, batteryLevel } = useMobileOptimizations({
+  const { isMobile, isLowPowerMode } = useMobileOptimizations({
     reducedMotion: true,
     optimizeRendering: optimizeForMedicalData,
-    reducedImageQuality: false,
+    reducedImageQuality: isLowPowerMode,
     batteryAwareness: true
   });
 

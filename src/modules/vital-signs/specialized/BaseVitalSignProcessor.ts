@@ -1,143 +1,160 @@
 
+/**
+ * Base class for all specialized vital sign processors
+ * Provides common functionality for all processors
+ */
 import { VitalSignType, ChannelFeedback } from '../../../types/signal';
+import { v4 as uuidv4 } from 'uuid';
 
 /**
- * Abstract base class for vital sign processors
+ * Abstract base class for specialized vital sign processors
  */
 export abstract class BaseVitalSignProcessor<T> {
-  protected readonly signalType: VitalSignType;
-  private lastProcessingTime: number = 0;
-  private baselineValue: number = 0;
-  private buffer: number[] = [];
-  private readonly bufferSize = 10;
-  private readonly processingInterval = 100; // ms
-  private quality: number = 0;
+  protected readonly type: VitalSignType;
+  protected readonly id: string;
+  protected confidence: number = 0;
+  protected lastProcessedValue: number = 0;
+  protected buffer: number[] = [];
+  protected readonly MAX_BUFFER_SIZE: number = 100;
+  protected lastFeedback: ChannelFeedback | null = null;
+  protected isInitialized: boolean = false;
   
   /**
-   * Create a new processor for a specific vital sign
+   * Constructor
+   * @param type Type of vital sign this processor handles
    */
-  constructor(signalType: VitalSignType) {
-    this.signalType = signalType;
+  constructor(type: VitalSignType) {
+    this.type = type;
+    this.id = `${type}-processor-${uuidv4().substring(0, 8)}`;
   }
   
   /**
-   * Process a value and return the appropriate measurement
+   * Initialize the processor
    */
-  public processValue(value: number): T | null {
-    // Buffer values for smoothing
+  public initialize(): void {
+    this.buffer = [];
+    this.confidence = 0;
+    this.lastProcessedValue = 0;
+    this.lastFeedback = null;
+    this.isInitialized = true;
+    
+    console.log(`${this.typeToString()} Processor: Initialized`);
+  }
+  
+  /**
+   * Reset the processor state
+   */
+  public reset(): void {
+    this.buffer = [];
+    this.confidence = 0;
+    this.lastProcessedValue = 0;
+    this.lastFeedback = null;
+    
+    console.log(`${this.typeToString()} Processor: Reset`);
+  }
+  
+  /**
+   * Get the processor's confidence in its measurements (0-1)
+   */
+  public getConfidence(): number {
+    return this.confidence;
+  }
+  
+  /**
+   * Process a value from the optimized channel
+   * @param value Channel-optimized value
+   * @returns Processed result
+   */
+  public processValue(value: number): T {
+    this.lastProcessedValue = value;
+    
+    // Add to buffer
     this.buffer.push(value);
-    if (this.buffer.length > this.bufferSize) {
+    if (this.buffer.length > this.MAX_BUFFER_SIZE) {
       this.buffer.shift();
     }
     
-    // Don't process too often
-    const now = Date.now();
-    if (now - this.lastProcessingTime < this.processingInterval) {
-      return null;
-    }
+    // Calculate confidence
+    this.updateConfidence();
     
-    // Calculate signal quality
-    this.updateQuality();
-    
-    // Update baseline
-    this.updateBaseline();
-    
-    // Process the actual value
-    const result = this.processValueImpl(this.getSmoothedValue());
-    
-    // Update last processing time
-    this.lastProcessingTime = now;
-    
-    return result;
+    // Process the value
+    return this.processValueImpl(value);
   }
   
   /**
-   * Abstract method that each specific processor must implement
+   * Get feedback for the channel to optimize for this processor
+   */
+  public getFeedback(): ChannelFeedback | null {
+    // Base implementation for feedback
+    // Subclasses can override for specialized feedback
+    
+    // Skip feedback if we don't have enough data
+    if (this.buffer.length < 10) {
+      return null;
+    }
+    
+    // Create basic feedback
+    const feedback: ChannelFeedback = {
+      channelId: this.id,
+      signalQuality: this.confidence,
+      suggestedAdjustments: {},
+      timestamp: Date.now(),
+      success: this.confidence > 0.3
+    };
+    
+    // Suggest amplification adjustment based on recent values
+    const recent = this.buffer.slice(-10);
+    const avg = recent.reduce((sum, val) => sum + val, 0) / recent.length;
+    const maxAbs = Math.max(...recent.map(val => Math.abs(val)));
+    
+    // If values are too small, suggest higher amplification
+    if (maxAbs < 0.1 && this.confidence < 0.5) {
+      feedback.suggestedAdjustments.amplificationFactor = 1.2;
+    }
+    
+    // If values are too large, suggest lower amplification
+    if (maxAbs > 5 && this.confidence < 0.5) {
+      feedback.suggestedAdjustments.amplificationFactor = 0.9;
+    }
+    
+    // Store this feedback
+    this.lastFeedback = feedback;
+    
+    return feedback;
+  }
+  
+  /**
+   * Update confidence based on signal characteristics
+   * Subclasses should override for specific confidence calculation
+   */
+  protected updateConfidence(): void {
+    if (this.buffer.length < 5) {
+      this.confidence = 0;
+      return;
+    }
+    
+    // Base confidence calculation (simple example)
+    const recent = this.buffer.slice(-10);
+    const mean = recent.reduce((sum, val) => sum + val, 0) / recent.length;
+    
+    // Calculate signal-to-noise ratio (simple approximation)
+    const variance = recent.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / recent.length;
+    const snr = mean !== 0 ? Math.abs(mean / Math.sqrt(variance)) : 0;
+    
+    // Base confidence on SNR
+    this.confidence = Math.min(1, snr / 10);
+  }
+  
+  /**
+   * Implementation of value processing
+   * Must be implemented by subclasses
    */
   protected abstract processValueImpl(value: number): T;
   
   /**
-   * Calculate smoothed value from buffer
+   * Convert type to readable string
    */
-  protected getSmoothedValue(): number {
-    if (this.buffer.length === 0) return 0;
-    
-    return this.buffer.reduce((sum, val) => sum + val, 0) / this.buffer.length;
-  }
-  
-  /**
-   * Update baseline value
-   */
-  private updateBaseline(): void {
-    if (this.buffer.length < 3) return;
-    
-    const averageValue = this.getSmoothedValue();
-    
-    // Slowly adjust baseline
-    if (this.baselineValue === 0) {
-      this.baselineValue = averageValue;
-    } else {
-      this.baselineValue = this.baselineValue * 0.95 + averageValue * 0.05;
-    }
-  }
-  
-  /**
-   * Update signal quality measurement
-   */
-  private updateQuality(): void {
-    if (this.buffer.length < 3) {
-      this.quality = 0;
-      return;
-    }
-    
-    // Calculate variance
-    const mean = this.getSmoothedValue();
-    const variance = this.buffer.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / this.buffer.length;
-    
-    // Calculate signal-to-noise ratio (higher is better)
-    const signalStrength = Math.abs(mean);
-    const noiseLevel = Math.sqrt(variance);
-    
-    // Avoid division by zero
-    if (noiseLevel === 0 || signalStrength === 0) {
-      this.quality = 0;
-      return;
-    }
-    
-    const snr = signalStrength / noiseLevel;
-    
-    // Convert to quality percentage (0-100)
-    this.quality = Math.min(100, Math.max(0, snr * 20));
-  }
-  
-  /**
-   * Get current signal quality (0-100)
-   */
-  public getQuality(): number {
-    return this.quality;
-  }
-  
-  /**
-   * Get feedback for the signal processor
-   */
-  public getFeedback(): ChannelFeedback {
-    return {
-      quality: this.quality,
-      suggestedAdjustments: {
-        amplificationFactor: this.quality < 40 ? 1.5 : 1.0,
-        filterStrength: this.quality < 30 ? 0.8 : 0.5,
-        baselineCorrection: this.baselineValue
-      }
-    };
-  }
-  
-  /**
-   * Reset the processor
-   */
-  public reset(): void {
-    this.lastProcessingTime = 0;
-    this.baselineValue = 0;
-    this.buffer = [];
-    this.quality = 0;
+  protected typeToString(): string {
+    return this.type.charAt(0).toUpperCase() + this.type.slice(1);
   }
 }

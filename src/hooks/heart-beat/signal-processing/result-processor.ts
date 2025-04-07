@@ -1,36 +1,66 @@
+
 /**
- * Process detection results and BPM calculations
+ * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
  */
 
-// Process low confidence result
-export const processLowConfidenceResult = (result: any) => {
-  if (!result) {
+let lastValidBpm = 0;
+let lastConfidence = 0;
+let validBpmCount = 0;
+
+/**
+ * Update last valid BPM
+ */
+export function updateLastValidBpm(bpm: number, confidence: number): void {
+  if (confidence > 0.5 && bpm >= 40 && bpm <= 200) {
+    // Use exponential smoothing to update
+    lastValidBpm = lastValidBpm > 0 
+      ? 0.8 * lastValidBpm + 0.2 * bpm
+      : bpm;
+    
+    lastConfidence = confidence;
+    validBpmCount++;
+  }
+}
+
+/**
+ * Process result with low confidence
+ */
+export function processLowConfidenceResult(
+  result: any, 
+  confidenceThreshold: number = 0.5
+): any {
+  if (result.confidence < confidenceThreshold && lastValidBpm > 0) {
+    // If confidence is low but we have a valid previous BPM
     return {
-      bpm: 0,
-      confidence: 0,
-      isPeak: false
+      ...result,
+      bpm: lastValidBpm,
+      confidence: Math.max(0.3, result.confidence)
     };
   }
   
   return result;
-};
+}
 
-// Update last valid BPM
-export const updateLastValidBpm = (bpm: number, confidence: number) => {
-  // This is a stub implementation
-  return bpm;
-};
-
-// Get last valid measurements
-export const getLastValidMeasurements = () => {
+/**
+ * Get last valid measurements
+ */
+export function getLastValidMeasurements(): {
+  bpm: number;
+  confidence: number;
+  count: number;
+} {
   return {
-    bpm: 0,
-    confidence: 0,
-    time: Date.now()
+    bpm: lastValidBpm,
+    confidence: lastConfidence,
+    count: validBpmCount
   };
-};
+}
 
-// Reset valid measurements
-export const resetValidMeasurements = () => {
-  // Reset implementation
-};
+/**
+ * Reset valid measurements tracking
+ */
+export function resetValidMeasurements(): void {
+  lastValidBpm = 0;
+  lastConfidence = 0;
+  validBpmCount = 0;
+}

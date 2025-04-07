@@ -64,7 +64,7 @@ export function useSignalProcessor() {
       
       // Process real signal
       const processorResult = processor.processSignal(value);
-      const rrData = processor.getRRIntervals ? processor.getRRIntervals() : { intervals: [] };
+      const rrData = processor.getRRIntervals();
       
       if (rrData && rrData.intervals.length > 0) {
         lastRRIntervalsRef.current = [...rrData.intervals];
