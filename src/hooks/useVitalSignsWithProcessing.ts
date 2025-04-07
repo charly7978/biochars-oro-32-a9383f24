@@ -1,3 +1,4 @@
+
 /**
  * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
  * 
@@ -6,7 +7,7 @@
  */
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { usePPGExtraction } from './usePPGExtraction';
-import { useSignalProcessing } from './useSignalProcessing';
+import { useSignalProcessing, ProcessedSignalResult } from './useSignalProcessing';
 import { useVitalSignsProcessor } from './useVitalSignsProcessor';
 
 /**
@@ -99,7 +100,7 @@ export function useVitalSignsWithProcessing() {
           amplifiedValue: processedSignal.amplifiedValue,
           
           heartRate: processedSignal.averageBPM || 0,
-          isPeak: processedSignal.isPeak || false,
+          isPeak: processedSignal.isPeak,
           rrInterval: processedSignal.rrInterval,
           
           spo2: vitalsResult.spo2,

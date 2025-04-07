@@ -2,7 +2,6 @@
 /**
  * Sistema de tipos unificado para procesamiento de señales
  * Consolida definiciones de tipos de múltiples archivos mientras mantiene toda la funcionalidad
- * Simplificado para enfocarse en SPO2
  */
 
 // Re-exportamos tipos existentes para mantener compatibilidad
@@ -35,12 +34,6 @@ export interface ProcessedSignalResult {
   quality: number;
   fingerDetected: boolean;
   signalStrength: number;
-  
-  // Adding these properties for compatibility
-  isPeak?: boolean;
-  rrInterval?: number | null;
-  averageBPM?: number;
-  heartRate?: number;
 }
 
 // Resultado del análisis de intervalo RR
@@ -69,7 +62,4 @@ export interface UnifiedVitalSignsResult {
     rmssd: number;
     rrVariation: number;
   } | null;
-  
-  // Adding heartRate for compatibility
-  heartRate?: number;
 }

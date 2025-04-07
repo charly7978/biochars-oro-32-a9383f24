@@ -25,24 +25,6 @@ export const calculateDC = (values: number[]): number => {
 export class SpO2Processor {
   private readonly SPO2_BUFFER_SIZE = 10;
   private spo2Buffer: number[] = [];
-  private valueBuffer: number[] = [];
-
-  /**
-   * Process new PPG value and add to buffer
-   */
-  public processValue(value: number): number {
-    this.valueBuffer.push(value);
-    if (this.valueBuffer.length > 50) {
-      this.valueBuffer.shift();
-    }
-    
-    // Calculate SpO2 if we have enough values
-    if (this.valueBuffer.length >= 30) {
-      return this.calculateSpO2(this.valueBuffer);
-    }
-    
-    return this.getLastValidSpo2(1);
-  }
 
   /**
    * Calculates the oxygen saturation (SpO2) from real PPG values
@@ -113,6 +95,5 @@ export class SpO2Processor {
    */
   public reset(): void {
     this.spo2Buffer = [];
-    this.valueBuffer = [];
   }
 }

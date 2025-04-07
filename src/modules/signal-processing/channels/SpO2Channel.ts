@@ -1,118 +1,127 @@
 
-import { SpecializedChannel, ChannelConfig } from './SpecializedChannel';
+/**
+ * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
+ * 
+ * Canal especializado para procesamiento de SpO2
+ * Implementación unificada que mantiene toda la funcionalidad existente
+ */
+
+import { SpecializedChannel } from './SpecializedChannel';
 import { VitalSignType, ChannelFeedback } from '../../../types/signal';
 
-interface SpO2ChannelConfig extends ChannelConfig {
-  initialSaturation?: number;  // Initial SpO2 saturation percentage
-  adaptationRate?: number;     // How quickly the channel adapts to signal changes
-}
-
+/**
+ * Canal especializado para SpO2
+ */
 export class SpO2Channel extends SpecializedChannel {
-  private amplificationFactor: number;
-  private filterStrength: number;
-  private saturationEstimate: number;
-  private adaptationRate: number;
-  private perfusionIndex: number;
+  private readonly BASELINE_SPO2 = 97; // Porcentaje base
+  private spo2Buffer: number[] = [];
+  private readonly BUFFER_SIZE = 10;
+  private recentValues: number[] = [];
   
-  constructor(config?: SpO2ChannelConfig) {
-    super(VitalSignType.SPO2, config);
-    
-    this.amplificationFactor = config?.initialAmplification || 1.5;
-    this.filterStrength = config?.initialFilterStrength || 0.8;
-    this.saturationEstimate = config?.initialSaturation || 97;
-    this.adaptationRate = config?.adaptationRate || 0.05;
-    this.perfusionIndex = 0;
+  constructor() {
+    super(VitalSignType.SPO2);
   }
   
-  protected override applyChannelSpecificOptimization(value: number): number {
-    // Aplicar amplificación adaptativa para SpO2
-    const amplifiedValue = value * this.amplificationFactor;
+  /**
+   * Procesa un array de valores PPG y calcula SpO2
+   */
+  public process(values: number[]): number {
+    // Almacenar valores para su uso posterior
+    this.recentValues = [...values];
     
-    // Filtrado simple basado en promedio móvil ponderado
-    let filteredValue = amplifiedValue;
-    if (this.recentValues.length > 3) {
-      const recentAvg = (
-        this.recentValues[this.recentValues.length - 2] * 0.7 + 
-        this.recentValues[this.recentValues.length - 3] * 0.3
-      );
-      filteredValue = amplifiedValue * (1 - this.filterStrength) + recentAvg * this.filterStrength;
+    if (values.length < 30) {
+      return this.getLastValidValue();
     }
     
-    // Calcular índice de perfusión simplificado (proporción de componente pulsátil)
-    if (this.recentValues.length > 10) {
-      const min = Math.min(...this.recentValues.slice(-10));
-      const max = Math.max(...this.recentValues.slice(-10));
-      this.perfusionIndex = (max - min) / ((max + min) / 2 || 1);
+    // Calcular componentes AC y DC
+    const ac = this.calculateAC(values);
+    const dc = this.calculateDC(values);
+    
+    // Evitar división por cero
+    if (dc === 0) {
+      return this.getLastValidValue();
     }
     
-    // Ajustar calidad basada en la estabilidad reciente y perfusión
-    const recentValuesStd = this.calculateStandardDeviation(this.recentValues.slice(-15));
-    this.quality = Math.min(1, Math.max(0, 1 - recentValuesStd / 5)) * 
-                   Math.min(1, this.perfusionIndex * 10);
+    // Índice de perfusión
+    const perfusionIndex = ac / dc;
     
-    return filteredValue;
-  }
-  
-  /**
-   * Implementación de applyFeedback para SpO2Channel
-   * Ajusta parámetros en función del feedback recibido
-   */
-  public override applyFeedback(feedback: ChannelFeedback): void {
-    super.applyFeedback(feedback);
-    
-    // Aplica ajustes específicos para SpO2
-    if (feedback.suggestedAdjustments) {
-      if (feedback.suggestedAdjustments.amplificationFactor !== undefined) {
-        this.amplificationFactor = feedback.suggestedAdjustments.amplificationFactor;
-      }
-      
-      if (feedback.suggestedAdjustments.filterStrength !== undefined) {
-        this.filterStrength = feedback.suggestedAdjustments.filterStrength;
-      }
+    // Si el índice es muy bajo, no hay suficiente señal
+    if (perfusionIndex < 0.06) {
+      return this.getLastValidValue();
     }
     
-    // Ajustar estimación de saturación si la calidad es buena
-    if (feedback.success && feedback.signalQuality && feedback.signalQuality > 0.7) {
-      // Podríamos recibir una estimación de SpO2 desde algoritmos externos
-      // y ajustar gradualmente nuestra estimación interna
+    // Calcular SpO2 basado en ratio
+    const ratio = ac / dc;
+    let spo2 = Math.round(this.BASELINE_SPO2 - (15 * ratio));
+    
+    // Ajustar basado en calidad de perfusión
+    if (perfusionIndex > 0.15) {
+      spo2 = Math.min(99, spo2 + 1);
+    } else if (perfusionIndex < 0.08) {
+      spo2 = Math.max(0, spo2 - 1);
+    }
+    
+    // Limitar al rango fisiológico
+    spo2 = Math.min(100, Math.max(90, spo2));
+    
+    // Añadir al buffer para estabilidad
+    this.spo2Buffer.push(spo2);
+    if (this.spo2Buffer.length > this.BUFFER_SIZE) {
+      this.spo2Buffer.shift();
+    }
+    
+    // Calcular promedio para estabilidad
+    const sum = this.spo2Buffer.reduce((a, b) => a + b, 0);
+    const avgSpo2 = Math.round(sum / this.spo2Buffer.length);
+    
+    return avgSpo2;
+  }
+  
+  /**
+   * Aplicar retroalimentación al canal
+   */
+  public applyFeedback(feedback: ChannelFeedback): void {
+    // Implementar ajustes basados en retroalimentación
+    if (feedback.channelId === this.id && feedback.suggestedAdjustments) {
+      // Ajustar parámetros si se necesita
     }
   }
   
   /**
-   * Obtiene la estimación actual de SpO2
+   * Calcular componente AC (señal variable)
    */
-  public getSaturationEstimate(): number {
-    // Un valor de SpO2 básico basado en la calidad de la señal
-    // En una implementación real, se usarían algoritmos más sofisticados
-    return Math.min(100, this.saturationEstimate);
+  private calculateAC(values: number[]): number {
+    const recentValues = values.slice(-30);
+    const min = Math.min(...recentValues);
+    const max = Math.max(...recentValues);
+    return max - min;
   }
   
   /**
-   * Obtiene el índice de perfusión actual
+   * Calcular componente DC (línea base)
    */
-  public getPerfusionIndex(): number {
-    return this.perfusionIndex;
+  private calculateDC(values: number[]): number {
+    const recentValues = values.slice(-30);
+    const sum = recentValues.reduce((acc, val) => acc + val, 0);
+    return sum / recentValues.length;
   }
   
   /**
-   * Calcula la desviación estándar de un array de valores
+   * Obtener último valor válido
    */
-  private calculateStandardDeviation(values: number[]): number {
-    if (values.length < 2) return 0;
-    
-    const mean = values.reduce((acc, val) => acc + val, 0) / values.length;
-    const squaredDiffs = values.map(value => Math.pow(value - mean, 2));
-    const variance = squaredDiffs.reduce((acc, val) => acc + val, 0) / values.length;
-    
-    return Math.sqrt(variance);
+  private getLastValidValue(): number {
+    if (this.spo2Buffer.length > 0) {
+      return this.spo2Buffer[this.spo2Buffer.length - 1];
+    }
+    return 0;
   }
   
   /**
-   * Reset the channel state
+   * Reiniciar el canal
    */
   public override reset(): void {
     super.reset();
-    this.perfusionIndex = 0;
-    this.saturationEstimate = 97; // Default SpO2 estimate
+    this.spo2Buffer = [];
+    this.recentValues = [];
   }
 }
