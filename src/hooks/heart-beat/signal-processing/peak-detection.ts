@@ -1,4 +1,3 @@
-
 /**
  * Peak detection and arrhythmia analysis module
  * Contains enhanced algorithms for cardiac signal analysis
@@ -57,6 +56,11 @@ export function handlePeakDetection(
       
       // Also call direct callback if provided
       requestBeepCallback(value || 1);
+      
+      // Dispatch arrhythmia visualization event if arrhythmia detected
+      if (isArrhythmia) {
+        dispatchArrhythmiaVisualEvent(result.bpm || 0, now);
+      }
     }
     
     // Track diagnostics
@@ -85,6 +89,24 @@ export function handlePeakDetection(
     lastQualityTrend.push(result.confidence * 100);
     if (lastQualityTrend.length > 10) lastQualityTrend.shift();
   }
+}
+
+/**
+ * Dispatch an event specifically for arrhythmia visualization
+ */
+function dispatchArrhythmiaVisualEvent(bpm: number, timestamp: number): void {
+  // Create a dedicated event for visual representation of arrhythmias
+  const arrhythmiaEvent = new CustomEvent('arrhythmia-visual', {
+    detail: {
+      timestamp,
+      bpm,
+      duration: 3000, // 3-second visual indicator
+      severity: bpm > 100 ? 'high' : 'medium'
+    }
+  });
+  
+  window.dispatchEvent(arrhythmiaEvent);
+  console.log('Arrhythmia visualization event dispatched', { timestamp, bpm });
 }
 
 /**
@@ -273,7 +295,6 @@ export function getDiagnosticsData(): DiagnosticEntry[] {
 
 /**
  * Clear diagnostic data history
- * Added to fix the missing export error
  */
 export function clearDiagnosticsData(): void {
   diagnosticHistory.length = 0;

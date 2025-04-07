@@ -1,47 +1,50 @@
 
-import React, { useEffect, useState } from 'react';
-import { Bell, BellOff } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
 
 interface ArrhythmiaIndicatorProps {
   isActive: boolean;
-  count: number;
-  className?: string;
+  severity?: 'low' | 'medium' | 'high';
 }
 
-const ArrhythmiaIndicator = ({ isActive, count, className = '' }: ArrhythmiaIndicatorProps) => {
-  const [isBlinking, setIsBlinking] = useState(false);
+const ArrhythmiaIndicator: React.FC<ArrhythmiaIndicatorProps> = ({ 
+  isActive, 
+  severity = 'medium' 
+}) => {
+  const [opacity, setOpacity] = useState(isActive ? 1 : 0);
   
   useEffect(() => {
     if (isActive) {
-      setIsBlinking(true);
-      const timeout = setTimeout(() => {
-        setIsBlinking(false);
+      setOpacity(1);
+      const timer = setTimeout(() => {
+        setOpacity(0);
       }, 2000);
-      
-      return () => clearTimeout(timeout);
+      return () => clearTimeout(timer);
     }
-  }, [isActive, count]);
+  }, [isActive]);
+
+  const getColor = () => {
+    switch (severity) {
+      case 'high': return 'rgb(239, 68, 68)';
+      case 'medium': return 'rgb(234, 179, 8)';
+      case 'low': return 'rgb(34, 197, 94)';
+      default: return 'rgb(234, 179, 8)';
+    }
+  };
   
-  if (!isActive && count === 0) {
-    return null;
-  }
-  
+  if (!isActive && opacity === 0) return null;
+
   return (
     <div 
-      className={`flex items-center gap-1 px-2 py-1 rounded-full transition-all duration-300 ${
-        isActive 
-          ? 'bg-red-600/90 text-white animate-pulse' 
-          : 'bg-orange-600/70 text-white'
-      } ${className}`}
+      className="absolute inset-0 pointer-events-none transition-opacity"
+      style={{ 
+        backgroundColor: getColor(),
+        opacity: opacity * 0.3,
+        zIndex: 5
+      }}
     >
-      {isActive ? (
-        <Bell className="w-4 h-4" />
-      ) : (
-        <BellOff className="w-4 h-4" />
-      )}
-      <span className="text-xs font-semibold">
-        {count > 0 ? `${count} ${count === 1 ? 'Arritmia' : 'Arritmias'}` : 'Normal'}
-      </span>
+      <div className="absolute top-4 left-1/2 transform -translate-x-1/2 bg-black/70 text-white px-4 py-2 rounded-full font-bold">
+        Arritmia Detectada
+      </div>
     </div>
   );
 };

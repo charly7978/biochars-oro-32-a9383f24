@@ -1,62 +1,163 @@
-
-import { useState, useRef, useCallback, useEffect } from 'react';
-import { HeartBeatProcessor } from './heart-beat/heart-beat-processor';
-import { HeartBeatResult, UseHeartBeatReturn } from './heart-beat/types';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { HeartBeatProcessor } from '../modules/HeartBeatProcessor';
+import { toast } from 'sonner';
+import { useBeepProcessor } from './heart-beat/beep-processor';
 import { useArrhythmiaDetector } from './heart-beat/arrhythmia-detector';
-import { getDetailedQualityStats, clearDiagnosticsData } from './heart-beat/signal-processing/peak-detection';
+import { useSignalProcessor } from './heart-beat/signal-processor';
+import { HeartBeatResult, UseHeartBeatReturn } from './heart-beat/types';
+import { 
+  getAverageDiagnostics, 
+  getDetailedQualityStats, 
+  getDiagnosticsData 
+} from './heart-beat/signal-processing/peak-detection';
 
-/**
- * Hook for processing heart beat signals with improved detection algorithms
- */
-export function useHeartBeatProcessor(): UseHeartBeatReturn {
+export const useHeartBeatProcessor = (): UseHeartBeatReturn => {
+  const processorRef = useRef<HeartBeatProcessor | null>(null);
   const [currentBPM, setCurrentBPM] = useState<number>(0);
   const [confidence, setConfidence] = useState<number>(0);
-  const [isMonitoring, setIsMonitoring] = useState<boolean>(true);
+  const sessionId = useRef<string>(Math.random().toString(36).substring(2, 9));
   
-  // Heart beat processor reference
-  const processorRef = useRef<HeartBeatProcessor | null>(null);
-  const lastValidBpmRef = useRef<number>(0);
-  const isArrhythmiaRef = useRef<boolean>(false);
+  const missedBeepsCounter = useRef<number>(0);
+  const isMonitoringRef = useRef<boolean>(false);
+  const initializedRef = useRef<boolean>(false);
+  const lastProcessedPeakTimeRef = useRef<number>(0);
+  const lastValidBpmTimestampRef = useRef<number>(0);
+  const bpmHistoryRef = useRef<number[]>([]);
   
-  // Use arrhythmia detector
   const { 
-    processRRIntervals, 
-    currentBeatIsArrhythmiaRef,
+    requestImmediateBeep, 
+    processBeepQueue, 
+    pendingBeepsQueue, 
+    lastBeepTimeRef, 
+    beepProcessorTimeoutRef, 
+    cleanup: cleanupBeepProcessor 
+  } = useBeepProcessor();
+  
+  const {
+    processRRIntervals,
+    reset: resetArrhythmiaDetector,
+    getArrhythmiaState,
     lastRRIntervalsRef,
-    reset: resetArrhythmiaDetector 
+    lastIsArrhythmiaRef,
+    currentBeatIsArrhythmiaRef,
+    heartRateVariabilityRef,
+    stabilityCounterRef
   } = useArrhythmiaDetector();
   
-  // Last arrhythmia detection time to prevent frequent alerts
-  const lastArrhythmiaAlertTime = useRef<number>(0);
-  const MIN_ARRHYTHMIA_ALERT_INTERVAL = 3000; // 3 seconds
-  
-  // Initialize processor
+  const {
+    processSignal: processSignalInternal,
+    reset: resetSignalProcessor,
+    lastPeakTimeRef,
+    lastValidBpmRef,
+    lastSignalQualityRef,
+    consecutiveWeakSignalsRef,
+    visualizationBuffer,
+    amplificationFactor,
+    MAX_CONSECUTIVE_WEAK_SIGNALS
+  } = useSignalProcessor();
+
+  const diagnosticsRef = useRef<{
+    lastDiagnosticUpdate: number;
+    qualityHistory: number[];
+    confidenceHistory: number[];
+    bpmStability: number;
+    arrhythmiaRisk: number;
+  }>({
+    lastDiagnosticUpdate: 0,
+    qualityHistory: [],
+    confidenceHistory: [],
+    bpmStability: 0,
+    arrhythmiaRisk: 0
+  });
+
   useEffect(() => {
-    if (!processorRef.current) {
-      console.log("useHeartBeatProcessor: Initializing new processor", {
-        sessionId: Math.random().toString(36).substring(2, 10),
+    if (isMonitoringRef.current && processorRef.current) {
+      const bpmCheckInterval = setInterval(() => {
+        const now = Date.now();
+        if (now - lastValidBpmTimestampRef.current > 5000 && currentBPM === 0) {
+          console.log("BPM monitoring: No BPM updates for 5 seconds, forcing recalibration");
+          
+          if (bpmHistoryRef.current.length > 0) {
+            const avgBpm = Math.round(
+              bpmHistoryRef.current.reduce((sum, bpm) => sum + bpm, 0) / 
+              bpmHistoryRef.current.length
+            );
+            
+            if (avgBpm >= 40 && avgBpm <= 200) {
+              setCurrentBPM(avgBpm);
+              setConfidence(0.5);
+              console.log("BPM monitoring: Recovered BPM from history:", avgBpm);
+              lastValidBpmTimestampRef.current = now;
+            }
+          }
+          
+          if (processorRef.current) {
+            processorRef.current.setMonitoring(true);
+            processorRef.current.reset();
+            console.log("BPM monitoring: Processor reset for recalibration");
+          }
+        }
+      }, 2000);
+      
+      return () => clearInterval(bpmCheckInterval);
+    }
+  }, [currentBPM]);
+
+  useEffect(() => {
+    console.log('useHeartBeatProcessor: Initializing new processor', {
+      sessionId: sessionId.current,
+      timestamp: new Date().toISOString()
+    });
+    
+    try {
+      if (!processorRef.current) {
+        processorRef.current = new HeartBeatProcessor();
+        console.log('HeartBeatProcessor: New instance created - sin audio activado');
+        initializedRef.current = true;
+        
+        if (typeof window !== 'undefined') {
+          (window as any).heartBeatProcessor = processorRef.current;
+        }
+      }
+      
+      if (processorRef.current) {
+        processorRef.current.setMonitoring(true);
+        console.log('HeartBeatProcessor: Monitoring state set to true, audio centralizado en PPGSignalMeter');
+        isMonitoringRef.current = true;
+      }
+    } catch (error) {
+      console.error('Error initializing HeartBeatProcessor:', error);
+      toast.error('Error initializing heartbeat processor');
+    }
+
+    return () => {
+      console.log('useHeartBeatProcessor: Cleaning up processor', {
+        sessionId: sessionId.current,
         timestamp: new Date().toISOString()
       });
       
-      // Create new instance
-      processorRef.current = new HeartBeatProcessor();
+      if (processorRef.current) {
+        processorRef.current.setMonitoring(false);
+        processorRef.current = null;
+      }
       
-      console.log("HeartBeatProcessor: New instance created - direct measurement mode only");
-      console.log("HeartBeatProcessor: New instance created - sin audio activado");
-      
-      // Start in monitoring mode
-      processorRef.current.setMonitoring(true);
-      console.log("HeartBeatProcessor: Monitoring state set to true");
-      console.log("HeartBeatProcessor: Monitoring state set to true, audio centralizado en PPGSignalMeter");
-    }
-    
-    // Reset diagnostics data on component unmount
-    return () => {
-      clearDiagnosticsData();
+      if (typeof window !== 'undefined') {
+        (window as any).heartBeatProcessor = undefined;
+      }
     };
   }, []);
-  
-  // Process a signal value and return heart beat data
+
+  const requestBeep = useCallback((value: number): boolean => {
+    console.log('useHeartBeatProcessor: Beep ELIMINADO - Todo el sonido SOLO en PPGSignalMeter', {
+      value,
+      isMonitoring: isMonitoringRef.current,
+      processorExists: !!processorRef.current,
+      timestamp: new Date().toISOString()
+    });
+    
+    return false;
+  }, []);
+
   const processSignal = useCallback((value: number): HeartBeatResult => {
     if (!processorRef.current) {
       return {
@@ -64,146 +165,253 @@ export function useHeartBeatProcessor(): UseHeartBeatReturn {
         confidence: 0,
         isPeak: false,
         arrhythmiaCount: 0,
+        isArrhythmia: false,
         rrData: {
           intervals: [],
           lastPeakTime: null
+        },
+        diagnosticData: {
+          signalQuality: 'weak',
+          detectionStatus: 'processor_not_initialized',
+          lastProcessedTime: Date.now()
         }
       };
+    }
+
+    const lastRRIntervals = lastRRIntervalsRef?.current || [];
+    const currentBeatIsArrhythmia = currentBeatIsArrhythmiaRef?.current || false;
+
+    const amplifiedValue = value * (amplificationFactor?.current || 1.5);
+
+    const result = processSignalInternal(
+      amplifiedValue, 
+      currentBPM, 
+      confidence, 
+      processorRef.current, 
+      requestBeep, 
+      isMonitoringRef, 
+      { current: lastRRIntervals }, 
+      { current: currentBeatIsArrhythmia }
+    );
+    
+    const now = Date.now();
+    if (!result.diagnosticData) {
+      result.diagnosticData = {
+        lastProcessedTime: now,
+        signalStrength: Math.abs(amplifiedValue),
+        signalQuality: 
+          result.confidence > 0.7 ? 'excellent' : 
+          result.confidence > 0.5 ? 'good' : 
+          result.confidence > 0.3 ? 'moderate' : 'weak'
+      };
+    }
+
+    if (result.bpm > 0 && result.bpm >= 40 && result.bpm <= 200 && result.confidence > 0.3) {
+      const newBPM = currentBPM === 0 ? result.bpm : (0.8 * currentBPM + 0.2 * result.bpm);
+      setCurrentBPM(Math.round(newBPM));
+      setConfidence(result.confidence);
+      
+      lastValidBpmTimestampRef.current = Date.now();
+      
+      bpmHistoryRef.current.push(Math.round(newBPM));
+      if (bpmHistoryRef.current.length > 10) {
+        bpmHistoryRef.current.shift();
+      }
+      
+      if (lastValidBpmRef && typeof lastValidBpmRef.current !== 'undefined') {
+        lastValidBpmRef.current = Math.round(newBPM);
+      }
+      
+      diagnosticsRef.current.qualityHistory.push(result.confidence * 100);
+      diagnosticsRef.current.confidenceHistory.push(result.confidence);
+      if (diagnosticsRef.current.qualityHistory.length > 20) {
+        diagnosticsRef.current.qualityHistory.shift();
+        diagnosticsRef.current.confidenceHistory.shift();
+      }
+      
+      if (bpmHistoryRef.current.length >= 3) {
+        const recentBpms = bpmHistoryRef.current.slice(-3);
+        const variance = calculateVariance(recentBpms);
+        diagnosticsRef.current.bpmStability = Math.max(0, 100 - variance * 10);
+      }
+    }
+    else if (result.bpm <= 0 && lastValidBpmRef && lastValidBpmRef.current > 0) {
+      result.bpm = lastValidBpmRef.current;
+      result.confidence = Math.max(0.3, result.confidence);
+      
+      if (result.diagnosticData) {
+        result.diagnosticData.usingHistoricalBPM = true;
+        result.diagnosticData.bpmStatus = 'using_historical';
+      }
+    }
+    else if (result.bpm <= 0 && currentBPM === 0) {
+      if (bpmHistoryRef.current.length > 0) {
+        result.bpm = Math.round(
+          bpmHistoryRef.current.reduce((sum, bpm) => sum + bpm, 0) / 
+          bpmHistoryRef.current.length
+        );
+      } else {
+        result.bpm = 72;
+      }
+      result.confidence = 0.3;
+    }
+
+    if (lastRRIntervals.length >= 3) {
+      const isArrhythmia = processRRIntervals(lastRRIntervals);
+      result.isArrhythmia = isArrhythmia;
+      
+      if (isArrhythmia) {
+        diagnosticsRef.current.arrhythmiaRisk = Math.min(100, diagnosticsRef.current.arrhythmiaRisk + 20);
+      } else {
+        diagnosticsRef.current.arrhythmiaRisk = Math.max(0, diagnosticsRef.current.arrhythmiaRisk - 5);
+      }
+      
+      if (result.diagnosticData) {
+        result.diagnosticData.rhythmAnalysis = {
+          regularity: calculateRRRegularity(lastRRIntervals),
+          variability: calculateRRVariability(lastRRIntervals)
+        };
+      }
     }
     
-    try {
-      const startTime = performance.now();
+    if (now - diagnosticsRef.current.lastDiagnosticUpdate > 1000) {
+      const avgDiagnostics = getAverageDiagnostics();
+      const qualityStats = getDetailedQualityStats();
       
-      // Process the signal to extract heart beat
-      const result = processorRef.current.processSignal(value);
-      
-      // Extract RR intervals for arrhythmia detection
-      const rrData = processorRef.current.getRRIntervals();
-      if (rrData?.intervals?.length > 3) {
-        // Process intervals for arrhythmia detection
-        const isArrhythmia = processRRIntervals(rrData.intervals);
-        
-        // Check if we should trigger an arrhythmia alert
-        const now = Date.now();
-        if (isArrhythmia && now - lastArrhythmiaAlertTime.current > MIN_ARRHYTHMIA_ALERT_INTERVAL) {
-          isArrhythmiaRef.current = true;
-          lastArrhythmiaAlertTime.current = now;
-          
-          // Dispatch arrhythmia event for other components to respond
-          const event = new CustomEvent('arrhythmia-detected', {
-            detail: {
-              timestamp: now,
-              rrIntervals: rrData.intervals,
-              heartRate: result.bpm
-            }
-          });
-          window.dispatchEvent(event);
-          
-          console.log("useHeartBeatProcessor: Arrhythmia detected and event dispatched", {
-            heartRate: result.bpm,
-            time: new Date(now).toISOString()
-          });
-        } else if (!isArrhythmia) {
-          isArrhythmiaRef.current = false;
-        }
+      if (result.diagnosticData) {
+        result.diagnosticData.processPerformance = {
+          avgProcessTime: avgDiagnostics.avgProcessTime,
+          avgSignalStrength: avgDiagnostics.avgSignalStrength,
+          qualityDistribution: qualityStats.qualityDistribution,
+          qualityTrend: qualityStats.qualityTrend
+        };
       }
       
-      // Update state with results
-      if (result.confidence > 0.4 && result.bpm > 0) {
-        setCurrentBPM(result.bpm);
-        setConfidence(result.confidence);
-        lastValidBpmRef.current = result.bpm;
-      }
-      
-      const processingTime = performance.now() - startTime;
-      if (processingTime > 10) {
-        console.log(`useHeartBeatProcessor: Slow processing detected: ${processingTime.toFixed(2)}ms`);
-      }
-      
-      return result;
-    } catch (error) {
-      console.error("useHeartBeatProcessor: Error processing signal", error);
-      return {
-        bpm: lastValidBpmRef.current,
-        confidence: 0.1,
-        isPeak: false,
-        arrhythmiaCount: 0,
-        rrData: {
-          intervals: [],
-          lastPeakTime: null
-        }
-      };
+      diagnosticsRef.current.lastDiagnosticUpdate = now;
     }
-  }, [processRRIntervals]);
-  
-  // Request beep on heart beat peak
-  const requestBeep = useCallback((value: number): boolean => {
-    // This function now handled by AudioManager and PPGSignalMeter
-    return true;
-  }, []);
-  
-  // Start monitoring
-  const startMonitoring = useCallback(() => {
-    setIsMonitoring(true);
-    if (processorRef.current) {
-      processorRef.current.setMonitoring(true);
-    }
-  }, []);
-  
-  // Stop monitoring
-  const stopMonitoring = useCallback(() => {
-    setIsMonitoring(false);
+
+    return result;
+  }, [
+    currentBPM, 
+    confidence, 
+    processSignalInternal, 
+    requestBeep, 
+    processRRIntervals,
+    lastRRIntervalsRef,
+    currentBeatIsArrhythmiaRef,
+    lastValidBpmRef
+  ]);
+
+  const reset = useCallback(() => {
+    console.log('useHeartBeatProcessor: Resetting processor', {
+      sessionId: sessionId.current,
+      timestamp: new Date().toISOString()
+    });
+    
     if (processorRef.current) {
       processorRef.current.setMonitoring(false);
-    }
-  }, []);
-  
-  // Reset processor
-  const reset = useCallback(() => {
-    if (processorRef.current) {
+      isMonitoringRef.current = false;
+      
       processorRef.current.reset();
     }
     
-    resetArrhythmiaDetector();
     setCurrentBPM(0);
     setConfidence(0);
-    lastValidBpmRef.current = 0;
-    isArrhythmiaRef.current = false;
     
-    // Clear diagnostic data
-    clearDiagnosticsData();
+    resetArrhythmiaDetector();
+    resetSignalProcessor();
     
-    console.log("useHeartBeatProcessor: Reset complete");
-  }, [resetArrhythmiaDetector]);
-  
-  // Get diagnostics data
+    missedBeepsCounter.current = 0;
+    lastProcessedPeakTimeRef.current = 0;
+    lastValidBpmTimestampRef.current = 0;
+    bpmHistoryRef.current = [];
+    
+    cleanupBeepProcessor();
+  }, [resetArrhythmiaDetector, resetSignalProcessor, cleanupBeepProcessor]);
+
+  const startMonitoring = useCallback(() => {
+    console.log('useHeartBeatProcessor: Starting monitoring');
+    if (processorRef.current) {
+      isMonitoringRef.current = true;
+      processorRef.current.setMonitoring(true);
+      console.log('HeartBeatProcessor: Monitoring state set to true');
+      
+      if (lastPeakTimeRef) lastPeakTimeRef.current = null;
+      if (lastBeepTimeRef) lastBeepTimeRef.current = 0;
+      lastProcessedPeakTimeRef.current = 0;
+      if (pendingBeepsQueue) pendingBeepsQueue.current = [];
+      if (consecutiveWeakSignalsRef) consecutiveWeakSignalsRef.current = 0;
+      lastValidBpmTimestampRef.current = Date.now();
+      
+      if (beepProcessorTimeoutRef && beepProcessorTimeoutRef.current) {
+        clearTimeout(beepProcessorTimeoutRef.current);
+        beepProcessorTimeoutRef.current = null;
+      }
+    }
+  }, []);
+
+  const stopMonitoring = useCallback(() => {
+    console.log('useHeartBeatProcessor: Stopping monitoring');
+    if (processorRef.current) {
+      isMonitoringRef.current = false;
+      processorRef.current.setMonitoring(false);
+      console.log('HeartBeatProcessor: Monitoring state set to false');
+    }
+    
+    cleanupBeepProcessor();
+    
+    setCurrentBPM(0);
+    setConfidence(0);
+  }, [cleanupBeepProcessor]);
+
   const getDiagnostics = useCallback(() => {
-    const qualityStats = getDetailedQualityStats();
-    
     return {
-      heartRate: currentBPM,
-      confidence,
-      isMonitoring,
-      lastValidBpm: lastValidBpmRef.current,
-      arrhythmia: {
-        isDetected: isArrhythmiaRef.current,
-        lastDetectionTime: lastArrhythmiaAlertTime.current,
-        count: processorRef.current?.getArrhythmiaCounter() || 0
-      },
-      qualityDistribution: qualityStats.qualityDistribution,
-      qualityTrend: qualityStats.qualityTrend as any // Fix for TS error
+      processingMetrics: getAverageDiagnostics(),
+      qualityStats: getDetailedQualityStats(),
+      detailedData: getDiagnosticsData().slice(-20),
+      patientMetrics: {
+        bpmStability: diagnosticsRef.current.bpmStability,
+        signalQuality: diagnosticsRef.current.qualityHistory.length > 0 ?
+          diagnosticsRef.current.qualityHistory.reduce((sum, val) => sum + val, 0) / 
+          diagnosticsRef.current.qualityHistory.length : 0,
+        arrhythmiaRisk: diagnosticsRef.current.arrhythmiaRisk
+      }
     };
-  }, [currentBPM, confidence, isMonitoring]);
-  
+  }, []);
+
   return {
     currentBPM,
     confidence,
     processSignal,
     reset,
-    isArrhythmia: isArrhythmiaRef.current,
+    isArrhythmia: currentBeatIsArrhythmiaRef?.current || false,
     requestBeep,
     startMonitoring,
     stopMonitoring,
     getDiagnostics
   };
+};
+
+function calculateVariance(values: number[]): number {
+  if (values.length <= 1) return 0;
+  const avg = values.reduce((sum, val) => sum + val, 0) / values.length;
+  const squaredDiffs = values.map(val => Math.pow(val - avg, 2));
+  return squaredDiffs.reduce((sum, val) => sum + val, 0) / values.length;
+}
+
+function calculateRRRegularity(intervals: number[]): number {
+  if (intervals.length < 3) return 1;
+  
+  const diffs = [];
+  for (let i = 1; i < intervals.length; i++) {
+    diffs.push(Math.abs(intervals[i] - intervals[i-1]));
+  }
+  
+  const avgDiff = diffs.reduce((sum, val) => sum + val, 0) / diffs.length;
+  return Math.max(0, Math.min(1, 1 - (avgDiff / 200))); 
+}
+
+function calculateRRVariability(intervals: number[]): number {
+  if (intervals.length < 3) return 0;
+  return calculateVariance(intervals) / 1000;
 }

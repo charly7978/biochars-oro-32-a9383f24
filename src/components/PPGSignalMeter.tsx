@@ -1,337 +1,224 @@
-
 import React, { useEffect, useRef, useState } from 'react';
-import { testAudioSystem, playBeep } from '@/services/AudioManager';
+import { Heart } from 'lucide-react';
 import ArrhythmiaIndicator from './ArrhythmiaIndicator';
 
-export interface PPGSignalMeterProps {
+interface PPGSignalMeterProps {
   value: number;
   quality: number;
-  isFingerDetected: boolean;
-  onStartMeasurement: () => void;
-  onReset: () => void;
-  arrhythmiaStatus: string;
-  isArrhythmia: boolean;
+  isFingerDetected?: boolean;
+  onStartMeasurement?: () => void;
+  onReset?: () => void;
+  arrhythmiaStatus?: string;
+  rawArrhythmiaData?: any;
 }
 
 const PPGSignalMeter: React.FC<PPGSignalMeterProps> = ({
   value,
   quality,
-  isFingerDetected,
+  isFingerDetected = false,
   onStartMeasurement,
   onReset,
   arrhythmiaStatus,
-  isArrhythmia
+  rawArrhythmiaData
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const dataPointsRef = useRef<number[]>([]);
-  const animationFrameRef = useRef<number>(0);
-  const [scale, setScale] = useState(1);
-  const [fingerDetectedTimeout, setFingerDetectedTimeout] = useState<number | null>(null);
-  const [showFingerDetected, setShowFingerDetected] = useState(false);
-  const [isInitialized, setIsInitialized] = useState(false);
-  const [arrhythmiaCount, setArrhythmiaCount] = useState(0);
-  const [arrhythmiaInfo, setArrhythmiaInfo] = useState<{
-    active: boolean;
-    lastTime: number;
-    count: number;
-  }>({
-    active: false,
-    lastTime: 0,
-    count: 0
-  });
-  const audioContextRef = useRef<AudioContext | null>(null);
-  const lastBeepTime = useRef<number>(0);
-  const lastArrhythmiaTime = useRef<number>(0);
+  const [values, setValues] = useState<number[]>([]);
+  const [isMaxValue, setIsMaxValue] = useState(false);
+  const [activeArrhythmia, setActiveArrhythmia] = useState(false);
+  const [arrhythmiaSeverity, setArrhythmiaSeverity] = useState<'low' | 'medium' | 'high'>('medium');
   
-  // Parse arrhythmia status to get count
+  const MAX_VALUES = 150;
+  const ARRHYTHMIA_DISPLAY_TIME = 3000; // 3 seconds display time
+  
   useEffect(() => {
-    if (arrhythmiaStatus && arrhythmiaStatus !== '--') {
-      const parts = arrhythmiaStatus.split('|');
-      if (parts.length > 1) {
-        const count = parseInt(parts[1], 10);
-        if (!isNaN(count)) {
-          setArrhythmiaCount(count);
-          // Update arrhythmia info
-          setArrhythmiaInfo(prev => ({
-            ...prev,
-            count: count
-          }));
+    const handleArrhythmiaVisual = (event: CustomEvent) => {
+      const { severity } = event.detail;
+      
+      console.log("Arrhythmia visual event received:", event.detail);
+      
+      setArrhythmiaSeverity(severity || 'medium');
+      setActiveArrhythmia(true);
+      
+      setTimeout(() => {
+        setActiveArrhythmia(false);
+      }, ARRHYTHMIA_DISPLAY_TIME);
+    };
+    
+    window.addEventListener('arrhythmia-visual', handleArrhythmiaVisual as EventListener);
+    
+    return () => {
+      window.removeEventListener('arrhythmia-visual', handleArrhythmiaVisual as EventListener);
+    };
+  }, []);
+  
+  useEffect(() => {
+    const handleCardiacPeak = (event: CustomEvent) => {
+      const { isArrhythmia } = event.detail;
+      
+      setIsMaxValue(true);
+      
+      if (isArrhythmia) {
+        setActiveArrhythmia(true);
+        
+        const heartRate = event.detail.heartRate || 0;
+        if (heartRate > 100) {
+          setArrhythmiaSeverity('high');
+        } else if (heartRate < 50) {
+          setArrhythmiaSeverity('low');
+        } else {
+          setArrhythmiaSeverity('medium');
         }
+        
+        setTimeout(() => {
+          setActiveArrhythmia(false);
+        }, ARRHYTHMIA_DISPLAY_TIME);
       }
+      
+      setTimeout(() => {
+        setIsMaxValue(false);
+      }, 150);
+    };
+    
+    window.addEventListener('cardiac-peak-detected', handleCardiacPeak as EventListener);
+    
+    return () => {
+      window.removeEventListener('cardiac-peak-detected', handleCardiacPeak as EventListener);
+    };
+  }, []);
+  
+  useEffect(() => {
+    if (arrhythmiaStatus?.includes("ARRHYTHMIA DETECTED")) {
+      setActiveArrhythmia(true);
+      
+      setTimeout(() => {
+        setActiveArrhythmia(false);
+      }, ARRHYTHMIA_DISPLAY_TIME);
     }
   }, [arrhythmiaStatus]);
   
-  // Handle arrhythmia detection
   useEffect(() => {
-    if (isArrhythmia) {
-      const now = Date.now();
-      
-      // Play special arrhythmia beep
-      if (now - lastArrhythmiaTime.current > 2000) {
-        playBeep('arrhythmia');
-        lastArrhythmiaTime.current = now;
+    setValues(prev => {
+      const newValues = [...prev, value];
+      if (newValues.length > MAX_VALUES) {
+        return newValues.slice(-MAX_VALUES);
       }
-      
-      // Update arrhythmia info
-      setArrhythmiaInfo({
-        active: true,
-        lastTime: now,
-        count: arrhythmiaCount
-      });
-      
-      // Reset active state after delay
-      setTimeout(() => {
-        setArrhythmiaInfo(prev => ({
-          ...prev,
-          active: false
-        }));
-      }, 3000);
-    }
-  }, [isArrhythmia, arrhythmiaCount]);
-
-  // Initialize audio on component mount
-  useEffect(() => {
-    if (!isInitialized) {
-      try {
-        audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
-        console.log("PPGSignalMeter: Inicializando Audio Context");
-        setIsInitialized(true);
-      } catch (error) {
-        console.error("Error initializing audio context:", error);
-      }
-    }
-  }, [isInitialized]);
-
-  // Update datapoints with new values
-  useEffect(() => {
-    if (isFingerDetected) {
-      dataPointsRef.current.push(value);
-      if (dataPointsRef.current.length > 100) {
-        dataPointsRef.current.shift();
-      }
-      
-      // Adjust scale based on signal amplitude
-      const maxValue = Math.max(...dataPointsRef.current.map(val => Math.abs(val)));
-      const targetScale = maxValue > 0 ? Math.min(5, 1 / maxValue) : 1;
-      setScale(prev => prev * 0.95 + targetScale * 0.05);
-      
-      // Show finger detected message
-      if (!showFingerDetected) {
-        setShowFingerDetected(true);
-        if (fingerDetectedTimeout) {
-          clearTimeout(fingerDetectedTimeout);
-        }
-        setFingerDetectedTimeout(window.setTimeout(() => {
-          setShowFingerDetected(false);
-        }, 2000));
-      }
-      
-      // Play heartbeat sound on peaks
-      const now = Date.now();
-      if (value > 0.1 && now - lastBeepTime.current > 600) {
-        // Adjust volume based on quality
-        const beepVolume = Math.min(0.01 + quality / 1000, 0.05);
-        console.log("PPGSignalMeter: Reproduciendo beep para círculo dibujado, volumen:", beepVolume);
-        playBeepWithVolume(440, beepVolume, 50);
-        lastBeepTime.current = now;
-      }
-    } else {
-      if (dataPointsRef.current.length > 0) {
-        dataPointsRef.current = [];
-      }
-    }
-  }, [value, isFingerDetected, fingerDetectedTimeout, showFingerDetected, quality]);
-
-  // Draw waveform
-  useEffect(() => {
+      return newValues;
+    });
+    
     const canvas = canvasRef.current;
-    if (!canvas) return;
-    
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    
-    const draw = () => {
-      const width = canvas.width;
-      const height = canvas.height;
-      
-      ctx.clearRect(0, 0, width, height);
-      
-      // Background
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
-      ctx.fillRect(0, 0, width, height);
-      
-      // Draw grid
-      ctx.strokeStyle = 'rgba(50, 50, 50, 0.5)';
-      ctx.lineWidth = 1;
-      
-      // Vertical grid lines
-      for (let x = 0; x < width; x += 20) {
-        ctx.beginPath();
-        ctx.moveTo(x, 0);
-        ctx.lineTo(x, height);
-        ctx.stroke();
-      }
-      
-      // Horizontal grid lines
-      for (let y = 0; y < height; y += 20) {
-        ctx.beginPath();
-        ctx.moveTo(0, y);
-        ctx.lineTo(width, y);
-        ctx.stroke();
-      }
-      
-      // Center line
-      ctx.strokeStyle = 'rgba(100, 100, 100, 0.7)';
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.moveTo(0, height / 2);
-      ctx.lineTo(width, height / 2);
-      ctx.stroke();
-      
-      // Draw signal
-      if (dataPointsRef.current.length > 1) {
-        const step = Math.max(1, Math.floor(dataPointsRef.current.length / width));
+    if (canvas) {
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        const width = canvas.width;
+        const height = canvas.height;
+        const centerY = height / 2;
         
-        // Create gradient for waveform
-        const gradient = ctx.createLinearGradient(0, 0, 0, height);
-        gradient.addColorStop(0, isArrhythmiaInfo.active ? '#ff3333' : '#00ff00');
-        gradient.addColorStop(0.5, isArrhythmiaInfo.active ? '#ff9999' : '#88ff88');
-        gradient.addColorStop(1, isArrhythmiaInfo.active ? '#ff3333' : '#00ff00');
+        ctx.clearRect(0, 0, width, height);
         
-        ctx.strokeStyle = gradient;
-        ctx.lineWidth = 2;
         ctx.beginPath();
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
+        ctx.lineWidth = 3;
         
-        for (let i = 0; i < dataPointsRef.current.length; i++) {
-          const x = (i * width) / dataPointsRef.current.length;
-          const y = height / 2 - dataPointsRef.current[i] * scale * (height / 2.5);
+        const currentValues = values.slice(-width);
+        currentValues.forEach((val, i) => {
+          const x = i;
+          const y = centerY - val * height * 0.4;
           
           if (i === 0) {
             ctx.moveTo(x, y);
           } else {
             ctx.lineTo(x, y);
           }
-        }
+        });
         
         ctx.stroke();
         
-        // Draw heartbeat circle at the latest point
-        if (dataPointsRef.current.length > 0) {
-          const latestValue = dataPointsRef.current[dataPointsRef.current.length - 1];
-          const x = width - 5;
-          const y = height / 2 - latestValue * scale * (height / 2.5);
-          
-          // Pulsing circle
-          const pulseSize = Math.abs(latestValue) * 10 + 5;
-          ctx.fillStyle = isArrhythmiaInfo.active ? 'rgba(255, 50, 50, 0.8)' : 'rgba(0, 255, 0, 0.8)';
+        if (rawArrhythmiaData && activeArrhythmia) {
           ctx.beginPath();
-          ctx.arc(x, y, pulseSize, 0, Math.PI * 2);
-          ctx.fill();
+          ctx.strokeStyle = 'rgba(239, 68, 68, 0.8)';
+          ctx.lineWidth = 5;
           
-          // Inner circle
-          ctx.fillStyle = isArrhythmiaInfo.active ? '#ff0000' : '#00cc00';
-          ctx.beginPath();
-          ctx.arc(x, y, 3, 0, Math.PI * 2);
-          ctx.fill();
+          const arrhythmiaX = currentValues.length - 5;
+          if (arrhythmiaX > 0) {
+            const y = centerY - currentValues[arrhythmiaX] * height * 0.4;
+            ctx.arc(arrhythmiaX, y, 8, 0, 2 * Math.PI);
+            ctx.stroke();
+          }
         }
       }
-      
-      // Draw finger detection status
-      if (!isFingerDetected) {
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-        ctx.fillRect(0, 0, width, height);
-        
-        ctx.font = '16px Arial';
-        ctx.fillStyle = '#ffffff';
-        ctx.textAlign = 'center';
-        ctx.fillText('Coloque su dedo en la cámara', width / 2, height / 2);
-      } else if (showFingerDetected) {
-        ctx.font = '14px Arial';
-        ctx.fillStyle = 'rgba(0, 255, 0, 0.8)';
-        ctx.textAlign = 'center';
-        ctx.fillText('Dedo detectado', width / 2, 25);
-      }
-      
-      // Show quality indicator
-      const qualityText = `Calidad: ${quality.toFixed(0)}%`;
-      ctx.font = '12px Arial';
-      ctx.fillStyle = quality > 70 ? '#00ff00' : quality > 40 ? '#ffff00' : '#ff3333';
-      ctx.textAlign = 'right';
-      ctx.fillText(qualityText, width - 10, 20);
-      
-      animationFrameRef.current = requestAnimationFrame(draw);
-    };
-    
-    animationFrameRef.current = requestAnimationFrame(draw);
-    
-    return () => {
-      if (animationFrameRef.current) {
-        cancelAnimationFrame(animationFrameRef.current);
-      }
-      if (fingerDetectedTimeout) {
-        clearTimeout(fingerDetectedTimeout);
-      }
-    };
-  }, [isFingerDetected, showFingerDetected, fingerDetectedTimeout, scale, quality, arrhythmiaInfo]);
-
-  // Play a beep with adjustable volume
-  const playBeepWithVolume = (frequency: number, volume: number, duration: number) => {
-    if (!audioContextRef.current) return;
-    
-    try {
-      const oscillator = audioContextRef.current.createOscillator();
-      const gainNode = audioContextRef.current.createGain();
-      
-      oscillator.type = 'sine';
-      oscillator.frequency.value = frequency;
-      
-      gainNode.gain.value = volume;
-      
-      oscillator.connect(gainNode);
-      gainNode.connect(audioContextRef.current.destination);
-      
-      oscillator.start();
-      oscillator.stop(audioContextRef.current.currentTime + duration / 1000);
-    } catch (error) {
-      console.error("Error playing beep:", error);
     }
-  };
-
-  // Test audio system by playing different types of beeps
-  const testAudio = () => {
-    testAudioSystem();
-  };
-
-  // Helper to check if arrhythmia is active
-  const isArrhythmiaInfo = {
-    active: arrhythmiaInfo.active || (isArrhythmia && Date.now() - arrhythmiaInfo.lastTime < 3000),
-    count: arrhythmiaInfo.count
-  };
-
+  }, [value, values, rawArrhythmiaData, activeArrhythmia]);
+  
   return (
-    <div className="relative h-full w-full flex flex-col">
-      <div className="absolute top-5 left-5 z-20">
-        <ArrhythmiaIndicator 
-          isActive={isArrhythmiaInfo.active}
-          count={isArrhythmiaInfo.count}
+    <div className="relative w-full h-full flex flex-col">
+      <div className="absolute top-4 right-4">
+        <div className={`flex items-center gap-2 px-3 py-2 rounded-lg ${isFingerDetected ? 'bg-green-500' : 'bg-red-500'} text-white`}>
+          <Heart 
+            className={`${isMaxValue ? 'scale-125' : 'scale-100'} transition-transform`}
+            fill={isMaxValue ? 'white' : 'transparent'} 
+          />
+          <span className="font-medium">
+            {isFingerDetected ? 'Dedo detectado' : 'Coloque el dedo'}
+          </span>
+        </div>
+      </div>
+      
+      <div className="flex-1 relative">
+        <canvas 
+          ref={canvasRef} 
+          className="w-full h-full" 
+          width={MAX_VALUES} 
+          height={200} 
         />
+        
+        <ArrhythmiaIndicator 
+          isActive={activeArrhythmia} 
+          severity={arrhythmiaSeverity}
+        />
+        
+        <div className="absolute bottom-4 left-4 bg-black/30 backdrop-blur-sm px-3 py-1 rounded-lg">
+          <div className="flex items-center gap-1">
+            <span className="text-xs text-gray-300">Calidad:</span>
+            <div className="flex gap-1">
+              {[1, 2, 3, 4, 5].map((i) => (
+                <div 
+                  key={i}
+                  className={`h-2 w-2 rounded-full ${
+                    quality >= i * 20 ? 'bg-green-500' : 'bg-gray-500'
+                  }`}
+                />
+              ))}
+            </div>
+          </div>
+        </div>
+        
+        {arrhythmiaStatus && !arrhythmiaStatus.includes("--") && (
+          <div className="absolute bottom-4 right-4 bg-black/30 backdrop-blur-sm px-3 py-1 rounded-lg">
+            <div className="flex items-center gap-2">
+              <span className={`text-xs ${arrhythmiaStatus.includes("ARRHYTHMIA") ? 'text-red-400' : 'text-green-400'}`}>
+                {arrhythmiaStatus.split("|")[0]}
+              </span>
+            </div>
+          </div>
+        )}
       </div>
-      
-      <div className="absolute top-5 right-5 z-20">
-        <button 
-          className="bg-gray-800/50 text-white px-3 py-1 rounded-md text-xs"
-          onClick={testAudio}
-        >
-          Test Audio
-        </button>
-      </div>
-      
-      <canvas
-        ref={canvasRef}
-        className="w-full h-full"
-        width={600}
-        height={300}
-      />
+
+      {onStartMeasurement && onReset && (
+        <div className="absolute bottom-20 left-1/2 transform -translate-x-1/2 flex gap-4">
+          <button 
+            onClick={onStartMeasurement}
+            className="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-6 rounded-full"
+          >
+            Iniciar
+          </button>
+          <button 
+            onClick={onReset}
+            className="bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-6 rounded-full"
+          >
+            Reiniciar
+          </button>
+        </div>
+      )}
     </div>
   );
 };

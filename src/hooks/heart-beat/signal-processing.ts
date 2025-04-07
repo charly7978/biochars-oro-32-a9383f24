@@ -8,6 +8,8 @@ interface DiagnosticData {
   signalQuality?: string;
   detectionStatus?: string;
   lastProcessedTime?: number;
+  isFingerDetected?: boolean;
+  isArrhythmia?: boolean;
   lastPeakDetected?: number;
   peakStrength?: number;
   lastValidBpmTime?: number;
@@ -21,8 +23,10 @@ interface DiagnosticData {
   processingStatus?: string;
   arrhythmiaTracking?: boolean;
   arrhythmiaCount?: number;
-  isFingerDetected?: boolean;
-  isArrhythmia?: boolean;
+  rhythmAnalysis?: {
+    regularity: number;
+    variability: number;
+  };
 }
 
 /**
@@ -100,7 +104,7 @@ export function createWeakSignalResult(arrhythmiaCount = 0): HeartBeatResult {
 
 /**
  * Handles peak detection and beep requests
- * Enhanced with arrhythmia detection
+ * Enhanced with arrhythmia detection notification
  */
 export function handlePeakDetection(
   result: HeartBeatResult,
@@ -132,6 +136,11 @@ export function handlePeakDetection(
       
       // Also use direct callback
       requestImmediateBeep(value);
+      
+      // Dispatch arrhythmia visualization event if detected
+      if (result.isArrhythmia) {
+        dispatchArrhythmiaVisualEvent(result.bpm || 0, now);
+      }
     }
     
     // Enhanced diagnostics for peak detection
@@ -142,6 +151,24 @@ export function handlePeakDetection(
       result.diagnosticData.isArrhythmia = result.isArrhythmia || false;
     }
   }
+}
+
+/**
+ * Dispatch an event specifically for arrhythmia visualization
+ */
+function dispatchArrhythmiaVisualEvent(bpm: number, timestamp: number): void {
+  // Create a dedicated event for visual representation of arrhythmias
+  const arrhythmiaEvent = new CustomEvent('arrhythmia-visual', {
+    detail: {
+      timestamp,
+      bpm,
+      duration: 3000, // 3-second visual indicator
+      severity: bpm > 100 ? 'high' : 'medium'
+    }
+  });
+  
+  window.dispatchEvent(arrhythmiaEvent);
+  console.log('Arrhythmia visualization event dispatched', { timestamp, bpm });
 }
 
 /**
@@ -189,7 +216,7 @@ export function processLowConfidenceResult(
         originalConfidence: result.confidence,
         adjustedConfidence: Math.max(0.3, result.confidence),
         arrhythmiaTracking: true,
-        arrhythmiaCount
+        arrhythmiaCount: arrhythmiaCount
       }
     };
     
@@ -205,7 +232,7 @@ export function processLowConfidenceResult(
         ...(result.diagnosticData || {}),
         bpmStatus: 'zero',
         arrhythmiaTracking: true,
-        arrhythmiaCount
+        arrhythmiaCount: arrhythmiaCount
       }
     };
   }
@@ -216,7 +243,7 @@ export function processLowConfidenceResult(
     diagnosticData: {
       ...(result.diagnosticData || {}),
       processingStatus: 'normal',
-      arrhythmiaCount
+      arrhythmiaCount: arrhythmiaCount
     }
   };
 }
@@ -244,8 +271,8 @@ export function isFingerDetected(
   }
   const avgDiff = sumDiffs / (recentValues.length - 1);
   
-  // Require minimum variability
-  return avgDiff > 0.01;
+  // Need both adequate strength and variation
+  return avgSignal >= threshold && avgDiff >= threshold * 0.2;
 }
 
 /**
