@@ -1,33 +1,16 @@
+
 /**
  * Central export for all type definitions
  * Import types from here instead of individual files
  */
 
-// Export vital sign types but with explicit naming to avoid conflicts
-import * as VitalSignsTypes from './vital-signs';
-export { VitalSignsTypes };
+// Export all vital sign types
+export * from './vital-signs';
 
-// Export signal types 
+// Export signal types
 export * from './signal';
 
 // Export screen orientation types
 export * from './screen-orientation';
 
-// Export the ArrhythmiaProcessingResult from the arrhythmia module
-import type { ArrhythmiaProcessingResult } from '../modules/vital-signs/arrhythmia/types';
-export type { ArrhythmiaProcessingResult };
-
-// Export RRIntervalData from vital-signs
-import type { RRIntervalData } from './vital-signs';
-export type { RRIntervalData };
-
-// Export SignalProcessor from signal-processing
-import type { SignalProcessor } from '../modules/signal-processing/types';
-export type { SignalProcessor };
-
-// Re-export VitalSignType to ensure consistency
-import { VitalSignType } from './signal';
-export { VitalSignType };
-
-// Add this line to export the type from PrecisionVitalSignsProcessor
-export type { PrecisionVitalSignsResult } from '../modules/vital-signs/PrecisionVitalSignsProcessor';
+// Note: media-stream.d.ts defines global interfaces and doesn't export anything

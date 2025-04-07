@@ -1,3 +1,4 @@
+
 /**
  * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
  * 
@@ -9,7 +10,6 @@
 import { ProcessedSignal, VitalSignType, ChannelFeedback } from '../../types/signal';
 import { OptimizedSignalDistributor } from '../signal-processing/OptimizedSignalDistributor';
 import { v4 as uuidv4 } from 'uuid';
-import { ProcessedPPGSignal, SignalPriority } from '../signal-processing/SignalBus';
 
 // Import specialized vital sign processors
 import { GlucoseProcessor } from './specialized/GlucoseProcessor';
@@ -78,8 +78,12 @@ export class ModularVitalSignsProcessor {
   constructor() {
     console.log("ModularVitalSignsProcessor: Initializing with specialized processors and optimized signal channels");
     
-    // Create signal distributor with no parameters
-    this.signalDistributor = new OptimizedSignalDistributor();
+    // Create signal distributor
+    this.signalDistributor = new OptimizedSignalDistributor({
+      enableFeedback: true,
+      adaptChannels: true,
+      optimizationInterval: 3000 // 3 seconds
+    });
     
     // Create specialized processors
     this.glucoseProcessor = new GlucoseProcessor();
@@ -169,22 +173,8 @@ export class ModularVitalSignsProcessor {
       // Start performance measurement
       const startTime = performance.now();
       
-      // Convert ProcessedSignal to ProcessedPPGSignal needed by the distributor
-      const convertedSignal: ProcessedPPGSignal = {
-        type: SignalType.PPG_SIGNAL,
-        timestamp: signal.timestamp,
-        sourceId: 'vital-signs-processor',
-        priority: SignalPriority.MEDIUM,
-        isValid: true,
-        rawValue: signal.rawValue,
-        filteredValue: signal.filteredValue,
-        amplifiedValue: signal.filteredValue * 1.5, // Approximate amplification if not available
-        quality: signal.quality,
-        fingerDetected: signal.fingerDetected
-      };
-      
       // Distribute signal to specialized channels
-      const channelValues = this.signalDistributor.processSignal(convertedSignal);
+      const channelValues = this.signalDistributor.processSignal(signal);
       
       // Process each vital sign with its optimized signal
       const glucoseValue = this.glucoseProcessor.processValue(channelValues[VitalSignType.GLUCOSE]);
@@ -283,20 +273,6 @@ export class ModularVitalSignsProcessor {
   }
   
   /**
-   * Calculate blood pressure with specialized processor
-   * Returns object format instead of string
-   */
-  private calculateBloodPressure(value: number, rrData?: any): { systolic: number, diastolic: number } {
-    // Use the specialized blood pressure processor
-    const systolic = 120 + (value * 10);
-    const diastolic = 80 + (value * 5);
-    return {
-      systolic: Math.round(systolic),
-      diastolic: Math.round(diastolic)
-    };
-  }
-  
-  /**
    * Create an empty result for invalid signals or non-processing state
    */
   private createEmptyResult(): VitalSignsResult {
@@ -350,10 +326,4 @@ export class ModularVitalSignsProcessor {
       processorConfidence: this.lastResult?.confidence
     };
   }
-}
-
-// Add the missing SignalType enum to avoid dependency issues
-enum SignalType {
-  PPG_SIGNAL = 'PPG_SIGNAL',
-  VALIDATED_SIGNAL = 'VALIDATED_SIGNAL'
 }

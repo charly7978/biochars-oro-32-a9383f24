@@ -1,3 +1,4 @@
+
 /**
  * Interface for PPG data point with timestamp
  */
@@ -80,11 +81,8 @@ export interface ProcessingError {
  */
 export interface SignalValidationResult {
   isValid: boolean;
-  reason?: string;
   errorCode?: string;
   errorMessage?: string;
-  validationId?: string;
-  timestamp?: number;
   diagnosticInfo?: Record<string, any>;
 }
 
@@ -109,10 +107,10 @@ export interface SignalProcessor {
  */
 export interface ErrorHandlerConfig {
   logErrors: boolean;
-  throwOnCritical: boolean;
-  retryOnError?: boolean;
-  fallbackToLastGoodValue?: boolean;
-  maxRetries?: number;
+  retryOnError: boolean;
+  maxRetries: number;
+  notifyUser: boolean;
+  fallbackToLastGoodValue: boolean;
 }
 
 /**
@@ -120,11 +118,10 @@ export interface ErrorHandlerConfig {
  */
 export interface SignalValidationConfig {
   minAmplitude: number;
-  maxAmplitude?: number;
-  minVariance?: number;
-  maxVariance?: number;
-  requiredSampleSize?: number;
-  maxTimeGap?: number;
+  maxAmplitude: number;
+  minVariance: number;
+  maxVariance: number;
+  requiredSampleSize: number;
 }
 
 /**
@@ -138,8 +135,6 @@ export interface OptimizedSignalChannel {
   applyFeedback: (feedback: ChannelFeedback) => void;  // Apply feedback from algorithm
   getQuality: () => number;       // Get channel quality (0-1)
   reset: () => void;              // Reset channel state
-  getAmplification: () => number; // Get current amplification factor
-  getFilterStrength: () => number; // Get current filter strength
 }
 
 /**
@@ -150,8 +145,7 @@ export enum VitalSignType {
   LIPIDS = 'lipids',
   BLOOD_PRESSURE = 'blood_pressure',
   SPO2 = 'spo2',
-  CARDIAC = 'cardiac',
-  HYDRATION = 'hydration'
+  CARDIAC = 'cardiac'
 }
 
 /**

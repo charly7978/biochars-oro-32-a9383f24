@@ -7,20 +7,17 @@ import { useVitalSignsProcessor } from "@/hooks/useVitalSignsProcessor";
 import PPGSignalMeter from "@/components/PPGSignalMeter";
 import MonitorButton from "@/components/MonitorButton";
 import AppTitle from "@/components/AppTitle";
-import { VitalSignsTypes } from "@/types";
-
-type LocalVitalSignsResult = VitalSignsTypes.VitalSignsResult;
+import { VitalSignsResult } from "@/modules/vital-signs";
 
 const Index = () => {
   const [isMonitoring, setIsMonitoring] = useState(false);
   const [isCameraOn, setIsCameraOn] = useState(false);
   const [signalQuality, setSignalQuality] = useState(0);
-  const [vitalSigns, setVitalSigns] = useState<LocalVitalSignsResult>({
+  const [vitalSigns, setVitalSigns] = useState<VitalSignsResult>({
     spo2: 0,
     pressure: "--/--",
     arrhythmiaStatus: "--",
     glucose: 0,
-    hydration: 0,
     lipids: {
       totalCholesterol: 0,
       triglycerides: 0
@@ -55,26 +52,6 @@ const Index = () => {
     }
   };
 
-  const sanitizeVitalSigns = (results: LocalVitalSignsResult): LocalVitalSignsResult => {
-    if (!results) return vitalSigns;
-    
-    return {
-      ...results,
-      spo2: results.spo2 ? Math.round(Math.min(99, Math.max(90, results.spo2))) : 0,
-      pressure: results.pressure,
-      glucose: results.glucose ? Math.round(results.glucose) : 0,
-      hydration: results.hydration ? Math.round(Math.min(100, Math.max(0, results.hydration))) : 0,
-      lipids: {
-        totalCholesterol: results.lipids?.totalCholesterol ? 
-          Math.round(results.lipids.totalCholesterol) : 0,
-        triglycerides: results.lipids?.triglycerides ? 
-          Math.round(results.lipids.triglycerides) : 0
-      },
-      arrhythmiaStatus: results.arrhythmiaStatus,
-      lastArrhythmiaData: results.lastArrhythmiaData
-    };
-  };
-
   useEffect(() => {
     const preventScroll = (e: Event) => e.preventDefault();
     document.body.addEventListener('touchmove', preventScroll, { passive: false });
@@ -88,62 +65,32 @@ const Index = () => {
 
   useEffect(() => {
     if (lastValidResults && !isMonitoring) {
-      const convertedResult: LocalVitalSignsResult = {
-        ...lastValidResults,
-        lastArrhythmiaData: lastValidResults.lastArrhythmiaData ? {
-          timestamp: lastValidResults.lastArrhythmiaData.timestamp,
-          rmssd: lastValidResults.lastArrhythmiaData.rmssd || 0,
-          rrVariation: lastValidResults.lastArrhythmiaData.rrVariation || 0
-        } : null
-      };
-      
-      setVitalSigns(sanitizeVitalSigns(convertedResult));
+      setVitalSigns(lastValidResults);
       setShowResults(true);
     }
   }, [lastValidResults, isMonitoring]);
 
   useEffect(() => {
     if (lastSignal && isMonitoring) {
-      console.log("Processing signal:", lastSignal);
+      const minQualityThreshold = 40;
       
-      const minQualityThreshold = 20;
-      
-      if (lastSignal.fingerDetected) {
-        console.log("Finger detected, quality:", lastSignal.quality);
-        
+      if (lastSignal.fingerDetected && lastSignal.quality >= minQualityThreshold) {
         const heartBeatResult = processHeartBeat(lastSignal.filteredValue);
-        console.log("Heart beat result:", heartBeatResult);
         
-        if (heartBeatResult.confidence > 0.1) {
-          setHeartRate(Math.round(heartBeatResult.bpm));
-          
-          if (heartBeatResult.rrData && heartBeatResult.rrData.intervals.length > 0) {
-            console.log("RR intervals:", heartBeatResult.rrData.intervals);
-          }
+        if (heartBeatResult.confidence > 0.4) {
+          setHeartRate(heartBeatResult.bpm);
           
           const vitals = processVitalSigns(lastSignal.filteredValue, heartBeatResult.rrData);
           if (vitals) {
-            console.log("Vital signs processed:", vitals);
-            
-            const convertedResult: LocalVitalSignsResult = {
-              ...vitals,
-              lastArrhythmiaData: vitals.lastArrhythmiaData ? {
-                timestamp: vitals.lastArrhythmiaData.timestamp,
-                rmssd: vitals.lastArrhythmiaData.rmssd || 0,
-                rrVariation: vitals.lastArrhythmiaData.rrVariation || 0
-              } : null
-            };
-            
-            setVitalSigns(sanitizeVitalSigns(convertedResult));
+            setVitalSigns(vitals);
           }
         }
         
-        setSignalQuality(Math.round(lastSignal.quality));
+        setSignalQuality(lastSignal.quality);
       } else {
-        console.log("No finger detected");
-        setSignalQuality(Math.round(lastSignal.quality));
+        setSignalQuality(lastSignal.quality);
         
-        if (heartRate > 0) {
+        if (!lastSignal.fingerDetected && heartRate > 0) {
           setHeartRate(0);
         }
       }
@@ -201,21 +148,13 @@ const Index = () => {
     
     const savedResults = resetVitalSigns();
     if (savedResults) {
-      const convertedResult: LocalVitalSignsResult = {
-        ...savedResults,
-        lastArrhythmiaData: savedResults.lastArrhythmiaData ? {
-          timestamp: savedResults.lastArrhythmiaData.timestamp,
-          rmssd: savedResults.lastArrhythmiaData.rmssd || 0,
-          rrVariation: savedResults.lastArrhythmiaData.rrVariation || 0
-        } : null
-      };
-      
-      setVitalSigns(sanitizeVitalSigns(convertedResult));
+      setVitalSigns(savedResults);
       setShowResults(true);
     }
     
     setElapsedTime(0);
     setSignalQuality(0);
+    setHeartRate(0);
   };
 
   const handleReset = () => {
@@ -240,7 +179,6 @@ const Index = () => {
       pressure: "--/--",
       arrhythmiaStatus: "--",
       glucose: 0,
-      hydration: 0,
       lipids: {
         totalCholesterol: 0,
         triglycerides: 0
@@ -415,9 +353,9 @@ const Index = () => {
                 highlighted={showResults}
               />
               <VitalSign 
-                label="HIDRATACIÓN"
-                value={vitalSigns.hydration || "--"}
-                unit="%"
+                label="TRIGLICÉRIDOS"
+                value={vitalSigns.lipids?.triglycerides || "--"}
+                unit="mg/dL"
                 highlighted={showResults}
               />
             </div>

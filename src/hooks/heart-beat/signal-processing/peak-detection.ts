@@ -1,183 +1,209 @@
 /**
- * Improved peak detection module with lowered thresholds for better detection
+ * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
+ *
+ * Functions for peak detection logic, working with real data only
  */
-import { HeartBeatConfig } from '../../../modules/heart-beat/config';
 
-// Store diagnostics data
-const diagnosticsData: Array<{
+// Diagnostics channel integration
+export interface DiagnosticsData {
   timestamp: number;
-  isPeak: boolean;
-  bpm: number;
-  confidence: number;
-  processingPriority: 'high' | 'medium' | 'low';
   processTime: number;
-}> = [];
-
-/**
- * Get diagnostics data
- */
-export function getDiagnosticsData() {
-  return [...diagnosticsData];
+  signalStrength: number;
+  processorLoad: number;
+  dataPointsProcessed: number;
+  peakDetectionConfidence: number;
+  processingPriority: 'high' | 'medium' | 'low';
 }
 
-/**
- * Clear diagnostics data
- */
-export function clearDiagnosticsData() {
-  diagnosticsData.length = 0;
-}
+// Global diagnostics collector
+let diagnosticsBuffer: DiagnosticsData[] = [];
+const MAX_DIAGNOSTICS_BUFFER = 100;
 
 /**
- * Detect peaks in the signal buffer
- * Uses a combination of amplitude, derivative, and time since last peak
- * NOW WITH LOWER THRESHOLDS FOR TESTING
+ * Determines if a measurement should be processed based on signal strength
+ * Only processes real measurements
+ * Now with improved prioritization based on signal strength
  */
-export function detectPeaks(
-  filteredValue: number,
-  buffer: number[],
-  lastPeakTime: number | null,
-  currentTime: number
-): { isPeak: boolean; confidence: number; bpm: number | null } {
-  const startTime = performance.now();
+export function shouldProcessMeasurement(value: number): boolean {
+  // Añadir diagnóstico sobre decisión de procesamiento
+  const signalStrength = Math.abs(value);
+  const processingDecision = signalStrength >= 0.008;
   
-  if (buffer.length < 5) {
-    return { isPeak: false, confidence: 0, bpm: null };
-  }
-
-  // Calculate derivative (rate of change)
-  const derivative = filteredValue - buffer[buffer.length - 2];
-  
-  // Calculate baseline as moving average
-  const recentValues = buffer.slice(-20);
-  const baseline = recentValues.reduce((sum, val) => sum + val, 0) / recentValues.length;
-
-  // Calculate minimum time between peaks (lowered for testing)
-  const minTimeBetweenPeaks = 300; // 300ms = 200 BPM max
-
-  // Check if enough time has passed since last peak
-  if (lastPeakTime !== null) {
-    const timeSinceLastPeak = currentTime - lastPeakTime;
-    if (timeSinceLastPeak < minTimeBetweenPeaks) {
-      return { isPeak: false, confidence: 0, bpm: null };
-    }
-  }
-
-  // LOWERED THRESHOLDS for testing
-  const signalThreshold = 0.01; // Was 0.6 or higher
-  const derivativeThreshold = -0.005; // Was -0.03
-  
-  // Peak detection: value above threshold and negative derivative (falling edge)
-  // This is the heart of the detection algorithm
-  const isPeak = 
-    derivative < derivativeThreshold && 
-    filteredValue > signalThreshold && 
-    filteredValue > baseline * 0.7; // Lower amplitude requirement
-
-  // Calculate confidence based on how well the signal meets criteria
-  let confidence = 0;
-  let bpm = null;
-
-  if (isPeak) {
-    // Calculate confidence based on signal characteristics
-    const valueConfidence = Math.min(filteredValue / 0.2, 1) * 0.6;
-    const derivativeConfidence = Math.min(Math.abs(derivative) / 0.02, 1) * 0.4;
-    confidence = valueConfidence + derivativeConfidence;
-
-    // Calculate BPM if we have a previous peak time
-    if (lastPeakTime !== null) {
-      const interval = currentTime - lastPeakTime;
-      if (interval > 0) {
-        bpm = Math.round(60000 / interval);
-        
-        // Validate BPM is physiologically reasonable
-        if (bpm < 40 || bpm > 200) {
-          confidence *= 0.5; // Reduce confidence for unlikely values
-        }
-      }
-    }
-    
-    console.log(`[Peak Detected] Value: ${filteredValue.toFixed(4)}, Derivative: ${derivative.toFixed(4)}, Confidence: ${confidence.toFixed(2)}, BPM: ${bpm}`);
-  }
-
-  // Calculate processing time for diagnostics
-  const processTime = performance.now() - startTime;
-  
-  // Determine processing priority based on signal quality
-  let processingPriority: 'high' | 'medium' | 'low' = 'low';
-  if (confidence > 0.7) {
-    processingPriority = 'high';
-  } else if (confidence > 0.3) {
-    processingPriority = 'medium';
+  // Determinar prioridad basada en la fuerza de la señal
+  let priority: 'high' | 'medium' | 'low' = 'low';
+  if (signalStrength >= 0.05) {
+    priority = 'high';
+  } else if (signalStrength >= 0.02) {
+    priority = 'medium';
   }
   
-  // Record diagnostics data
-  diagnosticsData.push({
-    timestamp: currentTime,
-    isPeak,
-    bpm: bpm || 0,
-    confidence,
-    processingPriority,
-    processTime
+  // Registrar diagnóstico
+  addDiagnosticsData({
+    timestamp: Date.now(),
+    processTime: 0,
+    signalStrength,
+    processorLoad: 0,
+    dataPointsProcessed: 1,
+    peakDetectionConfidence: processingDecision ? signalStrength * 10 : 0,
+    processingPriority: priority
   });
   
-  // Keep diagnostics data size manageable
-  if (diagnosticsData.length > 100) {
-    diagnosticsData.shift();
-  }
-
-  return { isPeak, confidence, bpm };
+  // Umbral más sensible para capturar señales reales mientras filtra ruido
+  return processingDecision; // Reducido aún más para mayor sensibilidad
 }
 
 /**
- * Calculate heart rate from a buffer of peaks
+ * Creates default signal processing result when signal is too weak
+ * Contains only real data structure with zero values
+ * Now includes diagnostics and priority information
  */
-export function calculateHeartRate(peakTimes: number[]): number | null {
-  if (peakTimes.length < 2) {
-    return null;
-  }
-
-  // Calculate intervals between peaks
-  const intervals: number[] = [];
-  for (let i = 1; i < peakTimes.length; i++) {
-    intervals.push(peakTimes[i] - peakTimes[i - 1]);
-  }
-
-  // Remove outliers (intervals that are too short or too long)
-  const validIntervals = intervals.filter(
-    interval => interval >= 300 && interval <= 1500
-  );
-
-  if (validIntervals.length === 0) {
-    return null;
-  }
-
-  // Calculate average interval
-  const avgInterval =
-    validIntervals.reduce((sum, val) => sum + val, 0) / validIntervals.length;
-
-  // Convert to BPM
-  return Math.round(60000 / avgInterval);
+export function createWeakSignalResult(arrhythmiaCounter: number = 0): any {
+  // Registrar evento de señal débil en diagnósticos
+  addDiagnosticsData({
+    timestamp: Date.now(),
+    processTime: 0,
+    signalStrength: 0.005, // Valor bajo característico
+    processorLoad: 0,
+    dataPointsProcessed: 1,
+    peakDetectionConfidence: 0,
+    processingPriority: 'low'
+  });
+  
+  return {
+    bpm: 0,
+    confidence: 0,
+    isPeak: false,
+    arrhythmiaCount: arrhythmiaCounter || 0,
+    rrData: {
+      intervals: [],
+      lastPeakTime: null
+    },
+    isArrhythmia: false,
+    // Adding transition state to ensure continuous color rendering
+    transition: {
+      active: false,
+      progress: 0,
+      direction: 'none'
+    },
+    // Add priority information for downstream processing
+    priority: 'low'
+  };
 }
 
 /**
- * Handle peak detection and update lastPeakTime
+ * Handle peak detection with improved natural synchronization
+ * Esta función se ha modificado para NO activar el beep - centralizado en PPGSignalMeter
+ * No simulation is used - direct measurement only
+ * Now with priority-based processing and diagnostics
  */
 export function handlePeakDetection(
-  processorResult: any,
+  result: any, 
   lastPeakTimeRef: React.MutableRefObject<number | null>,
-  requestImmediateBeep: (value: number) => boolean,
+  requestBeepCallback: (value: number) => boolean,
   isMonitoringRef: React.MutableRefObject<boolean>,
-  signalValue: number
+  value: number
 ): void {
-  // Update peak time when a peak is detected
-  if (processorResult.isPeak && processorResult.confidence > 0.2) {
-    const now = Date.now();
+  const startTime = performance.now();
+  const now = Date.now();
+  
+  // Determinar prioridad basada en la confianza del resultado
+  let priority: 'high' | 'medium' | 'low' = 'low';
+  if (result.confidence > 0.5) {
+    priority = 'high';
+  } else if (result.confidence > 0.2) {
+    priority = 'medium';
+  }
+  
+  // Solo actualizar tiempo del pico para cálculos de tiempo
+  if (result.isPeak && result.confidence > 0.05) {
+    // Actualizar tiempo del pico para cálculos de tempo solamente
     lastPeakTimeRef.current = now;
     
-    // Request immediate feedback for detected peak
-    if (isMonitoringRef.current) {
-      requestImmediateBeep(signalValue);
-      console.log("[PEAK] Detected at:", new Date(now).toLocaleTimeString(), "Value:", signalValue);
-    }
+    // Elevar la prioridad si se detecta un pico
+    priority = 'high';
+    
+    // EL BEEP SOLO SE MANEJA EN PPGSignalMeter CUANDO SE DIBUJA UN CÍRCULO
+    console.log("Peak-detection: Pico detectado SIN solicitar beep - control exclusivo por PPGSignalMeter", {
+      confianza: result.confidence,
+      valor: value,
+      tiempo: new Date(now).toISOString(),
+      // Log transition state if present
+      transicion: result.transition ? {
+        activa: result.transition.active,
+        progreso: result.transition.progress,
+        direccion: result.transition.direction
+      } : 'no hay transición',
+      isArrhythmia: result.isArrhythmia || false,
+      prioridad: priority
+    });
   }
+  
+  // Registrar diagnóstico con tiempo de procesamiento real
+  const endTime = performance.now();
+  addDiagnosticsData({
+    timestamp: now,
+    processTime: endTime - startTime,
+    signalStrength: Math.abs(value),
+    processorLoad: isMonitoringRef.current ? 1 : 0,
+    dataPointsProcessed: 1,
+    peakDetectionConfidence: result.confidence || 0,
+    processingPriority: priority
+  });
+  
+  // Añadir información de prioridad al resultado
+  result.priority = priority;
+}
+
+/**
+ * Add diagnostics data to the buffer
+ * Implements circular buffer to prevent memory leaks
+ */
+export function addDiagnosticsData(data: DiagnosticsData): void {
+  diagnosticsBuffer.push(data);
+  if (diagnosticsBuffer.length > MAX_DIAGNOSTICS_BUFFER) {
+    diagnosticsBuffer.shift();
+  }
+}
+
+/**
+ * Get all diagnostics data
+ * Allows external systems to access diagnostics without affecting main processing
+ */
+export function getDiagnosticsData(): DiagnosticsData[] {
+  return [...diagnosticsBuffer];
+}
+
+/**
+ * Clear diagnostics buffer
+ */
+export function clearDiagnosticsData(): void {
+  diagnosticsBuffer = [];
+}
+
+/**
+ * Get average processing time from diagnostics
+ * Useful for performance monitoring
+ */
+export function getAverageDiagnostics(): {
+  avgProcessTime: number;
+  avgSignalStrength: number;
+  highPriorityPercentage: number;
+} {
+  if (diagnosticsBuffer.length === 0) {
+    return {
+      avgProcessTime: 0,
+      avgSignalStrength: 0,
+      highPriorityPercentage: 0
+    };
+  }
+  
+  const totalTime = diagnosticsBuffer.reduce((sum, data) => sum + data.processTime, 0);
+  const totalStrength = diagnosticsBuffer.reduce((sum, data) => sum + data.signalStrength, 0);
+  const highPriorityCount = diagnosticsBuffer.filter(data => data.processingPriority === 'high').length;
+  
+  return {
+    avgProcessTime: totalTime / diagnosticsBuffer.length,
+    avgSignalStrength: totalStrength / diagnosticsBuffer.length,
+    highPriorityPercentage: (highPriorityCount / diagnosticsBuffer.length) * 100
+  };
 }
