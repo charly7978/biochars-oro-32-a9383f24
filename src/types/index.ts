@@ -26,3 +26,6 @@ export type { RRIntervalData };
 import { SignalProcessor } from '../modules/signal-processing/types';
 export type { SignalProcessor };
 
+// Export ArrhythmiaData
+import { ArrhythmiaData } from './vital-sign-types';
+export type { ArrhythmiaData };

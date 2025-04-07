@@ -1,63 +1,64 @@
 
 /**
- * Pattern detector for arrhythmia detection
+ * Arrhythmia pattern detector
+ * Detects patterns in heart rhythm that might indicate arrhythmias
  */
-
-const MAX_PATTERN_BUFFER = 30;
-
 export class ArrhythmiaPatternDetector {
   private patternBuffer: number[] = [];
+  private readonly BUFFER_SIZE = 10; 
+  private readonly PATTERN_THRESHOLD = 0.15; // Lower threshold for sensitivity
   
   /**
-   * Update the pattern buffer with a new variation value
+   * Update the pattern buffer with new variation value
    */
   public updatePatternBuffer(variation: number): void {
     this.patternBuffer.push(variation);
-    
-    if (this.patternBuffer.length > MAX_PATTERN_BUFFER) {
+    if (this.patternBuffer.length > this.BUFFER_SIZE) {
       this.patternBuffer.shift();
     }
   }
   
   /**
    * Detect arrhythmia patterns in the buffer
-   * Returns true if an arrhythmia pattern is detected
    */
   public detectArrhythmiaPattern(): boolean {
-    if (this.patternBuffer.length < 10) {
-      return false;
-    }
+    if (this.patternBuffer.length < 5) return false;
     
-    // Basic pattern detection: look for high variation followed by consistent pattern
-    const highVariationThreshold = 0.15;
-    const highVariationCount = this.patternBuffer.filter(v => v > highVariationThreshold).length;
+    // Calculate average variation
+    const avgVariation = this.patternBuffer.reduce((sum, val) => sum + val, 0) / 
+                         this.patternBuffer.length;
     
-    // If we have at least 2 high variations in our pattern buffer
-    if (highVariationCount >= 2) {
-      // Calculate average peak spacing
-      const indices: number[] = [];
-      this.patternBuffer.forEach((variation, index) => {
-        if (variation > highVariationThreshold) {
-          indices.push(index);
-        }
-      });
-      
-      // Check if indices have consistent spacing (arrhythmia pattern)
-      if (indices.length >= 2) {
-        const diffs = [];
-        for (let i = 1; i < indices.length; i++) {
-          diffs.push(indices[i] - indices[i-1]);
-        }
-        
-        // Calculate variance of diffs
-        const mean = diffs.reduce((sum, val) => sum + val, 0) / diffs.length;
-        const variance = diffs.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / diffs.length;
-        
-        // Low variance indicates consistent pattern
-        return variance < 5;
+    // Check for specific pattern types
+    return this.detectSuddenChanges() || 
+           this.detectCouplets() || 
+           avgVariation > this.PATTERN_THRESHOLD;
+  }
+  
+  /**
+   * Detect sudden changes in heart rhythm
+   */
+  private detectSuddenChanges(): boolean {
+    for (let i = 1; i < this.patternBuffer.length; i++) {
+      if (Math.abs(this.patternBuffer[i] - this.patternBuffer[i-1]) > 0.2) {
+        return true;
       }
     }
-    
+    return false;
+  }
+  
+  /**
+   * Detect couplets (pairs of abnormal beats)
+   */
+  private detectCouplets(): boolean {
+    let abnormalCount = 0;
+    for (let i = 0; i < this.patternBuffer.length; i++) {
+      if (this.patternBuffer[i] > 0.2) {
+        abnormalCount++;
+        if (abnormalCount >= 2) return true;
+      } else {
+        abnormalCount = 0;
+      }
+    }
     return false;
   }
   
