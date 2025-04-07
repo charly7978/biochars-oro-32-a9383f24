@@ -1,8 +1,21 @@
 
 /**
- * Type definitions for vital signs processing results
+ * Types for vital signs processing results
  */
 
+import { RRIntervalData } from "../../../hooks/vital-signs/types";
+
+/**
+ * Parameters for vital signs processing
+ */
+export interface VitalSignsProcessorParams {
+  value: number;
+  rrData?: RRIntervalData;
+}
+
+/**
+ * Result of vital signs processing
+ */
 export interface VitalSignsResult {
   spo2: number;
   pressure: string;
@@ -12,11 +25,11 @@ export interface VitalSignsResult {
     totalCholesterol: number;
     triglycerides: number;
   };
-  hydration: number; // Required field
+  hydration: number;
   confidence?: {
-    glucose: number;
-    lipids: number;
-    overall: number;
+    glucose?: number;
+    lipids?: number;
+    overall?: number;
   };
   lastArrhythmiaData?: {
     timestamp: number;
@@ -33,13 +46,17 @@ export interface VitalSignsResult {
   };
 }
 
-// Adding an interface for the processor parameters for better type safety
-export interface VitalSignsProcessorParams {
-  value: number;
-  rrData?: {
-    intervals: number[];
-    lastPeakTime: number | null;
+/**
+ * Extended result with precision metrics
+ */
+export interface PrecisionVitalSignsResult extends VitalSignsResult {
+  isCalibrated: boolean;
+  correlationValidated: boolean;
+  environmentallyAdjusted: boolean;
+  precisionMetrics: {
+    accuracy: number;
+    precision: number;
+    recall: number;
+    f1Score: number;
   };
-  isWeakSignal?: boolean;
 }
-

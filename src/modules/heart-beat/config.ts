@@ -22,7 +22,11 @@ export const HeartBeatConfig = {
   // Visualization
   DRAW_GRID: true,
   WINDOW_WIDTH_MS: 5000,
-  VERTICAL_SCALE: 35.0
+  VERTICAL_SCALE: 35.0,
+  
+  // Signal quality thresholds
+  LOW_SIGNAL_THRESHOLD: 0.005,
+  LOW_SIGNAL_FRAMES: 10
 };
 
 export default HeartBeatConfig;

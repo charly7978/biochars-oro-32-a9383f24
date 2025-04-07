@@ -1,6 +1,6 @@
 
 import { useCallback, useRef } from 'react';
-import { HeartBeatResult } from './types';
+import { HeartBeatResult, RRIntervalData } from '../vital-signs/types';
 import { HeartBeatConfig } from '../../modules/heart-beat/config';
 import { 
   checkWeakSignal, 
@@ -34,32 +34,52 @@ export function useSignalProcessor() {
     currentBeatIsArrhythmiaRef: React.MutableRefObject<boolean>
   ): HeartBeatResult => {
     if (!processor) {
-      return createWeakSignalResult();
+      return {
+        bpm: 0,
+        confidence: 0,
+        isPeak: false,
+        arrhythmiaCount: 0,
+        rrData: {
+          intervals: [],
+          lastPeakTime: null
+        }
+      };
     }
 
     try {
       calibrationCounterRef.current++;
       
       // Check for weak signal - fixed implementation
-      const result = checkWeakSignal(
-        value, 
-        consecutiveWeakSignalsRef.current, 
-        {
-          lowSignalThreshold: WEAK_SIGNAL_THRESHOLD,
-          maxWeakSignalCount: MAX_CONSECUTIVE_WEAK_SIGNALS
-        }
-      );
+      const result = checkWeakSignal(value, consecutiveWeakSignalsRef.current);
       
       const isWeakSignal = result.isWeakSignal;
-      consecutiveWeakSignalsRef.current = result.updatedWeakSignalsCount;
+      consecutiveWeakSignalsRef.current = result.updatedCount;
       
       if (isWeakSignal) {
-        return createWeakSignalResult(processor.getArrhythmiaCounter ? processor.getArrhythmiaCounter() : 0);
+        return {
+          bpm: 0,
+          confidence: 0,
+          isPeak: false,
+          arrhythmiaCount: processor.getArrhythmiaCounter ? processor.getArrhythmiaCounter() : 0,
+          rrData: {
+            intervals: [],
+            lastPeakTime: null
+          }
+        };
       }
       
       // Only process signals with sufficient amplitude
       if (!shouldProcessMeasurement(value)) {
-        return createWeakSignalResult(processor.getArrhythmiaCounter ? processor.getArrhythmiaCounter() : 0);
+        return {
+          bpm: 0,
+          confidence: 0,
+          isPeak: false,
+          arrhythmiaCount: processor.getArrhythmiaCounter ? processor.getArrhythmiaCounter() : 0,
+          rrData: {
+            intervals: [],
+            lastPeakTime: null
+          }
+        };
       }
       
       // Process real signal
@@ -74,9 +94,8 @@ export function useSignalProcessor() {
       handlePeakDetection(
         processorResult, 
         lastPeakTimeRef, 
-        requestImmediateBeep, 
-        isMonitoringRef,
-        value
+        requestImmediateBeep,
+        isMonitoringRef
       );
       
       // Update last valid BPM
