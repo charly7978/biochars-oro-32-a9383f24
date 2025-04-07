@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
@@ -20,6 +19,13 @@ const VitalSign = ({
   highlighted = false,
   calibrationProgress 
 }: VitalSignProps) => {
+  const formatValue = (val: string | number): string => {
+    if (typeof val === 'number') {
+      return Math.round(val).toString();
+    }
+    return val;
+  };
+
   const getRiskLabel = (label: string, value: string | number) => {
     if (typeof value === 'number') {
       switch(label) {
@@ -217,7 +223,7 @@ const VitalSign = ({
   };
 
   const displayValue = (label: string, value: string | number) => {
-    return value;
+    return formatValue(value);
   };
 
   const riskLabel = getRiskLabel(label, value);
