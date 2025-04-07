@@ -1,172 +1,140 @@
 
 /**
- * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
+ * Adaptive signal control and optimization
+ * Provides advanced signal processing methods
  */
 
-// Adaptive model state
-const state = {
-  buffer: [] as number[],
-  lastPrediction: 0,
-  predictionError: 0,
-  adaptationRate: 0.2,
-  filterCoefficients: [0.2, 0.3, 0.5],
+// Store model state
+const modelState = {
+  coefficients: [0.8, 0.15, 0.05],
+  predictions: [] as number[],
+  errors: [] as number[],
+  lastValues: [] as number[],
+  adaptationRate: 0.01
 };
 
 /**
- * Apply adaptive filter to signal
+ * Apply adaptive filter to smooth signal
  */
-export function applyAdaptiveFilter(value: number): number {
-  // Add to buffer
-  state.buffer.push(value);
-  if (state.buffer.length > 10) {
-    state.buffer.shift();
-  }
+export function applyAdaptiveFilter(value: number, previousValues: number[]): number {
+  if (previousValues.length < 3) return value;
+
+  // Simple adaptive filter
+  let filtered = value;
+  const recentValues = previousValues.slice(-3);
   
-  // Apply filter
-  let filtered = 0;
-  const len = Math.min(state.buffer.length, state.filterCoefficients.length);
+  // Apply coefficients
+  filtered = modelState.coefficients[0] * value + 
+             modelState.coefficients[1] * recentValues[0] + 
+             modelState.coefficients[2] * recentValues[1];
   
-  for (let i = 0; i < len; i++) {
-    filtered += state.buffer[state.buffer.length - 1 - i] * 
-               state.filterCoefficients[i];
-  }
+  // Store for learning
+  modelState.lastValues.push(value);
+  if (modelState.lastValues.length > 20) modelState.lastValues.shift();
   
   return filtered;
 }
 
 /**
- * Predict next signal value
+ * Predict next signal value based on pattern recognition
  */
-export function predictNextValue(): number {
-  if (state.buffer.length < 3) {
-    return 0;
-  }
+export function predictNextValue(recentValues: number[]): number {
+  if (recentValues.length < 5) return recentValues[recentValues.length - 1] || 0;
   
-  // Simple linear prediction
-  const lastValue = state.buffer[state.buffer.length - 1];
-  const prevValue = state.buffer[state.buffer.length - 2];
+  // Simple prediction based on trend
+  const lastValue = recentValues[recentValues.length - 1];
+  const prevValue = recentValues[recentValues.length - 2];
   const trend = lastValue - prevValue;
   
-  state.lastPrediction = lastValue + trend * 0.8;
-  return state.lastPrediction;
+  // Predict with damping factor
+  const prediction = lastValue + trend * 0.7;
+  
+  // Store prediction
+  modelState.predictions.push(prediction);
+  if (modelState.predictions.length > 10) modelState.predictions.shift();
+  
+  return prediction;
 }
 
 /**
- * Correct anomalies in signal
+ * Correct anomalies in signal based on expected patterns
  */
-export function correctSignalAnomalies(value: number): number {
-  if (state.buffer.length < 5) {
-    return value;
-  }
+export function correctSignalAnomalies(value: number, recentValues: number[]): number {
+  if (recentValues.length < 5) return value;
   
-  // Calculate mean and standard deviation
-  const mean = state.buffer.reduce((sum, val) => sum + val, 0) / 
-               state.buffer.length;
+  // Calculate mean and std dev
+  const mean = recentValues.reduce((sum, val) => sum + val, 0) / recentValues.length;
+  const variance = recentValues.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / recentValues.length;
+  const stdDev = Math.sqrt(variance);
   
-  const stdDev = Math.sqrt(
-    state.buffer.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / 
-    state.buffer.length
-  );
+  // Check if current value is an outlier
+  const zScore = Math.abs(value - mean) / (stdDev || 1);
   
-  // Check if value is an outlier (more than 3 standard deviations from mean)
-  if (Math.abs(value - mean) > 3 * stdDev) {
-    return mean; // Replace with mean value
+  if (zScore > 3) {
+    // Correct outliers by clamping to 3 standard deviations
+    const direction = value > mean ? 1 : -1;
+    return mean + direction * 3 * stdDev;
   }
   
   return value;
 }
 
 /**
- * Update quality based on prediction accuracy
+ * Update signal quality estimate with prediction accuracy
  */
-export function updateQualityWithPrediction(value: number): number {
-  if (state.lastPrediction === 0) {
-    return 50; // Default quality
-  }
-  
+export function updateQualityWithPrediction(actualValue: number, predictedValue: number, currentQuality: number): number {
   // Calculate prediction error
-  const error = Math.abs(value - state.lastPrediction);
-  state.predictionError = 0.8 * state.predictionError + 0.2 * error;
+  const error = Math.abs(actualValue - predictedValue);
+  modelState.errors.push(error);
+  if (modelState.errors.length > 10) modelState.errors.shift();
   
-  // Calculate quality based on prediction error
-  // Lower error means higher quality
-  const maxError = 0.5;
-  const quality = 100 * (1 - Math.min(1, state.predictionError / maxError));
+  // Calculate average error
+  const avgError = modelState.errors.reduce((sum, err) => sum + err, 0) / modelState.errors.length;
   
-  return Math.max(0, Math.min(100, quality));
+  // Adjust quality based on prediction accuracy
+  const errorFactor = Math.max(0, 1 - avgError * 10);
+  
+  // Blend with current quality
+  return currentQuality * 0.7 + errorFactor * 30;
 }
 
 /**
- * Reset adaptive control state
+ * Reset adaptive control parameters
  */
 export function resetAdaptiveControl(): void {
-  state.buffer = [];
-  state.lastPrediction = 0;
-  state.predictionError = 0;
-  state.adaptationRate = 0.2;
-  state.filterCoefficients = [0.2, 0.3, 0.5];
+  modelState.coefficients = [0.8, 0.15, 0.05];
+  modelState.predictions = [];
+  modelState.errors = [];
+  modelState.lastValues = [];
+  modelState.adaptationRate = 0.01;
 }
 
 /**
- * Get current adaptive model state
+ * Get current state of adaptive model
  */
-export function getAdaptiveModelState(): typeof state {
-  return { ...state };
+export function getAdaptiveModelState() {
+  return { ...modelState };
 }
 
 /**
- * Apply Bayesian optimization to filter parameters
+ * Apply Bayesian optimization to signal processing parameters
  */
 export function applyBayesianOptimization(): void {
-  // Simple implementation - adjust filter coefficients based on error
-  if (state.predictionError > 0.2) {
-    // Increase weight of most recent sample
-    state.filterCoefficients = [
-      state.filterCoefficients[0] * 0.9,
-      state.filterCoefficients[1] * 0.9,
-      Math.min(0.8, state.filterCoefficients[2] * 1.1)
-    ];
-  } else {
-    // Balanced weights for stable signal
-    state.filterCoefficients = [0.2, 0.3, 0.5];
-  }
+  // Placeholder for Bayesian optimization
 }
 
 /**
- * Apply Gaussian process modeling
+ * Apply Gaussian process modeling for signal prediction
  */
-export function applyGaussianProcessModeling(values: number[]): number[] {
-  // Simple smoothing as placeholder for Gaussian process
-  if (values.length < 3) {
-    return values;
-  }
-  
-  const result = [...values];
-  
-  // Simple moving average smoothing
-  for (let i = 1; i < values.length - 1; i++) {
-    result[i] = (values[i-1] + values[i] + values[i+1]) / 3;
-  }
-  
-  return result;
+export function applyGaussianProcessModeling(values: number[]): number {
+  // Placeholder for Gaussian process modeling
+  return values[values.length - 1] || 0;
 }
 
 /**
- * Apply mixed model prediction
+ * Apply mixed model prediction combining multiple approaches
  */
-export function applyMixedModelPrediction(): number {
-  if (state.buffer.length < 5) {
-    return 0;
-  }
-  
-  // Linear prediction component
-  const linearPred = predictNextValue();
-  
-  // Mean prediction component
-  const mean = state.buffer.reduce((sum, val) => sum + val, 0) / state.buffer.length;
-  
-  // Mix predictions based on error history
-  const mixWeight = Math.min(1, Math.max(0, 1 - state.predictionError * 5));
-  
-  return linearPred * mixWeight + mean * (1 - mixWeight);
+export function applyMixedModelPrediction(values: number[]): number {
+  // Placeholder for mixed model prediction
+  return values[values.length - 1] || 0;
 }

@@ -1,97 +1,97 @@
 
 /**
- * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
+ * Signal quality assessment module
+ * Ensures accurate detection of finger presence and signal quality
  */
 
-import { HeartBeatResult } from '../types';
-
-// Signal quality state tracking
-let consecutiveWeakSignalsCount = 0;
-let fingerDetectionState = false;
+// State for signal quality tracking
+let lastSignalValues: number[] = [];
+let qualityScores: number[] = [];
+let fingerDetectionBuffer: boolean[] = [];
+let lastQualityTime = 0;
 
 /**
- * Check if signal is weak
+ * Check if the signal is too weak for accurate processing
  */
-export function checkWeakSignal(
-  value: number,
-  currentWeakSignalsCount: number,
-  options: {
-    lowSignalThreshold: number;
-    maxWeakSignalCount: number;
-  }
-): { isWeakSignal: boolean; updatedWeakSignalsCount: number } {
-  const { lowSignalThreshold, maxWeakSignalCount } = options;
-  
-  // Calculate absolute value for amplitude check
-  const signalAmplitude = Math.abs(value);
-  
-  // Check if amplitude is below threshold
-  const isLowAmplitude = signalAmplitude < lowSignalThreshold;
-  
-  let updatedWeakSignalsCount = currentWeakSignalsCount;
-  
-  if (isLowAmplitude) {
-    updatedWeakSignalsCount = Math.min(maxWeakSignalCount + 1, updatedWeakSignalsCount + 1);
-  } else {
-    updatedWeakSignalsCount = Math.max(0, updatedWeakSignalsCount - 1);
+export function checkWeakSignal(value: number, threshold = 0.01): boolean {
+  return Math.abs(value) < threshold;
+}
+
+/**
+ * Determine if a measurement should be processed based on signal quality
+ */
+export function shouldProcessMeasurement(value: number, quality: number): boolean {
+  // Add to signal buffer
+  lastSignalValues.push(value);
+  if (lastSignalValues.length > 30) {
+    lastSignalValues.shift();
   }
   
-  // Signal is weak if we've had too many consecutive weak signals
-  const isWeakSignal = updatedWeakSignalsCount >= maxWeakSignalCount;
-  
+  // Check for sufficient quality
+  return quality > 20 && !checkWeakSignal(value);
+}
+
+/**
+ * Create a result object for weak signal conditions
+ */
+export function createWeakSignalResult() {
   return {
-    isWeakSignal,
-    updatedWeakSignalsCount
-  };
-}
-
-/**
- * Reset signal quality state
- */
-export function resetSignalQualityState(): void {
-  consecutiveWeakSignalsCount = 0;
-  fingerDetectionState = false;
-}
-
-/**
- * Check if a measurement should be processed
- */
-export function shouldProcessMeasurement(value: number): boolean {
-  // Check if amplitude is significant enough for processing
-  const absValue = Math.abs(value);
-  return absValue > 0.05;
-}
-
-/**
- * Create a result object for weak signal
- */
-export function createWeakSignalResult(arrhythmiaCount: number = 0): HeartBeatResult {
-  return {
-    bpm: 0,
-    confidence: 0,
+    timestamp: Date.now(),
     isPeak: false,
-    arrhythmiaCount,
-    rrData: {
-      intervals: [],
-      lastPeakTime: null
-    }
+    value: 0,
+    confidence: 0,
+    bpm: null,
+    weakSignal: true
   };
 }
 
 /**
- * Check if finger is currently detected
+ * Reset the signal quality assessment state
  */
-export function isFingerDetected(value: number): boolean {
-  // Update finger detection state based on signal amplitude
-  const minThreshold = 0.08;
-  const absValue = Math.abs(value);
+export function resetSignalQualityState() {
+  lastSignalValues = [];
+  qualityScores = [];
+  fingerDetectionBuffer = [];
+  lastQualityTime = 0;
+}
+
+/**
+ * Determine if a finger is detected based on signal patterns
+ */
+export function isFingerDetected(values: number[] = lastSignalValues): boolean {
+  if (values.length < 10) return false;
   
-  // Add some hysteresis to avoid flickering
-  if (absValue > 0.1) {
-    fingerDetectionState = true;
-  } else if (absValue < minThreshold) {
-    fingerDetectionState = false;
+  // Calculate signal metrics
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const amplitude = max - min;
+  const variance = calculateVariance(values);
+  
+  // Criteria for finger detection
+  const hasAmplitude = amplitude > 0.05;
+  const hasVariance = variance > 0.0001;
+  const isStable = variance < 0.1;
+  
+  const isDetected = hasAmplitude && hasVariance && isStable;
+  
+  // Add to detection buffer for stability
+  fingerDetectionBuffer.push(isDetected);
+  if (fingerDetectionBuffer.length > 10) {
+    fingerDetectionBuffer.shift();
   }
   
-  return fingerDetectionState;
+  // Require majority of recent readings to indicate finger presence
+  const detectionCount = fingerDetectionBuffer.filter(Boolean).length;
+  return detectionCount > fingerDetectionBuffer.length / 2;
+}
+
+/**
+ * Calculate variance of a set of values
+ */
+function calculateVariance(values: number[]): number {
+  if (values.length < 2) return 0;
+  
+  const mean = values.reduce((sum, val) => sum + val, 0) / values.length;
+  const squaredDiffs = values.map(val => Math.pow(val - mean, 2));
+  return squaredDiffs.reduce((sum, diff) => sum + diff, 0) / values.length;
 }

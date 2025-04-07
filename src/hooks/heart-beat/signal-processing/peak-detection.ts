@@ -1,3 +1,4 @@
+
 /**
  * Improved peak detection module with lowered thresholds for better detection
  */
@@ -32,7 +33,7 @@ export function clearDiagnosticsData() {
  * Uses a combination of amplitude, derivative, and time since last peak
  * NOW WITH LOWER THRESHOLDS FOR TESTING
  */
-export function detectPeaks(
+export function detectPeak(
   filteredValue: number,
   buffer: number[],
   lastPeakTime: number | null,
@@ -127,6 +128,9 @@ export function detectPeaks(
 
   return { isPeak, confidence, bpm };
 }
+
+// Alias for backward compatibility
+export const detectPeaks = detectPeak;
 
 /**
  * Calculate heart rate from a buffer of peaks
