@@ -4,10 +4,7 @@
 
 import { useCallback, useRef } from 'react';
 import { ArrhythmiaWindow } from '../../types/signal';
-
-// Constants for arrhythmia detection
-const MIN_RR_INTERVALS = 5;
-const ARRHYTHMIA_VARIATION_THRESHOLD = 0.2;
+import HeartBeatConfig from '../../modules/heart-beat/config';
 
 /**
  * Hook for detecting arrhythmias from RR intervals
@@ -41,12 +38,12 @@ export function useArrhythmiaDetector() {
    * Process RR intervals to detect arrhythmia
    */
   const processRRIntervals = useCallback((rrIntervals: number[]): boolean => {
-    if (rrIntervals.length < MIN_RR_INTERVALS) {
+    if (rrIntervals.length < HeartBeatConfig.MIN_RR_INTERVALS_FOR_DETECTION) {
       return false;
     }
     
     // Get the most recent intervals
-    const recentIntervals = rrIntervals.slice(-MIN_RR_INTERVALS);
+    const recentIntervals = rrIntervals.slice(-HeartBeatConfig.MIN_RR_INTERVALS_FOR_DETECTION);
     rrIntervalsRef.current = recentIntervals;
     lastRRIntervalsRef.current = recentIntervals;
     
@@ -66,8 +63,7 @@ export function useArrhythmiaDetector() {
     heartRateVariabilityRef.current = Math.sqrt(sumSquaredDiffs / (recentIntervals.length - 1));
     
     // Check for arrhythmia - high variation indicates arrhythmia
-    // Medical threshold is typically around 0.2 or 20% variation
-    const isArrhythmia = maxVariation > ARRHYTHMIA_VARIATION_THRESHOLD;
+    const isArrhythmia = maxVariation > HeartBeatConfig.ARRHYTHMIA_VARIATION_THRESHOLD;
     
     // Update arrhythmia status
     if (isArrhythmia && !currentBeatIsArrhythmiaRef.current) {

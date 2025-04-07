@@ -1,3 +1,4 @@
+
 import { useRef } from 'react';
 
 /**
@@ -18,6 +19,35 @@ export const detectPeak = (
   
   // Simple threshold-based peak detection
   return value >= threshold;
+};
+
+/**
+ * Detect multiple peaks in a signal array
+ * (Added function to match imports)
+ */
+export const detectPeaks = (
+  signalValues: number[],
+  threshold: number,
+  minDistance = 5
+): number[] => {
+  const peaks: number[] = [];
+  
+  if (signalValues.length <= 2) return peaks;
+  
+  for (let i = 1; i < signalValues.length - 1; i++) {
+    // Check if this point is higher than threshold and higher than neighbors
+    if (signalValues[i] >= threshold && 
+        signalValues[i] > signalValues[i-1] && 
+        signalValues[i] > signalValues[i+1]) {
+      
+      // Check if we're far enough from the last detected peak
+      if (peaks.length === 0 || (i - peaks[peaks.length - 1]) >= minDistance) {
+        peaks.push(i);
+      }
+    }
+  }
+  
+  return peaks;
 };
 
 /**
@@ -42,6 +72,35 @@ export const calculateHeartRate = (peakTimes: number[], minBpm: number = 40, max
   
   // Ensure it's in physiological range
   return Math.min(maxBpm, Math.max(minBpm, bpm));
+};
+
+// Diagnostics-related functions
+let diagnosticsData: {
+  peakValues: number[];
+  timestamps: number[];
+  thresholds: number[];
+} = {
+  peakValues: [],
+  timestamps: [],
+  thresholds: []
+};
+
+/**
+ * Get diagnostic data for peak detection
+ */
+export const getDiagnosticsData = () => {
+  return { ...diagnosticsData };
+};
+
+/**
+ * Clear diagnostic data
+ */
+export const clearDiagnosticsData = () => {
+  diagnosticsData = {
+    peakValues: [],
+    timestamps: [],
+    thresholds: []
+  };
 };
 
 /**
@@ -70,6 +129,17 @@ export const handlePeakDetection = (
     // Keep array size manageable
     if (peakTimesRef.current.length > 20) {
       peakTimesRef.current.shift();
+    }
+    
+    // Store diagnostics data
+    diagnosticsData.peakValues.push(value);
+    diagnosticsData.timestamps.push(now);
+    diagnosticsData.thresholds.push(threshold);
+    
+    if (diagnosticsData.peakValues.length > 50) {
+      diagnosticsData.peakValues.shift();
+      diagnosticsData.timestamps.shift();
+      diagnosticsData.thresholds.shift();
     }
     
     // Execute callback if provided
