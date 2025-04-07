@@ -1,4 +1,3 @@
-
 /**
  * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
  * 
@@ -15,7 +14,10 @@ import {
   ChannelFeedback,
   SignalDistributorConfig
 } from '../../types/signal';
-import { SpecializedChannel, ChannelConfig } from './channels/SpecializedChannel';
+import { SpecializedChannel } from './channels/SpecializedChannel';
+import { GlucoseChannel } from './channels/GlucoseChannel';
+import { LipidsChannel } from './channels/LipidsChannel';
+import { BloodPressureChannel } from './channels/BloodPressureChannel';
 import { SpO2Channel } from './channels/SpO2Channel';
 import { CardiacChannel } from './channels/CardiacChannel';
 
@@ -28,18 +30,35 @@ const DEFAULT_CONFIG: SignalDistributorConfig = {
   optimizationInterval: 5000, // 5 seconds
   channels: {
     // Configure each channel with optimal settings for each vital sign
+    [VitalSignType.GLUCOSE]: {
+      initialAmplification: 1.2,
+      initialFilterStrength: 0.7,
+      frequencyBandMin: 0.5,
+      frequencyBandMax: 4.0
+    },
+    [VitalSignType.LIPIDS]: {
+      initialAmplification: 1.3,
+      initialFilterStrength: 0.6,
+      frequencyBandMin: 0.6,
+      frequencyBandMax: 3.5
+    },
+    [VitalSignType.BLOOD_PRESSURE]: {
+      initialAmplification: 1.1,
+      initialFilterStrength: 0.8,
+      frequencyBandMin: 0.5,
+      frequencyBandMax: 8.0
+    },
     [VitalSignType.SPO2]: {
       initialAmplification: 1.15,
       initialFilterStrength: 0.75,
       frequencyBandMin: 0.8,
       frequencyBandMax: 5.0
     },
-    // Add cardiac channel configuration
     [VitalSignType.CARDIAC]: {
-      initialAmplification: 1.8,
-      initialFilterStrength: 0.6,
-      frequencyBandMin: 0.5,
-      frequencyBandMax: 4.0
+      initialAmplification: 1.25,
+      initialFilterStrength: 0.9,
+      frequencyBandMin: 0.7,
+      frequencyBandMax: 10.0
     }
   }
 };
@@ -49,7 +68,7 @@ const DEFAULT_CONFIG: SignalDistributorConfig = {
  * Core class that manages specialized signal channels for each vital sign
  */
 export class OptimizedSignalDistributor {
-  private channels: Map<VitalSignType, SpecializedChannel> = new Map();
+  private channels: Map<VitalSignType, OptimizedSignalChannel> = new Map();
   private feedbackQueue: ChannelFeedback[] = [];
   private isProcessing: boolean = false;
   private config: SignalDistributorConfig;
@@ -60,7 +79,6 @@ export class OptimizedSignalDistributor {
     feedbackCount: Map<VitalSignType, number>;
     successRate: Map<VitalSignType, number[]>;
   };
-  private audioEnabled: boolean = true;
 
   /**
    * Constructor
@@ -76,7 +94,7 @@ export class OptimizedSignalDistributor {
       successRate: new Map()
     };
     
-    // Initialize channels
+    // Initialize all specialized channels
     this.initializeChannels();
     
     // Start optimization loop if enabled
@@ -84,39 +102,61 @@ export class OptimizedSignalDistributor {
       this.startOptimizationLoop();
     }
     
-    console.log("OptimizedSignalDistributor: Initialized with SpO2 and Cardiac channels with bidirectional feedback");
+    console.log("OptimizedSignalDistributor: Initialized with specialized channels and bidirectional feedback");
   }
 
   /**
    * Initialize all specialized channels
    */
   private initializeChannels(): void {
+    // Create specialized channel for glucose measurement
+    this.channels.set(
+      VitalSignType.GLUCOSE, 
+      new GlucoseChannel(
+        this.config.channels[VitalSignType.GLUCOSE] || DEFAULT_CONFIG.channels[VitalSignType.GLUCOSE]!
+      )
+    );
+    
+    // Create specialized channel for lipids measurement
+    this.channels.set(
+      VitalSignType.LIPIDS, 
+      new LipidsChannel(
+        this.config.channels[VitalSignType.LIPIDS] || DEFAULT_CONFIG.channels[VitalSignType.LIPIDS]!
+      )
+    );
+    
+    // Create specialized channel for blood pressure measurement
+    this.channels.set(
+      VitalSignType.BLOOD_PRESSURE, 
+      new BloodPressureChannel(
+        this.config.channels[VitalSignType.BLOOD_PRESSURE] || DEFAULT_CONFIG.channels[VitalSignType.BLOOD_PRESSURE]!
+      )
+    );
+    
     // Create specialized channel for SpO2 measurement
     this.channels.set(
       VitalSignType.SPO2, 
       new SpO2Channel(
-        this.config.channels[VitalSignType.SPO2] || DEFAULT_CONFIG.channels[VitalSignType.SPO2]
+        this.config.channels[VitalSignType.SPO2] || DEFAULT_CONFIG.channels[VitalSignType.SPO2]!
       )
     );
     
-    // Create specialized channel for Cardiac measurement
+    // Create specialized channel for cardiac (BPM, arrhythmia) measurements
     this.channels.set(
       VitalSignType.CARDIAC, 
       new CardiacChannel(
-        this.config.channels[VitalSignType.CARDIAC] || DEFAULT_CONFIG.channels[VitalSignType.CARDIAC]
+        this.config.channels[VitalSignType.CARDIAC] || DEFAULT_CONFIG.channels[VitalSignType.CARDIAC]!
       )
     );
     
     // Initialize metrics for each channel
     for (const type of Object.values(VitalSignType)) {
-      if (this.channels.has(type)) {
-        this.processingMetrics.channelProcessingTimes.set(type, []);
-        this.processingMetrics.feedbackCount.set(type, 0);
-        this.processingMetrics.successRate.set(type, []);
-      }
+      this.processingMetrics.channelProcessingTimes.set(type, []);
+      this.processingMetrics.feedbackCount.set(type, 0);
+      this.processingMetrics.successRate.set(type, []);
     }
     
-    console.log("OptimizedSignalDistributor: SpO2 and Cardiac channels initialized");
+    console.log("OptimizedSignalDistributor: All specialized channels created");
   }
 
   /**
@@ -163,15 +203,6 @@ export class OptimizedSignalDistributor {
         times.shift();
       }
       this.processingMetrics.channelProcessingTimes.set(type, times);
-      
-      // Special handling for cardiac channel - emit beep if peak detected
-      if (type === VitalSignType.CARDIAC) {
-        const cardiacChannel = channel as CardiacChannel;
-        if (cardiacChannel.isLatestPeakDetected() && this.audioEnabled) {
-          // Emit peak detected event for audio system
-          this.emitCardiacPeakEvent(cardiacChannel.getEstimatedHeartRate());
-        }
-      }
     }
     
     const totalProcessingTime = performance.now() - startTime;
@@ -186,35 +217,6 @@ export class OptimizedSignalDistributor {
     }
     
     return results;
-  }
-
-  /**
-   * Emit cardiac peak event for audio system
-   * @param heartRate Current heart rate estimate
-   */
-  private emitCardiacPeakEvent(heartRate: number): void {
-    // Custom event with heart rate data for audio system
-    const event = new CustomEvent('cardiac-peak-detected', { 
-      detail: { 
-        heartRate,
-        timestamp: Date.now(),
-        source: 'optimized-cardiac-channel'
-      } 
-    });
-    
-    // Dispatch the event for listeners (AudioManager will listen)
-    window.dispatchEvent(event);
-    
-    console.log("OptimizedSignalDistributor: Cardiac peak event emitted", { heartRate });
-  }
-
-  /**
-   * Enable/disable audio for cardiac peaks
-   * @param enabled Whether audio should be enabled
-   */
-  public setAudioEnabled(enabled: boolean): void {
-    this.audioEnabled = enabled;
-    console.log(`OptimizedSignalDistributor: Audio ${enabled ? 'enabled' : 'disabled'}`);
   }
 
   /**
@@ -260,11 +262,9 @@ export class OptimizedSignalDistributor {
     
     // Reset processing metrics
     for (const type of Object.values(VitalSignType)) {
-      if (this.channels.has(type)) {
-        this.processingMetrics.channelProcessingTimes.set(type, []);
-        this.processingMetrics.feedbackCount.set(type, 0);
-        this.processingMetrics.successRate.set(type, []);
-      }
+      this.processingMetrics.channelProcessingTimes.set(type, []);
+      this.processingMetrics.feedbackCount.set(type, 0);
+      this.processingMetrics.successRate.set(type, []);
     }
     
     this.lastProcessedSignal = null;
@@ -300,6 +300,13 @@ export class OptimizedSignalDistributor {
     
     // Process feedback immediately if not in batch mode
     this.processFeedback(feedback);
+    
+    console.log("OptimizedSignalDistributor: Feedback received", {
+      channelId: feedback.channelId,
+      signalQuality: feedback.signalQuality,
+      success: feedback.success,
+      timestamp: new Date(feedback.timestamp).toISOString()
+    });
   }
 
   /**
@@ -380,7 +387,7 @@ export class OptimizedSignalDistributor {
    */
   private getChannelTypeById(channelId: string): VitalSignType | undefined {
     for (const [type, channel] of this.channels.entries()) {
-      if (channel.getId() === channelId) {
+      if (channel.id === channelId) {
         return type;
       }
     }
@@ -392,7 +399,7 @@ export class OptimizedSignalDistributor {
    * @param type Type of vital sign channel
    * @returns Channel or undefined if not found
    */
-  public getChannel(type: VitalSignType): SpecializedChannel | undefined {
+  public getChannel(type: VitalSignType): OptimizedSignalChannel | undefined {
     return this.channels.get(type);
   }
 
@@ -404,9 +411,7 @@ export class OptimizedSignalDistributor {
     const results: Record<VitalSignType, number> = {} as Record<VitalSignType, number>;
     
     for (const type of Object.values(VitalSignType)) {
-      if (this.channels.has(type)) {
-        results[type] = 0;
-      }
+      results[type] = 0;
     }
     
     return results;
@@ -439,8 +444,7 @@ export class OptimizedSignalDistributor {
       configSummary: {
         enableFeedback: this.config.enableFeedback,
         adaptChannels: this.config.adaptChannels,
-        optimizationInterval: this.config.optimizationInterval,
-        audioEnabled: this.audioEnabled
+        optimizationInterval: this.config.optimizationInterval
       }
     };
   }
