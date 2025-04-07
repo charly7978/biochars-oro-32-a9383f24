@@ -2,151 +2,131 @@
 /**
  * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
  * 
- * Utilidades para detección de calidad de señal
+ * Utility functions for signal quality evaluation
  */
 
 /**
- * Evalúa la calidad de una señal PPG utilizando múltiples factores
- * @param rawValue Valor bruto
- * @param filteredValue Valor filtrado
- * @param filteredBuffer Buffer de valores filtrados
- * @param threshold Umbral mínimo de calidad
- * @returns Valor de calidad (0-100)
+ * Evaluates the quality of a PPG signal
  */
 export function evaluateSignalQuality(
   rawValue: number,
   filteredValue: number,
   filteredBuffer: number[],
-  threshold: number = 30
+  qualityThreshold: number = 30
 ): number {
   if (filteredBuffer.length < 5) {
-    return 0;
+    return 0; // Not enough data to evaluate quality
   }
   
-  // Factores para calcular la calidad
-  const factors = {
-    // 1. Ruido (diferencia entre valor bruto y filtrado)
-    noise: calculateNoiseScore(rawValue, filteredValue),
+  try {
+    // Calculate basic statistics
+    const recent = filteredBuffer.slice(-10);
+    const min = Math.min(...recent);
+    const max = Math.max(...recent);
+    const range = max - min;
+    const mean = recent.reduce((sum, val) => sum + val, 0) / recent.length;
     
-    // 2. Amplitud (rango de la señal)
-    amplitude: calculateAmplitudeScore(filteredBuffer),
+    // Calculate variance
+    const variance = recent.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / recent.length;
     
-    // 3. Estabilidad (consistencia en el tiempo)
-    stability: calculateStabilityScore(filteredBuffer),
+    // Calculate periodicity metrics
+    let periodicityScore = calculatePeriodicityScore(recent);
     
-    // 4. Variabilidad (señales completamente planas son malas)
-    variability: calculateVariabilityScore(filteredBuffer)
-  };
-  
-  // Pesos de cada factor (suma = 1)
-  const weights = {
-    noise: 0.3,
-    amplitude: 0.3,
-    stability: 0.2,
-    variability: 0.2
-  };
-  
-  // Calcular puntuación ponderada
-  const weightedScore = 
-    factors.noise * weights.noise +
-    factors.amplitude * weights.amplitude +
-    factors.stability * weights.stability +
-    factors.variability * weights.variability;
-  
-  // Convertir a escala 0-100 y aplicar umbral mínimo
-  let quality = Math.round(weightedScore * 100);
-  
-  // Si está por debajo del umbral, disminuir más agresivamente
-  if (quality < threshold) {
-    quality = Math.max(0, quality - 10);
-  }
-  
-  return quality;
-}
-
-/**
- * Calcula la puntuación basada en el nivel de ruido (0-1)
- */
-function calculateNoiseScore(rawValue: number, filteredValue: number): number {
-  const noiseMagnitude = Math.abs(rawValue - filteredValue);
-  
-  // Máximo ruido esperado
-  const maxExpectedNoise = 0.3;
-  
-  // Si no hay o hay muy poco ruido (0-1, donde 1 es bueno)
-  return Math.max(0, Math.min(1, 1 - (noiseMagnitude / maxExpectedNoise)));
-}
-
-/**
- * Calcula la puntuación basada en la amplitud de la señal (0-1)
- */
-function calculateAmplitudeScore(buffer: number[]): number {
-  if (buffer.length < 3) return 0;
-  
-  const min = Math.min(...buffer);
-  const max = Math.max(...buffer);
-  const amplitude = max - min;
-  
-  // Amplitud óptima para PPG está entre 0.1 y 0.6
-  if (amplitude < 0.1) {
-    return amplitude * 10; // Escalar linealmente de 0 a 1
-  } else if (amplitude <= 0.6) {
-    return 1; // Amplitud óptima
-  } else {
-    // Penaliza ligeramente amplitudes muy altas (posible saturación)
-    return Math.max(0, Math.min(1, 1.2 - (amplitude - 0.6)));
+    // Calculate noise metrics
+    const noiseScore = calculateNoiseScore(rawValue, filteredValue, mean, variance);
+    
+    // Calculate stability
+    const stabilityScore = calculateStabilityScore(recent, range);
+    
+    // Combine scores with appropriate weights
+    const periodWeight = 0.4;
+    const noiseWeight = 0.3;
+    const stabilityWeight = 0.3;
+    
+    const qualityScore = 
+      (periodicityScore * periodWeight) + 
+      (noiseScore * noiseWeight) + 
+      (stabilityScore * stabilityWeight);
+    
+    // Scale to 0-100 range
+    const scaledQuality = Math.min(100, Math.max(0, qualityScore * 100));
+    
+    return scaledQuality;
+  } catch (error) {
+    console.error("Error evaluating signal quality:", error);
+    return Math.max(0, qualityThreshold / 2); // Fallback to moderate quality
   }
 }
 
 /**
- * Calcula la puntuación basada en la estabilidad de la señal (0-1)
+ * Calculates a score for the periodicity of the signal
  */
-function calculateStabilityScore(buffer: number[]): number {
-  if (buffer.length < 5) return 0;
+function calculatePeriodicityScore(values: number[]): number {
+  if (values.length < 6) return 0;
   
-  // Calcular diferencias entre valores consecutivos
-  const differences = [];
-  for (let i = 1; i < buffer.length; i++) {
-    differences.push(Math.abs(buffer[i] - buffer[i - 1]));
+  // Count zero crossings
+  let crossings = 0;
+  const meanShifted = values.map(v => v - (values.reduce((a, b) => a + b, 0) / values.length));
+  
+  for (let i = 1; i < meanShifted.length; i++) {
+    if ((meanShifted[i] >= 0 && meanShifted[i-1] < 0) || 
+        (meanShifted[i] < 0 && meanShifted[i-1] >= 0)) {
+      crossings++;
+    }
   }
   
-  // Calcular la desviación estándar de las diferencias
-  const mean = differences.reduce((sum, val) => sum + val, 0) / differences.length;
-  const variance = differences.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / differences.length;
-  const stdDev = Math.sqrt(variance);
+  // Ideal number of crossings depends on sampling rate and expected heart rate
+  // For a 30Hz sampling rate and 60BPM, we expect about 1 crossing per second
+  // So in 10 samples (1/3 second), we might expect 1-3 crossings for good quality
+  if (crossings < 1) return 0.2; // Too few - likely flat line or very slow
+  if (crossings > 5) return 0.3; // Too many - likely noisy
   
-  // Estabilidad óptima: desviación estándar baja pero no cero
-  if (stdDev < 0.001) {
-    return 0.1; // Demasiado estable (señal plana o constante)
-  } else if (stdDev < 0.1) {
-    return 1 - (stdDev * 5); // Escalar entre 0.5 y 1
-  } else {
-    // Penalizar alta inestabilidad
-    return Math.max(0, Math.min(0.5, 0.5 - (stdDev - 0.1) * 2));
-  }
+  // Optimal range - likely good periodic signal
+  return 0.8 + ((3 - Math.abs(crossings - 3)) * 0.05);
 }
 
 /**
- * Calcula la puntuación basada en la variabilidad adecuada de la señal (0-1)
- * Penaliza señales completamente planas o extremadamente variables
+ * Calculates a score for the noise level in the signal
  */
-function calculateVariabilityScore(buffer: number[]): number {
-  if (buffer.length < 5) return 0;
+function calculateNoiseScore(
+  rawValue: number,
+  filteredValue: number,
+  mean: number,
+  variance: number
+): number {
+  // Calculate difference between raw and filtered
+  const filteringDelta = Math.abs(rawValue - filteredValue) / Math.max(0.001, Math.abs(mean));
   
-  // Calcular varianza normalizada
-  const mean = buffer.reduce((sum, val) => sum + val, 0) / buffer.length;
-  if (mean === 0) return 0;
+  // Reasonable noise level
+  if (filteringDelta < 0.1) return 0.9; // Very little filtering needed - clean signal
+  if (filteringDelta < 0.2) return 0.7; // Moderate filtering - good signal
+  if (filteringDelta < 0.4) return 0.5; // Significant filtering - noisy signal
+  return 0.3; // Heavy filtering - very noisy
+}
+
+/**
+ * Calculates a score for the stability of the signal
+ */
+function calculateStabilityScore(values: number[], range: number): number {
+  if (values.length < 3) return 0.5; // Not enough data
   
-  const variance = buffer.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / buffer.length;
-  const normalizedVariance = variance / (mean * mean);
-  
-  // Señal fisiológica PPG debe tener cierta variabilidad, pero no excesiva
-  if (normalizedVariance < 0.0001) {
-    return 0.1; // Casi plana, mala calidad
-  } else if (normalizedVariance <= 0.05) {
-    return Math.min(1, normalizedVariance * 20); // Escalar entre 0 y 1
-  } else {
-    // Penalizar variabilidad excesiva
-    return Math.max(0, Math.min(1, 1.5 - normalizedVariance * 10));
+  // Calculate consecutive differences
+  const diffs = [];
+  for (let i = 1; i < values.length; i++) {
+    diffs.push(Math.abs(values[i] - values[i-1]));
   }
+  
+  // Calculate mean and max difference
+  const meanDiff = diffs.reduce((a, b) => a + b, 0) / diffs.length;
+  const maxDiff = Math.max(...diffs);
+  
+  // Normalize by signal range
+  const normalizedMeanDiff = meanDiff / Math.max(0.001, range);
+  const normalizedMaxDiff = maxDiff / Math.max(0.001, range);
+  
+  // Score based on normalized differences
+  if (normalizedMaxDiff > 0.8) return 0.3; // Large spikes - unstable
+  if (normalizedMeanDiff > 0.3) return 0.5; // Significant variations - moderate stability
+  if (normalizedMeanDiff > 0.1) return 0.7; // Moderate variations - good stability
+  return 0.9; // Small variations - excellent stability
 }

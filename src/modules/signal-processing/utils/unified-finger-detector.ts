@@ -22,6 +22,16 @@ export type DetectionSource =
 export interface DetectionState {
   isFingerDetected: boolean;
   confidence: number;
+  sources: Record<string, { detected: boolean, confidence: number }>;
+  thresholds: {
+    sensitivityLevel: number;
+    adaptationRate: number;
+    qualityFactor: number;
+    environmentFactor: number;
+    amplitudeThreshold: number;
+    falsePositiveReduction: number;
+    falseNegativeReduction: number;
+  };
 }
 
 /**
@@ -36,6 +46,8 @@ export class UnifiedFingerDetector {
   private falseNegativeReductionFactor: number = 0.7;
   private sensitivityFactor: number = 1.0;
   private adaptationRate: number = 0.1;
+  private qualityFactor: number = 1.0;
+  private environmentFactor: number = 1.0;
   
   /**
    * Update detection state from a source
@@ -49,9 +61,26 @@ export class UnifiedFingerDetector {
    * Get current detection state
    */
   public getDetectionState(): DetectionState {
+    const sourcesObj: Record<string, { detected: boolean, confidence: number }> = {};
+    
+    // Convert Map to plain object for the interface
+    for (const [key, value] of this.detectionSources.entries()) {
+      sourcesObj[key] = { ...value };
+    }
+    
     return {
       isFingerDetected: this.isFingerDetected,
-      confidence: this.detectionConfidence
+      confidence: this.detectionConfidence,
+      sources: sourcesObj,
+      thresholds: {
+        sensitivityLevel: this.sensitivityFactor,
+        adaptationRate: this.adaptationRate,
+        qualityFactor: this.qualityFactor,
+        environmentFactor: this.environmentFactor,
+        amplitudeThreshold: this.amplitudeThreshold,
+        falsePositiveReduction: this.falsePositiveReductionFactor,
+        falseNegativeReduction: this.falseNegativeReductionFactor
+      }
     };
   }
   
@@ -98,11 +127,13 @@ export class UnifiedFingerDetector {
    */
   public adaptThresholds(signalQuality: number, brightness?: number): void {
     const qualityFactor = signalQuality / 100; // normalize to 0-1
+    this.qualityFactor = qualityFactor;
     
     // Adjust sensitivity based on signal quality
     if (brightness !== undefined) {
       // Use brightness to further adjust sensitivity
       const brightnessFactor = Math.min(1, Math.max(0.1, brightness / 255));
+      this.environmentFactor = brightnessFactor;
       this.sensitivityFactor = Math.max(0.5, Math.min(1.5, qualityFactor * brightnessFactor * 2));
     } else {
       // Just use signal quality

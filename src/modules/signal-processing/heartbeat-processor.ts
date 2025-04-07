@@ -1,12 +1,12 @@
+
 /**
  * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
  * 
  * Procesador avanzado de señal cardíaca
  * Se encarga del procesamiento especializado de picos/latidos
  */
-import { ProcessedHeartbeatSignal, SignalProcessor, SignalProcessingOptions } from './types';
+import { ProcessedHeartbeatSignal, SignalProcessor, SignalProcessingOptions, AdaptivePredictor } from './types';
 import { getAdaptivePredictor } from './utils/adaptive-predictor';
-import type { AdaptivePredictor } from './utils/adaptive-predictor';
 
 /**
  * Clase para el procesamiento avanzado de señales cardíacas
@@ -51,7 +51,7 @@ export class HeartbeatProcessor implements SignalProcessor<ProcessedHeartbeatSig
       this.adaptivePredictor.update(timestamp, value, 1.0);
       
       // Get prediction for the current time
-      const prediction = this.adaptivePredictor.predict(timestamp);
+      const prediction = this.adaptivePredictor.predict();
       predictionQuality = prediction.confidence * 100;
       
       // Use filtered value from predictor for enhanced peak detection
@@ -69,6 +69,7 @@ export class HeartbeatProcessor implements SignalProcessor<ProcessedHeartbeatSig
     let peakConfidence = 0;
     let instantaneousBPM: number | null = null;
     let rrInterval: number | null = null;
+    let averageBPM: number | null = null;
     
     // Verificar condiciones para detección de pico
     if (this.isPotentialPeak(enhancedValue, timestamp)) {
@@ -91,6 +92,15 @@ export class HeartbeatProcessor implements SignalProcessor<ProcessedHeartbeatSig
             this.rrIntervals.push(rrInterval);
             if (this.rrIntervals.length > 10) {
               this.rrIntervals.shift();
+            }
+            
+            // Estimate average BPM based on recent RR intervals
+            if (this.rrIntervals.length >= 3) {
+              const validRR = this.rrIntervals.filter(rr => rr >= 300 && rr <= 1500);
+              if (validRR.length >= 2) {
+                const avgRR = validRR.reduce((sum, rr) => sum + rr, 0) / validRR.length;
+                averageBPM = avgRR > 0 ? 60000 / avgRR : null;
+              }
             }
           }
         }
@@ -126,6 +136,7 @@ export class HeartbeatProcessor implements SignalProcessor<ProcessedHeartbeatSig
       isPeak,
       peakConfidence,
       instantaneousBPM,
+      averageBPM,
       rrInterval,
       heartRateVariability
     };
@@ -246,8 +257,8 @@ export class HeartbeatProcessor implements SignalProcessor<ProcessedHeartbeatSig
    * Configura el procesador con opciones personalizadas
    */
   public configure(options: SignalProcessingOptions): void {
-    if (options.amplificationFactor !== undefined) {
-      this.dynamicThresholdFactor = Math.max(0.3, Math.min(0.9, options.amplificationFactor / 2));
+    if (options.amplification !== undefined || options.amplificationFactor !== undefined) {
+      this.dynamicThresholdFactor = Math.max(0.3, Math.min(0.9, (options.amplification || options.amplificationFactor || 1) / 2));
     }
     
     if (options.filterStrength !== undefined) {

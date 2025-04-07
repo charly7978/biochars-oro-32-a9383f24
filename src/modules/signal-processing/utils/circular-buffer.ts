@@ -1,222 +1,156 @@
+
 /**
  * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
  * 
- * Implementación de buffer circular optimizado
- * Proporciona almacenamiento eficiente para señales
+ * Circular buffer implementation for efficient data storage
  */
-import { CircularBufferState } from '../types';
-import { logError, ErrorLevel } from '@/utils/debugUtils';
+
+import type { CircularBufferState } from '../types';
 
 /**
- * Buffer circular para valores
+ * CircularBuffer class for efficient fixed-size buffer operations
  */
 export class CircularBuffer<T> {
-  private buffer: T[];
-  private head: number = 0;
-  private tail: number = 0;
-  private size: number = 0;
-  private readonly capacity: number;
-  private readonly useTypeChecking: boolean;
-  private readonly useAverageTracking: boolean;
-  private sumValue: number = 0;
-  private minValue: number = 0;
-  private maxValue: number = 0;
+  private capacity: number;
+  private items: T[];
+  private head = 0; // Position to add new items
+  private tail = 0; // Position to remove items
+  private size = 0; // Current number of items
   
   /**
-   * Constructor del buffer circular
+   * Create a new circular buffer with the specified capacity
+   * @param capacity Maximum number of items the buffer can hold
    */
-  constructor(
-    capacity: number, 
-    useTypeChecking: boolean = false,
-    useAverageTracking: boolean = false
-  ) {
+  constructor(capacity: number) {
     this.capacity = Math.max(1, capacity);
-    this.buffer = new Array<T>(this.capacity);
-    this.useTypeChecking = useTypeChecking;
-    this.useAverageTracking = useAverageTracking;
+    this.items = new Array<T>(this.capacity);
   }
-  
+
   /**
-   * Añade un valor al buffer
+   * Add an item to the buffer, overwriting oldest data if full
    */
-  public push(value: T): void {
-    try {
-      if (this.useTypeChecking && typeof value !== typeof this.buffer[0] && this.size > 0) {
-        throw new Error(`Tipo de dato inválido: ${typeof value}, se esperaba ${typeof this.buffer[0]}`);
-      }
-      
-      this.buffer[this.head] = value;
-      
-      if (this.useAverageTracking && typeof value === 'number') {
-        this.sumValue += value;
-        this.minValue = this.size === 0 ? value : Math.min(this.minValue, value);
-        this.maxValue = this.size === 0 ? value : Math.max(this.maxValue, value);
-      }
-      
-      this.head = (this.head + 1) % this.capacity;
-      
-      if (this.size === this.capacity) {
-        this.tail = (this.tail + 1) % this.capacity;
-        
-        if (this.useAverageTracking && typeof value === 'number') {
-          const oldValue = this.buffer[this.tail];
-          if (typeof oldValue === 'number') {
-            this.sumValue -= oldValue;
-          }
-        }
-      } else {
-        this.size++;
-      }
-    } catch (error) {
-      logError(
-        `Error al añadir valor al buffer circular: ${error}`,
-        ErrorLevel.WARNING,
-        "CircularBuffer"
-      );
+  push(item: T): void {
+    // Store the item at the head position
+    this.items[this.head] = item;
+    
+    // Increment size if not full
+    if (this.size < this.capacity) {
+      this.size++;
+    }
+    
+    // Move head to next position
+    this.head = (this.head + 1) % this.capacity;
+    
+    // If buffer is full, move tail to next position too
+    if (this.size === this.capacity) {
+      this.tail = (this.tail + 1) % this.capacity;
     }
   }
-  
+
   /**
-   * Elimina y retorna el valor más antiguo del buffer
+   * Remove and return the oldest item in the buffer
    */
-  public pop(): T | undefined {
+  pop(): T | undefined {
     if (this.size === 0) {
       return undefined;
     }
     
-    const value = this.buffer[this.tail];
-    this.buffer[this.tail] = undefined as any;
+    // Get the item at the tail position
+    const item = this.items[this.tail];
     
-    if (this.useAverageTracking && typeof value === 'number') {
-      this.sumValue -= value;
-    }
-    
+    // Move tail to next position
     this.tail = (this.tail + 1) % this.capacity;
+    
+    // Decrement size
     this.size--;
     
-    return value;
+    return item;
   }
-  
+
   /**
-   * Obtiene el valor en un índice específico
+   * Get the item at the specified index (0 = oldest item)
    */
-  public get(index: number): T | undefined {
+  at(index: number): T | undefined {
     if (index < 0 || index >= this.size) {
       return undefined;
     }
     
     const actualIndex = (this.tail + index) % this.capacity;
-    return this.buffer[actualIndex];
+    return this.items[actualIndex];
   }
-  
+
   /**
-   * Retorna el buffer como un array
+   * Get all items in the buffer as an array (oldest to newest)
    */
-  public toArray(): T[] {
+  toArray(): T[] {
     const result: T[] = [];
     
     for (let i = 0; i < this.size; i++) {
-      result.push(this.get(i) as T);
+      const index = (this.tail + i) % this.capacity;
+      result.push(this.items[index]);
     }
     
     return result;
   }
-  
+
   /**
-   * Limpia el buffer
+   * Clear all items from the buffer
    */
-  public clear(): void {
+  clear(): void {
     this.head = 0;
     this.tail = 0;
     this.size = 0;
-    this.sumValue = 0;
-    this.minValue = 0;
-    this.maxValue = 0;
-    this.buffer = new Array<T>(this.capacity);
   }
-  
+
   /**
-   * Obtiene el tamaño actual del buffer
+   * Get the current number of items in the buffer
    */
-  public getSize(): number {
+  getSize(): number {
     return this.size;
   }
-  
+
   /**
-   * Obtiene la capacidad máxima del buffer
+   * Get the maximum capacity of the buffer
    */
-  public getCapacity(): number {
+  getCapacity(): number {
     return this.capacity;
   }
-  
+
   /**
-   * Obtiene el valor promedio de los elementos en el buffer
+   * Check if the buffer is empty
    */
-  public getAverage(): number {
-    return this.useAverageTracking && this.size > 0 ? this.sumValue / this.size : 0;
+  isEmpty(): boolean {
+    return this.size === 0;
   }
-  
+
   /**
-   * Obtiene el valor mínimo en el buffer
+   * Check if the buffer is full
    */
-  public getMinValue(): number {
-    return this.minValue;
+  isFull(): boolean {
+    return this.size === this.capacity;
   }
-  
+
   /**
-   * Obtiene el valor máximo en el buffer
+   * Get the current state of the circular buffer
    */
-  public getMaxValue(): number {
-    return this.maxValue;
+  getState(): CircularBufferState<T> {
+    return {
+      capacity: this.capacity,
+      items: [...this.items],
+      head: this.head,
+      tail: this.tail,
+      size: this.size
+    };
   }
-  
+
   /**
-   * Obtiene información sobre el consumo de memoria
+   * Set the state of the circular buffer
    */
-  private getMemoryUsage(): { usedBytes: number, totalBytes: number } {
-    try {
-      // Estimación aproximada de memoria
-      const bytesPerItem = 8; // Estimación para números (puede variar para otros tipos)
-      const usedBytes = this.size * bytesPerItem;
-      const totalBytes = this.capacity * bytesPerItem;
-      
-      return { usedBytes, totalBytes };
-    } catch (error) {
-      return { usedBytes: 0, totalBytes: 0 };
-    }
-  }
-  
-  /**
-   * Obtiene el estado actual del buffer
-   */
-  public getState(): CircularBufferState {
-    try {
-      const memory = this.getMemoryUsage();
-      
-      return {
-        size: this.size,
-        capacity: this.capacity,
-        memoryUsage: memory.usedBytes,
-        avgValue: this.useAverageTracking && this.size > 0 ? this.sumValue / this.size : 0,
-        minValue: this.useAverageTracking ? this.minValue : 0,
-        maxValue: this.useAverageTracking ? this.maxValue : 0
-      };
-    } catch (error) {
-      return {
-        size: this.size,
-        capacity: this.capacity,
-        memoryUsage: 0,
-        avgValue: 0,
-        minValue: 0,
-        maxValue: 0
-      };
-    }
-  }
-  
-  /**
-   * Returns the current buffer
-   */
-  public getBuffer(): T[] {
-    return this.buffer;
+  setState(state: CircularBufferState<T>): void {
+    this.capacity = state.capacity;
+    this.items = [...state.items];
+    this.head = state.head;
+    this.tail = state.tail;
+    this.size = state.size;
   }
 }
