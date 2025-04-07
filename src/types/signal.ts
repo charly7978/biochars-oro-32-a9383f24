@@ -1,39 +1,23 @@
 
 /**
- * Signal processing and vital signs types
+ * Interface for PPG data point with timestamp
  */
-
 export interface PPGDataPoint {
-  value: number;
   timestamp: number;
-  quality?: number;
+  value: number;
+  time: number; // Required for backward compatibility
+  [key: string]: any;
 }
 
+/**
+ * Interface for standardized PPG data across the system
+ */
 export interface TimestampedPPGData {
-  value: number;
-  time: number;
-  timestamp?: number;
-  quality?: number;
-}
-
-export interface SignalValidationResult {
-  isValid: boolean;
-  errorCode?: string;
-  errorMessage?: string;
-  validatedData?: any;
-}
-
-// Vital sign types
-export type VitalSignType = 
-  | 'CARDIAC'
-  | 'SPO2'
-  | 'BLOOD_PRESSURE'
-  | 'GLUCOSE'
-  | 'LIPIDS';
-
-// Feedback from channels
-export interface ChannelFeedback {
-  value: number;
   timestamp: number;
-  quality: number;
+  value: number;
+  time: number; // Changed from optional to required to match PPGDataPoint
+  [key: string]: any;
 }
+
+// Export the processed signal interface from the .d.ts file
+export type { ProcessedSignal, ProcessingError, SignalProcessor } from './signal.d';
