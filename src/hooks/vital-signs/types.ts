@@ -1,23 +1,26 @@
-/**
- * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
- */
 
-import { CoreVitalSignsResult } from '../../modules/vital-signs/types/vital-signs-result';
+/**
+ * Types for arrhythmia visualization
+ */
 
 export interface ArrhythmiaWindow {
   start: number;
   end: number;
 }
 
-export interface UseVitalSignsProcessorReturn {
-  processSignal: (value: number, rrData?: { intervals: number[], lastPeakTime: number | null }) => CoreVitalSignsResult;
-  reset: () => CoreVitalSignsResult | null;
-  fullReset: () => void;
-  arrhythmiaCounter: number;
-  lastValidResults: CoreVitalSignsResult | null;
-  arrhythmiaWindows: ArrhythmiaWindow[];
-  debugInfo: {
-    processedSignals: number;
-    signalLog: { timestamp: number, value: number, result: any }[];
-  };
+export interface DiagnosticDataPoint {
+  timestamp: number;
+  rmssd: number | null;
+  peakAmplitude: number | null;
+  rrVariability: number | null;
+  signalQuality: number;
+  beatConfidence: number;
+}
+
+// Interfaz para el estado de arritmia
+export interface ArrhythmiaState {
+  isActive: boolean;
+  lastDetectionTime: number;
+  recoveryTime: number; // Tiempo para resetear el estado de arritmia automáticamente
+  windows: ArrhythmiaWindow[];
 }

@@ -11,7 +11,7 @@ import { LipidProcessor } from './lipid-processor';
 import { ResultFactory } from './factories/result-factory';
 import { SignalValidator } from './validators/signal-validator';
 import { ConfidenceCalculator } from './calculators/confidence-calculator';
-import { CoreVitalSignsResult } from './types/vital-signs-result';
+import { VitalSignsResult } from './types/vital-signs-result';
 
 /**
  * Main vital signs processor
@@ -58,7 +58,7 @@ export class VitalSignsProcessor {
   public processSignal(data: {
     value: number, 
     rrData?: { intervals: number[]; lastPeakTime: number | null }
-  }): CoreVitalSignsResult {
+  }): VitalSignsResult {
     return this.process(data.value, data.rrData);
   }
   
@@ -69,7 +69,7 @@ export class VitalSignsProcessor {
   public process(
     ppgValue: number,
     rrData?: { intervals: number[]; lastPeakTime: number | null }
-  ): CoreVitalSignsResult {
+  ): VitalSignsResult {
     // Check for near-zero signal
     if (!this.signalValidator.isValidSignal(ppgValue)) {
       console.log("VitalSignsProcessor: Signal too weak, returning zeros", { value: ppgValue });
@@ -171,7 +171,7 @@ export class VitalSignsProcessor {
    * Reset the processor to ensure a clean state
    * No reference values or simulations
    */
-  public reset(): CoreVitalSignsResult | null {
+  public reset(): VitalSignsResult | null {
     this.spo2Processor.reset();
     this.bpProcessor.reset();
     this.arrhythmiaProcessor.reset();
@@ -193,7 +193,7 @@ export class VitalSignsProcessor {
    * Get the last valid results - always returns null
    * Forces fresh measurements without reference values
    */
-  public getLastValidResults(): CoreVitalSignsResult | null {
+  public getLastValidResults(): VitalSignsResult | null {
     return null; // Always return null to ensure measurements start from zero
   }
   
@@ -207,5 +207,5 @@ export class VitalSignsProcessor {
   }
 }
 
-// Re-export the CoreVitalSignsResult type
-export type { CoreVitalSignsResult } from './types/vital-signs-result';
+// Re-export the VitalSignsResult type
+export type { VitalSignsResult } from './types/vital-signs-result';
