@@ -1,8 +1,8 @@
-
 import React, { useEffect, useRef, useCallback, useState, memo } from 'react';
 import { Fingerprint, AlertCircle } from 'lucide-react';
 import { CircularBuffer, PPGDataPoint } from '../utils/CircularBuffer';
 import AppTitle from './AppTitle';
+import { useCardiacSignal } from '../hooks/useCardiacSignal';
 
 interface PPGSignalMeterProps {
   value: number;
@@ -79,6 +79,37 @@ const PPGSignalMeter = memo(({
   const BEEP_DURATION = 80;
   const BEEP_VOLUME = 0.9;
   const MIN_BEEP_INTERVAL_MS = 350;
+
+  // Use the CardiacSignal hook with sound enabled
+  const { lastPeak: lastCardiacPeak } = useCardiacSignal({
+    playSound: true,
+    onPeak: (peak) => {
+      // Make sure we have a data buffer
+      if (!dataBufferRef.current) {
+        dataBufferRef.current = new CircularBuffer<PPGDataPointExtended>(BUFFER_SIZE);
+      }
+      
+      // Add detected peak to visualization
+      peaksRef.current.push({
+        time: peak.time,
+        value: peak.value,
+        isArrhythmia: peak.isArrhythmia,
+        beepPlayed: true
+      });
+      
+      // Sort by time and limit the number of peaks to display
+      peaksRef.current.sort((a, b) => a.time - b.time);
+      peaksRef.current = peaksRef.current
+        .filter(p => peak.time - p.time < WINDOW_WIDTH_MS)
+        .slice(-MAX_PEAKS_TO_DISPLAY);
+      
+      // Update arrhythmia counter if needed
+      if (peak.isArrhythmia) {
+        arrhythmiaCountRef.current++;
+        lastArrhythmiaTime.current = peak.time;
+      }
+    }
+  });
 
   useEffect(() => {
     const initAudio = async () => {
@@ -516,8 +547,6 @@ const PPGSignalMeter = memo(({
     const points = dataBufferRef.current.getPoints();
     detectPeaks(points, now);
     
-    let shouldBeep = false;
-    
     if (points.length > 1) {
       let firstPoint = true;
       let currentPathColor = '#0EA5E9'; // Default blue color
@@ -593,11 +622,6 @@ const PPGSignalMeter = memo(({
           renderCtx.fillStyle = '#000000';
           renderCtx.textAlign = 'center';
           renderCtx.fillText(Math.abs(peak.value / verticalScale).toFixed(2), x, y - 15);
-          
-          if (!peak.beepPlayed) {
-            shouldBeep = true;
-            peak.beepPlayed = true;
-          }
         }
       });
     }
@@ -609,15 +633,9 @@ const PPGSignalMeter = memo(({
       }
     }
     
-    if (shouldBeep && isFingerDetected && 
-        consecutiveFingerFramesRef.current >= REQUIRED_FINGER_FRAMES) {
-      console.log("PPGSignalMeter: Círculo dibujado, reproduciendo beep (un beep por latido)");
-      playBeep(1.0);
-    }
-    
     lastRenderTimeRef.current = currentTime;
     animationFrameRef.current = requestAnimationFrame(renderSignal);
-  }, [value, quality, isFingerDetected, rawArrhythmiaData, arrhythmiaStatus, drawGrid, detectPeaks, smoothValue, preserveResults, isArrhythmia, playBeep]);
+  }, [value, quality, isFingerDetected, rawArrhythmiaData, arrhythmiaStatus, drawGrid, detectPeaks, smoothValue, preserveResults, isArrhythmia]);
 
   useEffect(() => {
     renderSignal();

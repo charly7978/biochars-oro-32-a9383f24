@@ -153,67 +153,16 @@ export class CardiacChannel extends SpecializedChannel {
       return value - baseline;
     }
     
-    // Calculate average and variability of intervals
-    const avgInterval = intervals.reduce((sum, i) => sum + i, 0) / intervals.length;
-    const variability = intervals.reduce((sum, i) => sum + Math.pow(i - avgInterval, 2), 0) / intervals.length;
-    const normalizedVariability = Math.sqrt(variability) / avgInterval;
+    // Calculate variability metrics
+    const meanInterval = intervals.reduce((sum, i) => sum + i, 0) / intervals.length;
     
-    // Emphasize signal more when rhythm is irregular (higher variability)
-    // This helps detect arrhythmias
-    const variabilityEmphasis = 1 + normalizedVariability * 0.5;
+    // Calculate interval variation coefficient
+    const intervalVariation = intervals.reduce((sum, i) => sum + Math.abs(i - meanInterval), 0) / intervals.length;
     
-    // Apply rhythm enhancement
-    return (value - baseline) * variabilityEmphasis;
-  }
-  
-  /**
-   * Reset channel state
-   */
-  public override reset(): void {
-    super.reset();
-    this.peakBuffer = [];
-    this.lastPeakTime = 0;
-  }
-  
-  /**
-   * Get cardiac rhythm characteristics
-   */
-  public getRhythmCharacteristics(): {
-    heartRate: number;
-    beatsPerMinute: number;
-    rhythmRegularity: number;
-  } {
-    if (this.peakBuffer.length < 2) {
-      return {
-        heartRate: 0,
-        beatsPerMinute: 0,
-        rhythmRegularity: 0
-      };
-    }
+    // Normalize variation to 0-1 range (0 = completely regular, 1 = highly irregular)
+    const normalizedVariation = Math.min(1, intervalVariation / (meanInterval * 0.5));
     
-    const intervals = this.peakBuffer.map(peak => peak.interval).filter(i => i > 0);
-    
-    if (intervals.length < 2) {
-      return {
-        heartRate: 0,
-        beatsPerMinute: 0,
-        rhythmRegularity: 0
-      };
-    }
-    
-    // Calculate average interval and convert to BPM
-    const avgInterval = intervals.reduce((sum, i) => sum + i, 0) / intervals.length;
-    const bpm = 60000 / avgInterval;
-    
-    // Calculate rhythm regularity (1 = perfect regularity, 0 = chaotic)
-    const variability = intervals.reduce((sum, i) => sum + Math.pow(i - avgInterval, 2), 0) / intervals.length;
-    const normalizedVariability = Math.sqrt(variability) / avgInterval;
-    const regularity = Math.max(0, 1 - normalizedVariability * 2);
-    
-    return {
-      heartRate: avgInterval,
-      beatsPerMinute: bpm,
-      rhythmRegularity: regularity
-    };
+    // Enhance signal based on rhythm characteristics
+    return (value - baseline) * (1 + normalizedVariation);
   }
 }

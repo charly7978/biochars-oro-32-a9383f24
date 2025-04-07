@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect } from "react";
 import VitalSign from "@/components/VitalSign";
 import CameraView from "@/components/CameraView";
@@ -8,13 +7,13 @@ import { useVitalSignsProcessor } from "@/hooks/useVitalSignsProcessor";
 import PPGSignalMeter from "@/components/PPGSignalMeter";
 import MonitorButton from "@/components/MonitorButton";
 import AppTitle from "@/components/AppTitle";
-import { UnifiedVitalSignsResult } from "@/types/signal-processing";
+import { VitalSignsResult } from "@/modules/vital-signs";
 
 const Index = () => {
   const [isMonitoring, setIsMonitoring] = useState(false);
   const [isCameraOn, setIsCameraOn] = useState(false);
   const [signalQuality, setSignalQuality] = useState(0);
-  const [vitalSigns, setVitalSigns] = useState<UnifiedVitalSignsResult>({
+  const [vitalSigns, setVitalSigns] = useState<VitalSignsResult>({
     spo2: 0,
     pressure: "--/--",
     arrhythmiaStatus: "--",

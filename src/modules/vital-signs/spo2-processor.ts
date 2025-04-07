@@ -3,25 +3,8 @@
  * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
  */
 
-/**
- * Utilidades para cálculos de señal PPG
- */
-export const calculateAC = (values: number[]): number => {
-  const recentValues = values.slice(-30);
-  const min = Math.min(...recentValues);
-  const max = Math.max(...recentValues);
-  return max - min;
-};
+import { calculateAC, calculateDC } from './utils';
 
-export const calculateDC = (values: number[]): number => {
-  const recentValues = values.slice(-30);
-  const sum = recentValues.reduce((acc, val) => acc + val, 0);
-  return sum / recentValues.length;
-};
-
-/**
- * Procesador especializado para cálculo de SpO2
- */
 export class SpO2Processor {
   private readonly SPO2_BUFFER_SIZE = 10;
   private spo2Buffer: number[] = [];

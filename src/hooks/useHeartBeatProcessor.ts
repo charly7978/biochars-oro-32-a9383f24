@@ -1,4 +1,3 @@
-
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { HeartBeatProcessor } from '../modules/HeartBeatProcessor';
 import { toast } from 'sonner';
@@ -7,6 +6,7 @@ import { useBeepProcessor } from './heart-beat/beep-processor';
 import { useArrhythmiaDetector } from './heart-beat/arrhythmia-detector';
 import { useSignalProcessor } from './heart-beat/signal-processor';
 import { HeartBeatResult, UseHeartBeatReturn } from './heart-beat/types';
+import { useCardiacSignal } from './useCardiacSignal';
 
 export const useHeartBeatProcessor = (): UseHeartBeatReturn => {
   const processorRef = useRef<HeartBeatProcessor | null>(null);
@@ -19,7 +19,16 @@ export const useHeartBeatProcessor = (): UseHeartBeatReturn => {
   const initializedRef = useRef<boolean>(false);
   const lastProcessedPeakTimeRef = useRef<number>(0);
   
-  // Hooks para procesamiento y detección, sin funcionalidad de beep
+  // Unified cardiac signal processor
+  const { 
+    processSignal: processCardiacSignal,
+    lastPeak: lastCardiacPeak,
+    reset: resetCardiacSignal,
+    peakCount,
+    arrhythmiaCount
+  } = useCardiacSignal();
+  
+  // Hooks for processing and detection, without functionality of beep
   const { 
     requestImmediateBeep, 
     processBeepQueue, 
@@ -105,6 +114,66 @@ export const useHeartBeatProcessor = (): UseHeartBeatReturn => {
     return false;
   }, []);
 
+  // Effect to update BPM when cardiac peaks are detected
+  useEffect(() => {
+    if (lastCardiacPeak && isMonitoringRef.current) {
+      // Update RR intervals for arrhythmia detection
+      const now = Date.now();
+      
+      if (lastPeakTimeRef.current && lastPeakTimeRef.current > 0) {
+        const rrInterval = now - lastPeakTimeRef.current;
+        if (rrInterval > 300 && rrInterval < 1500) { // Valid RR interval range
+          lastRRIntervalsRef.current.push({
+            time: now,
+            rrInterval,
+            isValid: true
+          });
+          
+          // Keep only recent intervals
+          if (lastRRIntervalsRef.current.length > 10) {
+            lastRRIntervalsRef.current.shift();
+          }
+        }
+      }
+      
+      lastPeakTimeRef.current = now;
+      
+      // Calculate BPM from RR intervals
+      if (lastRRIntervalsRef.current.length >= 3) {
+        const validIntervals = lastRRIntervalsRef.current
+          .filter(item => item.isValid)
+          .map(item => item.rrInterval);
+          
+        if (validIntervals.length >= 3) {
+          const avgInterval = validIntervals.reduce((sum, interval) => sum + interval, 0) / validIntervals.length;
+          const calculatedBPM = Math.round(60000 / avgInterval);
+          
+          if (calculatedBPM >= 40 && calculatedBPM <= 200) {
+            setCurrentBPM(calculatedBPM);
+            
+            // Calculate confidence based on stability
+            const stdDev = Math.sqrt(
+              validIntervals.reduce((sum, interval) => {
+                return sum + Math.pow(interval - avgInterval, 2);
+              }, 0) / validIntervals.length
+            );
+            
+            const stabilityFactor = Math.max(0, Math.min(1, 1 - (stdDev / avgInterval) * 2));
+            const qualityFactor = lastCardiacPeak.confidence;
+            const newConfidence = (stabilityFactor * 0.7) + (qualityFactor * 0.3);
+            
+            setConfidence(newConfidence);
+          }
+        }
+      }
+      
+      // Update arrhythmia status
+      if (lastCardiacPeak.isArrhythmia) {
+        currentBeatIsArrhythmiaRef.current = true;
+      }
+    }
+  }, [lastCardiacPeak]);
+
   const processSignal = useCallback((value: number): HeartBeatResult => {
     if (!processorRef.current) {
       return {
@@ -119,6 +188,7 @@ export const useHeartBeatProcessor = (): UseHeartBeatReturn => {
       };
     }
 
+    // Process with original signal processor for backward compatibility
     const result = processSignalInternal(
       value, 
       currentBPM, 
@@ -130,25 +200,39 @@ export const useHeartBeatProcessor = (): UseHeartBeatReturn => {
       currentBeatIsArrhythmiaRef
     );
 
-    if (result.bpm > 0 && result.confidence > 0.4) {
-      setCurrentBPM(result.bpm);
-      setConfidence(result.confidence);
+    // Process with unified cardiac signal service
+    const isPeak = processCardiacSignal(
+      value, 
+      lastSignalQualityRef.current * 100, 
+      { isArrhythmia: currentBeatIsArrhythmiaRef.current }
+    );
+
+    // If the original processor detected a peak but CardiacSignalService didn't,
+    // or vice versa, log it for analysis
+    if (isPeak !== result.isPeak) {
+      console.log('Peak detection difference:', {
+        cardiacSignalDetectedPeak: isPeak,
+        originalProcessorDetectedPeak: result.isPeak,
+        value,
+        quality: lastSignalQualityRef.current
+      });
     }
 
-    if (lastRRIntervalsRef.current.length >= 3) {
-      const arrhythmiaResult = detectArrhythmia(lastRRIntervalsRef.current);
-      currentBeatIsArrhythmiaRef.current = arrhythmiaResult.isArrhythmia;
-      
-      result.isArrhythmia = currentBeatIsArrhythmiaRef.current;
-    }
-
-    return result;
+    // Return the result from the original processor for backward compatibility
+    return {
+      ...result,
+      // Include cardiac signal data
+      cardiacPeakCount: peakCount,
+      cardiacArrhythmiaCount: arrhythmiaCount
+    };
   }, [
     currentBPM, 
     confidence, 
     processSignalInternal, 
-    requestBeep, 
-    detectArrhythmia
+    processCardiacSignal,
+    requestBeep,
+    peakCount,
+    arrhythmiaCount
   ]);
 
   const reset = useCallback(() => {
@@ -170,12 +254,13 @@ export const useHeartBeatProcessor = (): UseHeartBeatReturn => {
     
     resetArrhythmiaDetector();
     resetSignalProcessor();
+    resetCardiacSignal();
     
     missedBeepsCounter.current = 0;
     lastProcessedPeakTimeRef.current = 0;
     
     cleanupBeepProcessor();
-  }, [resetArrhythmiaDetector, resetSignalProcessor, cleanupBeepProcessor]);
+  }, [resetArrhythmiaDetector, resetSignalProcessor, cleanupBeepProcessor, resetCardiacSignal]);
 
   const startMonitoring = useCallback(() => {
     console.log('useHeartBeatProcessor: Starting monitoring');

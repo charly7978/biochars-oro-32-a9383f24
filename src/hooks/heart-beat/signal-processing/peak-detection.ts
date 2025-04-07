@@ -5,6 +5,8 @@
  * Functions for peak detection logic, working with real data only
  */
 
+import React from 'react';
+
 // Diagnostics channel integration
 export interface DiagnosticsData {
   timestamp: number;

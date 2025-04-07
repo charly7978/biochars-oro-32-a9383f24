@@ -1,56 +1,103 @@
 
 /**
- * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
- * 
- * Canal especializado base para procesamiento de señales
- * Define la interfaz común para todos los canales de procesamiento
+ * Base class for specialized signal processing channels
+ * Each channel optimizes the signal for a specific vital sign
  */
 
-import { VitalSignType, ChannelFeedback } from '../../../types/signal';
+import { VitalSignType } from '../../../types/signal';
 
 /**
- * Clase base para canales de procesamiento especializados
+ * Configuration for a specialized channel
  */
-export abstract class SpecializedChannel {
-  protected id: string;
-  protected type: VitalSignType;
-  protected quality: number = 0;
+export interface ChannelConfig {
+  sampleRate?: number;
+  bufferSize?: number;
+  adaptiveThreshold?: number;
+}
+
+/**
+ * Interface for optimized signal channel
+ */
+export interface OptimizedSignalChannel {
+  type: VitalSignType;
+  processValue(value: number): number;
+  reset(): void;
+  configure(config: ChannelConfig): void;
+}
+
+/**
+ * Base class for all specialized channels
+ */
+export abstract class SpecializedChannel implements OptimizedSignalChannel {
+  public type: VitalSignType;
+  protected readonly sampleRate: number = 25; // Default sample rate in Hz
+  protected readonly bufferSize: number = 100; // Max values to store
+  protected adaptiveThreshold: number = 0.5;
+  protected recentValues: number[] = [];
   
-  constructor(type: VitalSignType) {
+  constructor(type: VitalSignType, config: ChannelConfig = {}) {
     this.type = type;
-    this.id = `channel-${type}-${Date.now()}`;
+    
+    if (config.sampleRate) this.sampleRate = config.sampleRate;
+    if (config.bufferSize) this.bufferSize = config.bufferSize;
+    if (config.adaptiveThreshold !== undefined) this.adaptiveThreshold = config.adaptiveThreshold;
   }
   
   /**
-   * Obtiene el ID único del canal
+   * Process a value through the channel
+   * @param value Raw value to process
+   * @returns Optimized value for this specific vital sign
    */
-  public getId(): string {
-    return this.id;
+  public processValue(value: number): number {
+    // Store value in recent values buffer
+    this.recentValues.push(value);
+    if (this.recentValues.length > this.bufferSize) {
+      this.recentValues.shift();
+    }
+    
+    // Apply generic preprocessing
+    const preprocessedValue = this.applyCommonPreprocessing(value);
+    
+    // Apply channel-specific optimization
+    const optimizedValue = this.applyChannelSpecificOptimization(preprocessedValue);
+    
+    return optimizedValue;
   }
   
   /**
-   * Obtiene el tipo de canal
+   * Apply common preprocessing steps
    */
-  public getType(): VitalSignType {
-    return this.type;
+  protected applyCommonPreprocessing(value: number): number {
+    // Apply generic preprocessing steps
+    return value;
   }
   
   /**
-   * Obtiene la calidad de señal actual (0-1)
+   * Apply channel-specific optimization
+   * To be implemented by each channel type
    */
-  public getQuality(): number {
-    return this.quality;
-  }
+  protected abstract applyChannelSpecificOptimization(value: number): number;
   
   /**
-   * Aplica retroalimentación al canal
-   */
-  public abstract applyFeedback(feedback: ChannelFeedback): void;
-  
-  /**
-   * Reinicia el canal
+   * Reset the channel state
    */
   public reset(): void {
-    this.quality = 0;
+    this.recentValues = [];
   }
+  
+  /**
+   * Configure channel parameters
+   */
+  public configure(config: ChannelConfig): void {
+    if (config.sampleRate) this.sampleRate = config.sampleRate;
+    if (config.bufferSize) this.bufferSize = config.bufferSize;
+    if (config.adaptiveThreshold !== undefined) this.adaptiveThreshold = config.adaptiveThreshold;
+  }
+}
+
+/**
+ * Factory function to create channels
+ */
+export function createChannel(type: VitalSignType, config: ChannelConfig = {}): OptimizedSignalChannel {
+  throw new Error(`Channel type ${type} not implemented`);
 }
