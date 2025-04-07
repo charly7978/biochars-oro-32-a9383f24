@@ -40,8 +40,8 @@ export function useSignalProcessor() {
     try {
       calibrationCounterRef.current++;
       
-      // Check for weak signal
-      const { isWeakSignal, updatedWeakSignalsCount } = checkWeakSignal(
+      // Check for weak signal - fixed implementation
+      const result = checkWeakSignal(
         value, 
         consecutiveWeakSignalsRef.current, 
         {
@@ -50,19 +50,20 @@ export function useSignalProcessor() {
         }
       );
       
-      consecutiveWeakSignalsRef.current = updatedWeakSignalsCount;
+      const isWeakSignal = result.isWeakSignal;
+      consecutiveWeakSignalsRef.current = result.updatedWeakSignalsCount;
       
       if (isWeakSignal) {
-        return createWeakSignalResult(processor.getArrhythmiaCounter());
+        return createWeakSignalResult(processor.getArrhythmiaCounter ? processor.getArrhythmiaCounter() : 0);
       }
       
       // Only process signals with sufficient amplitude
       if (!shouldProcessMeasurement(value)) {
-        return createWeakSignalResult(processor.getArrhythmiaCounter());
+        return createWeakSignalResult(processor.getArrhythmiaCounter ? processor.getArrhythmiaCounter() : 0);
       }
       
       // Process real signal
-      const result = processor.processSignal(value);
+      const processorResult = processor.processSignal(value);
       const rrData = processor.getRRIntervals();
       
       if (rrData && rrData.intervals.length > 0) {
@@ -71,24 +72,31 @@ export function useSignalProcessor() {
       
       // Handle peak detection
       handlePeakDetection(
-        result, 
+        processorResult, 
         lastPeakTimeRef, 
         requestImmediateBeep, 
         isMonitoringRef,
         value
       );
       
-      // Update last valid BPM if it's reasonable
-      updateLastValidBpm(result, lastValidBpmRef);
+      // Update last valid BPM
+      updateLastValidBpm(processorResult.bpm, processorResult.confidence);
       
-      lastSignalQualityRef.current = result.confidence;
+      lastSignalQualityRef.current = processorResult.confidence;
 
-      // Process result
-      return processLowConfidenceResult(
-        result, 
-        currentBPM, 
-        processor.getArrhythmiaCounter()
-      );
+      // Process result with proper parameters
+      const finalResult = processLowConfidenceResult(processorResult);
+      
+      return {
+        bpm: finalResult.bpm || currentBPM,
+        confidence: finalResult.confidence,
+        isPeak: finalResult.isPeak,
+        arrhythmiaCount: processor.getArrhythmiaCounter ? processor.getArrhythmiaCounter() : 0,
+        rrData: {
+          intervals: lastRRIntervalsRef.current,
+          lastPeakTime: lastPeakTimeRef.current
+        }
+      };
     } catch (error) {
       console.error('useHeartBeatProcessor: Error processing signal', error);
       return {

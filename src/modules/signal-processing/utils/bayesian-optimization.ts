@@ -5,8 +5,6 @@
  * Provides utilities for parameter optimization using Bayesian methods
  */
 
-import { BayesianOptimizerConfig } from '../types';
-
 /**
  * Interface for optimization parameters
  */
@@ -27,22 +25,13 @@ export interface OptimizationResult {
 }
 
 /**
- * Data point for Bayesian optimization
- */
-interface BayesianDataPoint {
-  params: Record<string, number>;
-  score: number;
-}
-
-/**
  * Bayesian optimization engine for signal processing
  */
 export class BayesianOptimizer {
   private parameters: OptimizationParameter[] = [];
-  private observedValues: Array<BayesianDataPoint> = [];
+  private observedValues: Array<{params: Record<string, number>, score: number}> = [];
   private explorationFactor: number = 0.1;
   private readonly MAX_HISTORY_SIZE = 50;
-  private bestObservation: BayesianDataPoint | null = null;
 
   /**
    * Create a new optimizer with a set of parameters to optimize
@@ -57,17 +46,11 @@ export class BayesianOptimizer {
    * Add an observation with current parameter values and resulting score
    */
   public addObservation(paramValues: Record<string, number>, score: number): void {
-    const observation: BayesianDataPoint = {params: {...paramValues}, score};
-    this.observedValues.push(observation);
+    this.observedValues.push({params: {...paramValues}, score});
     
     // Keep history bounded
     if (this.observedValues.length > this.MAX_HISTORY_SIZE) {
       this.observedValues.shift();
-    }
-    
-    // Update best observation
-    if (this.bestObservation === null || score > this.bestObservation.score) {
-      this.bestObservation = observation;
     }
     
     console.log("BayesianOptimizer: Added observation with score", score);
@@ -143,7 +126,7 @@ export class BayesianOptimizer {
     }
     
     // Start with best observed parameters
-    const bestObservation = this.bestObservation || {...this.observedValues}
+    const bestObservation = [...this.observedValues]
       .sort((a, b) => b.score - a.score)[0];
     
     // Search space around best observation
@@ -202,8 +185,12 @@ export class BayesianOptimizer {
    * Get the best parameters found so far
    */
   public getBestParameters(): Record<string, number> | null {
-    if (!this.bestObservation) return null;
-    return {...this.bestObservation.params};
+    if (this.observedValues.length === 0) return null;
+    
+    const bestObservation = [...this.observedValues]
+      .sort((a, b) => b.score - a.score)[0];
+    
+    return {...bestObservation.params};
   }
 
   /**
@@ -211,7 +198,6 @@ export class BayesianOptimizer {
    */
   public reset(): void {
     this.observedValues = [];
-    this.bestObservation = null;
     console.log("BayesianOptimizer: Reset");
   }
 }

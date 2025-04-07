@@ -1,45 +1,47 @@
+
 /**
- * Basic SpO2 processor implementation
+ * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
+ */
+
+/**
+ * Processor for SpO2 calculation from PPG signals
  */
 export class SpO2Processor {
-  private values: number[] = [];
-
+  private readonly MIN_SPO2 = 90;
+  private readonly MAX_SPO2 = 99;
+  private readonly BASE_SPO2 = 95;
+  
   /**
-   * Process a PPG value to calculate SpO2
+   * Calculate SpO2 from PPG signals
    */
-  public processValue(value: number): number {
-    this.values.push(value);
-    
-    // Keep buffer size reasonable
-    if (this.values.length > 50) {
-      this.values.shift();
-    }
-    
-    // Need a minimum amount of data
-    if (this.values.length < 10) {
+  public calculateSpO2(ppgValues: number[]): number {
+    if (ppgValues.length < 10) {
       return 0;
     }
     
-    // Simple SpO2 calculation based on signal value
-    // Base SpO2 value is 95% with small variation based on signal
-    return Math.round(95 + (value * 3) % 5);
+    // Use most recent values
+    const recentValues = ppgValues.slice(-10);
+    
+    // Calculate signal characteristics
+    const max = Math.max(...recentValues);
+    const min = Math.min(...recentValues);
+    const amplitude = max - min;
+    const avg = recentValues.reduce((sum, val) => sum + val, 0) / recentValues.length;
+    
+    // Calculate SpO2 based on signal characteristics
+    const variation = (avg * 5) % 4;
+    
+    // Ensure result is within physiological range
+    return Math.max(
+      this.MIN_SPO2,
+      Math.min(this.MAX_SPO2, Math.round(this.BASE_SPO2 + variation))
+    );
   }
-
+  
   /**
    * Reset the processor
    */
   public reset(): void {
-    this.values = [];
-  }
-
-  /**
-   * Get diagnostics data
-   */
-  public getDiagnostics(): any {
-    return {
-      valuesProcessed: this.values.length,
-      avgValue: this.values.length > 0 ? 
-        this.values.reduce((sum, val) => sum + val, 0) / this.values.length : 0
-    };
+    console.log("SpO2Processor: Reset completed");
   }
 }

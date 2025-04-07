@@ -3,36 +3,15 @@ import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import { Toaster } from "@/components/ui/toaster";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
-import { useEffect } from 'react';
-import './App.css';
-import { useMobileOptimizations } from './hooks/useMobileOptimizations';
-import ResponsiveContainer from './components/ResponsiveContainer';
 
 const App = () => {
-  // Apply mobile optimizations
-  const { isMobile, isLowPowerMode } = useMobileOptimizations({
-    reducedMotion: true,
-    optimizeRendering: true,
-    reducedImageQuality: true,
-    batteryAwareness: true
-  });
-
-  useEffect(() => {
-    // App initialization code
-    if (isLowPowerMode) {
-      console.log('Running in low power mode');
-    }
-  }, [isLowPowerMode]);
-
   return (
     <Router>
-      <ResponsiveContainer className="app-container" optimizeForMedicalData={true}>
-        <Routes>
-          <Route path="/" element={<Index />} />
-          <Route path="*" element={<NotFound />} />
-        </Routes>
-        <Toaster />
-      </ResponsiveContainer>
+      <Routes>
+        <Route path="/" element={<Index />} />
+        <Route path="*" element={<NotFound />} />
+      </Routes>
+      <Toaster />
     </Router>
   );
 };
