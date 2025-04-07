@@ -68,16 +68,7 @@ const Index = () => {
 
   useEffect(() => {
     if (lastValidResults && !isMonitoring) {
-      const convertedResult: LocalVitalSignsResult = {
-        ...lastValidResults,
-        lastArrhythmiaData: lastValidResults.lastArrhythmiaData ? {
-          timestamp: lastValidResults.lastArrhythmiaData.timestamp,
-          rmssd: lastValidResults.lastArrhythmiaData.rmssd || 0,
-          rrVariation: lastValidResults.lastArrhythmiaData.rrVariation || 0
-        } : null
-      };
-      
-      setVitalSigns(convertedResult);
+      setVitalSigns(lastValidResults);
       setShowResults(true);
     }
   }, [lastValidResults, isMonitoring]);
@@ -104,17 +95,7 @@ const Index = () => {
           const vitals = processVitalSigns(lastSignal.filteredValue, heartBeatResult.rrData);
           if (vitals) {
             console.log("Vital signs processed:", vitals);
-            
-            const convertedResult: LocalVitalSignsResult = {
-              ...vitals,
-              lastArrhythmiaData: vitals.lastArrhythmiaData ? {
-                timestamp: vitals.lastArrhythmiaData.timestamp,
-                rmssd: vitals.lastArrhythmiaData.rmssd || 0,
-                rrVariation: vitals.lastArrhythmiaData.rrVariation || 0
-              } : null
-            };
-            
-            setVitalSigns(convertedResult);
+            setVitalSigns(vitals);
           }
         }
         
@@ -181,16 +162,7 @@ const Index = () => {
     
     const savedResults = resetVitalSigns();
     if (savedResults) {
-      const convertedResult: LocalVitalSignsResult = {
-        ...savedResults,
-        lastArrhythmiaData: savedResults.lastArrhythmiaData ? {
-          timestamp: savedResults.lastArrhythmiaData.timestamp,
-          rmssd: savedResults.lastArrhythmiaData.rmssd || 0,
-          rrVariation: savedResults.lastArrhythmiaData.rrVariation || 0
-        } : null
-      };
-      
-      setVitalSigns(convertedResult);
+      setVitalSigns(savedResults);
       setShowResults(true);
     }
     
@@ -356,6 +328,7 @@ const Index = () => {
               onStartMeasurement={startMonitoring}
               onReset={handleReset}
               arrhythmiaStatus={vitalSigns.arrhythmiaStatus}
+              rawArrhythmiaData={vitalSigns.lastArrhythmiaData}
               preserveResults={showResults}
               isArrhythmia={isArrhythmia}
             />
