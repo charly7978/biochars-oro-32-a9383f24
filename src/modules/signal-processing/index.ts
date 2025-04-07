@@ -1,80 +1,55 @@
 
 /**
- * Módulo central para procesamiento de señales
- * Exporta todas las funciones y tipos necesarios para el procesamiento de señales reales
- * SOLO PROCESAMIENTO REAL - NO HAY SIMULACIONES
+ * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
+ * 
+ * Punto de entrada del módulo de procesamiento de señales
+ * Exporta todas las funcionalidades públicas
  */
 
-// Exportar tipos
-export * from './finger-detection/finger-detection-types';
+// Exportar tipos comunes
+export * from './types';
 
-// Exportar detector de dedos unificado
-export {
-  updateDetectionSource,
-  getFingerDetectionState,
-  resetFingerDetector,
-  analyzeSignalForRhythmicPattern,
-  isFingerDetected,
-  getDetectionConfidence,
-  checkSignalStrength,
-  unifiedFingerDetector
-} from './finger-detection/unified-finger-detector';
+// Exportar procesadores
+export * from './ppg-processor';
+export * from './heartbeat-processor';
 
-// Exportar diagnósticos
-export {
-  fingerDiagnostics,
-  reportFingerDetection,
-  reportDiagnosticEvent,
-  getDiagnosticStats,
-  clearDiagnosticEvents
-} from './finger-detection/finger-diagnostics';
+// Exportar utilidades adaptativas 
+export { getAdaptivePredictor } from './utils/adaptive-predictor';
+export { unifiedFingerDetector, resetFingerDetector, type DetectionState } from './utils/unified-finger-detector';
 
-// Exportar calibración adaptativa
-export {
-  updateEnvironmentalState,
-  getEnvironmentalState,
-  getCalibrationParameters,
-  resetCalibration,
-  calculateAdaptiveThreshold,
-  adaptDetectionThresholds
-} from './finger-detection/adaptive-calibration';
+// Exportar optimizador bayesiano
+export { 
+  createBayesianOptimizer,
+  createDefaultPPGOptimizer,
+  createHeartbeatOptimizer,
+  DEFAULT_PPG_PARAMETERS,
+  DEFAULT_HEARTBEAT_PARAMETERS,
+  OptimizationParameter
+} from './utils/bayesian-optimization';
 
-// Exportar detector de amplitud
-export {
-  checkSignalStrength as checkAmplitudeSignalStrength,
-  shouldProcessMeasurement,
-  resetAmplitudeDetector,
-  getLastSignalQuality,
-  isFingerDetectedByAmplitude
-} from './finger-detection/amplitude-detector';
-
-// Exportar procesador de señales neuronal
-export {
-  processTensorSignal,
-  createNeuralProcessor,
-  getNeuralNetworkState,
-  resetNeuralNetwork,
-  applyAdaptiveCalibration
-} from './neural/tensor-processor';
-
-// Exportar modelos tensoriales optimizados para procesamiento en tiempo real
-export {
-  MixedModel,
-  getMixedModel,
-  resetMixedModel,
-  type MixedModelPrediction,
-  type MixedModelConfig
-} from './utils/mixed-model';
-
-// Exportar tipos de procesamiento de señales
+// Use 'export type' for types when isolatedModules is enabled
 export type { 
-  ProcessedPPGSignal, 
-  ProcessedHeartbeatSignal,
-  SignalProcessingOptions,
-  SignalProcessorConfig,
-  RealTimeProcessingConfig
-} from './types';
+  BayesianOptimizer, 
+  BayesianDataPoint,
+  BayesianOptimizerConfig,
+  GaussianProcess,
+  ParameterOptions
+} from './utils/bayesian-optimization';
 
-// Exportar procesadores principales
-export { PPGSignalProcessor } from './processors/ppg-processor';
-export { HeartbeatProcessor } from './processors/heartbeat-processor';
+// Exportar sistema adaptativo
+export { getAdaptiveSystemCoordinator, MessageType } from './utils/adaptive-system-coordinator';
+export type { AdaptiveSystemMessage } from './utils/adaptive-system-coordinator';
+
+// Exportar funciones de creación
+export { createPPGSignalProcessor } from './ppg-processor';
+export { createHeartbeatProcessor } from './heartbeat-processor';
+
+// Exportar optimizador de parámetros de señal
+export {
+  SignalParameterOptimizer,
+  createSignalParameterOptimizer,
+  OptimizationState
+} from './utils/parameter-optimization';
+
+// Exportar utilidades de buffer circular optimizado
+export { CircularBuffer } from './utils/circular-buffer';

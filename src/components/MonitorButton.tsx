@@ -7,38 +7,30 @@ interface MonitorButtonProps {
   isMonitoring: boolean;
   onToggle: () => void;
   variant?: "monitor" | "reset";
-  disabled?: boolean;
-  className?: string;
 }
 
 const MonitorButton: React.FC<MonitorButtonProps> = ({ 
   isMonitoring, 
   onToggle, 
-  variant = "monitor",
-  disabled = false,
-  className = ""
+  variant = "monitor" 
 }) => {
-  const baseClass = "w-full transition-colors duration-200";
+  const baseClass = "w-full animation-smooth";
   
   // Get the button variant accepted by shadcn/ui Button component
   const getButtonVariant = () => {
     if (variant === "reset") return "secondary";
-    return isMonitoring ? "destructive" : "default"; 
+    return isMonitoring ? "destructive" : "default"; // Using 'default' instead of 'primary'
   };
   
   return (
     <Button 
       onClick={onToggle} 
       variant={getButtonVariant()}
-      disabled={disabled}
       className={cn(
         baseClass,
         isMonitoring && variant === "monitor" && "bg-[var(--medical-danger-direct)] hover:bg-[var(--medical-danger-direct)]/90",
-        !isMonitoring && variant === "monitor" && "bg-[var(--medical-info-direct)] hover:bg-[var(--medical-info-direct)]/90",
-        className
+        !isMonitoring && variant === "monitor" && "bg-[var(--medical-info-direct)] hover:bg-[var(--medical-info-direct)]/90"
       )}
-      aria-label={variant === "monitor" ? (isMonitoring ? 'Detener monitoreo' : 'Iniciar monitoreo') : 'Reiniciar'}
-      title={variant === "monitor" ? (isMonitoring ? 'Detener monitoreo' : 'Iniciar monitoreo') : 'Reiniciar'}
     >
       {variant === "monitor" ? (isMonitoring ? 'Detener' : 'Iniciar') : 'Reset'}
     </Button>

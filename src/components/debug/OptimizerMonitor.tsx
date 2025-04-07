@@ -6,8 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Progress } from "@/components/ui/progress";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { OptimizationState } from '@/modules/signal-processing';
-import type { OptimizationMetrics } from '@/modules/signal-processing';
+import { OptimizationState, OptimizationMetrics } from '@/modules/signal-processing/utils/parameter-optimization';
 
 interface OptimizerMonitorProps {
   metrics: OptimizationMetrics | null;
@@ -42,20 +41,14 @@ const OptimizerMonitor: React.FC<OptimizerMonitorProps> = ({
   
   const getStateColor = (state: OptimizationState): string => {
     switch (state) {
-      case OptimizationState.IDLE:
+      case OptimizationState.COLLECTING:
         return 'bg-blue-500';
       case OptimizationState.OPTIMIZING:
         return 'bg-purple-500';
-      case OptimizationState.COMPLETED:
-        return 'bg-amber-500';
-      case OptimizationState.FAILED:
-        return 'bg-red-500';
-      case OptimizationState.COLLECTING:
-        return 'bg-cyan-500';
-      case OptimizationState.EVALUATING:
-        return 'bg-pink-500';
       case OptimizationState.APPLYING:
-        return 'bg-orange-500';
+        return 'bg-amber-500';
+      case OptimizationState.EVALUATING:
+        return 'bg-green-500';
       default:
         return 'bg-gray-500';
     }
@@ -85,6 +78,7 @@ const OptimizerMonitor: React.FC<OptimizerMonitorProps> = ({
       </CardHeader>
       
       <CardContent className="space-y-4">
+        {/* Current scores */}
         {metrics && (
           <>
             <div className="space-y-2">
@@ -112,6 +106,7 @@ const OptimizerMonitor: React.FC<OptimizerMonitorProps> = ({
               </div>
             </div>
             
+            {/* Parameter history */}
             {metrics.paramsHistory.length > 0 && (
               <div className="space-y-2 mt-4">
                 <h4 className="text-sm font-medium">Parameter History</h4>
@@ -129,7 +124,7 @@ const OptimizerMonitor: React.FC<OptimizerMonitorProps> = ({
                           {Object.entries(entry.params).map(([key, value]) => (
                             <div key={key} className="flex justify-between">
                               <span className="text-gray-500">{key}:</span>
-                              <span>{typeof value === 'number' ? value.toFixed(3) : String(value)}</span>
+                              <span>{typeof value === 'number' ? value.toFixed(3) : value}</span>
                             </div>
                           ))}
                         </div>
