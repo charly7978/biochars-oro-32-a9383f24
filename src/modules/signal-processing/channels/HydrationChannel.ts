@@ -1,181 +1,248 @@
-
 /**
- * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
- * 
- * Canal especializado para procesamiento de señal de hidratación
- * Optimiza la señal para algoritmos de medición de hidratación
- * Se enfoca en la perfusión tisular y componentes de conductancia
+ * Specialized channel for hydration signal processing
+ * Optimizes the signal specifically for hydration level measurement algorithms
+ * Focuses on waveform characteristics related to blood volume and fluid balance
  */
 
 import { SpecializedChannel, ChannelConfig } from './SpecializedChannel';
 import { VitalSignType } from '../../../types/signal';
 
 /**
- * Implementación de canal específico para hidratación
+ * Hydration-specific channel implementation
  */
 export class HydrationChannel extends SpecializedChannel {
-  // Parámetros específicos para hidratación
-  private readonly PERFUSION_EMPHASIS = 1.25;    // Énfasis en perfusión tisular
-  private readonly SLOW_COMPONENT_WEIGHT = 0.65; // Peso para componentes lentos (DC)
-  private readonly FAST_COMPONENT_WEIGHT = 0.35; // Peso para componentes rápidos (AC)
+  // Hydration-specific parameters
+  private readonly AMPLITUDE_EMPHASIS = 1.2;   // Emphasis on amplitude variations
+  private readonly LOW_FREQ_WEIGHT = 0.65;     // Higher weight for low frequencies (fluid balance)
+  private readonly HIGH_FREQ_WEIGHT = 0.35;    // Lower weight for high frequencies
   
-  // Buffers para análisis espectral
-  private temporalBuffer: number[] = [];
-  private readonly TEMPORAL_BUFFER_SIZE = 128; // Potencia de 2 para análisis FFT
-  
-  // Buffers para componentes lentos y rápidos
-  private slowComponentBuffer: number[] = [];
-  private fastComponentBuffer: number[] = [];
-  private readonly COMPONENT_BUFFER_SIZE = 32;
+  // Buffers for analysis
+  private waveformBuffer: number[] = [];
+  private readonly WAVEFORM_BUFFER_SIZE = 60;
+  private amplitudeRatios: number[] = [];
   
   constructor(config: ChannelConfig) {
     super(VitalSignType.HYDRATION, config);
   }
   
   /**
-   * Aplica optimización específica para hidratación a la señal
-   * - Enfatiza componentes relacionados con la perfusión tisular
-   * - Separa componentes lentos (DC) que correlacionan con nivel de hidratación
-   * - Preserva componentes rápidos (AC) para análisis de pulsatilidad
+   * Apply hydration-specific optimization to the signal
+   * - Emphasizes amplitude changes related to tissue water content
+   * - Enhances low-frequency components correlated with fluid balance
+   * - Detects subtle changes in pulse wave velocity
    */
   protected applyChannelSpecificOptimization(value: number): number {
-    // Actualizar buffer temporal
-    this.updateTemporalBuffer(value);
+    // Update waveform buffer for analysis
+    this.updateWaveformBuffer(value);
     
-    // Separar componentes lentos y rápidos
-    this.separateComponents(value);
-    
-    // Calcular línea base (componente DC)
+    // Extract baseline (DC component)
     const baseline = this.calculateBaseline();
     
-    // Calcular componente de perfusión (indicador primario de hidratación)
-    const perfusionComponent = this.calculatePerfusionComponent(value, baseline);
+    // Enhance amplitude characteristics related to hydration
+    const amplitudeEnhanced = this.enhanceAmplitude(value, baseline);
     
-    // Calcular componente de conductancia (indicador secundario)
-    const conductanceComponent = this.calculateConductanceComponent(value, baseline);
+    // Apply frequency weighting to emphasize hydration-related components
+    const frequencyOptimized = this.applyFrequencyWeighting(value, baseline);
     
-    // Combinar componentes con ponderación para optimizar la señal para hidratación
-    const optimizedValue = baseline + 
-                          (perfusionComponent * this.SLOW_COMPONENT_WEIGHT) +
-                          (conductanceComponent * this.FAST_COMPONENT_WEIGHT);
+    // Calculate pulse wave features
+    const pulseWaveComponent = this.calculatePulseWaveFeatures(value, baseline);
     
-    // Aplicar énfasis en perfusión
-    return optimizedValue * this.PERFUSION_EMPHASIS;
+    // Combine components with appropriate weighting
+    return baseline + 
+           (amplitudeEnhanced * 0.4) + 
+           (frequencyOptimized * 0.4) + 
+           (pulseWaveComponent * 0.2);
   }
   
   /**
-   * Actualiza el buffer temporal para análisis
+   * Update buffer for waveform analysis
    */
-  private updateTemporalBuffer(value: number): void {
-    this.temporalBuffer.push(value);
+  private updateWaveformBuffer(value: number): void {
+    this.waveformBuffer.push(value);
     
-    if (this.temporalBuffer.length > this.TEMPORAL_BUFFER_SIZE) {
-      this.temporalBuffer.shift();
+    if (this.waveformBuffer.length > this.WAVEFORM_BUFFER_SIZE) {
+      this.waveformBuffer.shift();
+      
+      // When buffer is full, calculate amplitude ratios
+      this.calculateAmplitudeRatios();
     }
   }
   
   /**
-   * Separa componentes lentos y rápidos de la señal
-   * - Componentes lentos: relacionados con cambios en hidratación
-   * - Componentes rápidos: relacionados con pulso y perfusión
+   * Calculate amplitude ratios that correlate with hydration levels
+   * Higher amplitude ratio typically indicates better hydration
    */
-  private separateComponents(value: number): void {
-    // Filtro simple paso bajo para componentes lentos (DC)
-    const alpha = 0.1; // Factor de suavizado
-    const lastSlowComponent = this.slowComponentBuffer.length > 0 ? 
-                            this.slowComponentBuffer[this.slowComponentBuffer.length - 1] : 
-                            value;
+  private calculateAmplitudeRatios(): void {
+    if (this.waveformBuffer.length < 10) return;
     
-    const slowComponent = (alpha * value) + ((1 - alpha) * lastSlowComponent);
+    // Find peaks and troughs in the buffer
+    const { peaks, troughs } = this.findPeaksTroughs(this.waveformBuffer);
     
-    // Componente rápido es la diferencia entre valor actual y componente lento
-    const fastComponent = value - slowComponent;
-    
-    // Actualizar buffers
-    this.slowComponentBuffer.push(slowComponent);
-    this.fastComponentBuffer.push(fastComponent);
-    
-    // Mantener tamaño de buffer
-    if (this.slowComponentBuffer.length > this.COMPONENT_BUFFER_SIZE) {
-      this.slowComponentBuffer.shift();
-    }
-    
-    if (this.fastComponentBuffer.length > this.COMPONENT_BUFFER_SIZE) {
-      this.fastComponentBuffer.shift();
+    if (peaks.length > 1 && troughs.length > 1) {
+      // Calculate amplitude ratio (peak-to-trough height / peak interval)
+      const amplitudes = [];
+      const intervals = [];
+      
+      for (let i = 0; i < peaks.length - 1; i++) {
+        const peakIdx = peaks[i];
+        const nextPeakIdx = peaks[i + 1];
+        
+        // Find trough between peaks
+        const troughsBetween = troughs.filter(t => t > peakIdx && t < nextPeakIdx);
+        if (troughsBetween.length > 0) {
+          const troughIdx = troughsBetween[0];
+          
+          const peakValue = this.waveformBuffer[peakIdx];
+          const troughValue = this.waveformBuffer[troughIdx];
+          const amplitude = peakValue - troughValue;
+          
+          amplitudes.push(amplitude);
+          intervals.push(nextPeakIdx - peakIdx);
+        }
+      }
+      
+      // Calculate ratio
+      if (amplitudes.length > 0 && intervals.length > 0) {
+        const avgAmplitude = amplitudes.reduce((sum, amp) => sum + amp, 0) / amplitudes.length;
+        const avgInterval = intervals.reduce((sum, int) => sum + int, 0) / intervals.length;
+        
+        this.amplitudeRatios.push(avgAmplitude / (avgInterval || 1));
+        
+        // Keep history limited
+        if (this.amplitudeRatios.length > 5) {
+          this.amplitudeRatios.shift();
+        }
+      }
     }
   }
   
   /**
-   * Calcula la línea base (componente DC)
+   * Find peaks and troughs in a signal buffer
+   */
+  private findPeaksTroughs(buffer: number[]): { peaks: number[], troughs: number[] } {
+    const peaks: number[] = [];
+    const troughs: number[] = [];
+    
+    // Simple peak/trough detection
+    for (let i = 2; i < buffer.length - 2; i++) {
+      // Check for peak (local maximum)
+      if (buffer[i] > buffer[i-1] && buffer[i] > buffer[i-2] &&
+          buffer[i] > buffer[i+1] && buffer[i] > buffer[i+2]) {
+        peaks.push(i);
+      }
+      
+      // Check for trough (local minimum)
+      if (buffer[i] < buffer[i-1] && buffer[i] < buffer[i-2] &&
+          buffer[i] < buffer[i+1] && buffer[i] < buffer[i+2]) {
+        troughs.push(i);
+      }
+    }
+    
+    return { peaks, troughs };
+  }
+  
+  /**
+   * Calculate the baseline (DC component)
    */
   private calculateBaseline(): number {
-    if (this.slowComponentBuffer.length < 5) {
+    if (this.recentValues.length < 5) {
       return 0;
     }
     
-    // Media ponderada para línea base
-    const weights = this.slowComponentBuffer.map((_, i, arr) => (i + 1) / arr.length);
-    const weightSum = weights.reduce((sum, w) => sum + w, 0);
+    // Use median for more stable baseline
+    const sorted = [...this.recentValues].sort((a, b) => a - b);
+    const midIndex = Math.floor(sorted.length / 2);
     
-    return this.slowComponentBuffer.reduce((sum, val, i) => sum + val * weights[i], 0) / weightSum;
+    return sorted.length % 2 === 0
+      ? (sorted[midIndex - 1] + sorted[midIndex]) / 2
+      : sorted[midIndex];
   }
   
   /**
-   * Calcula componente de perfusión relevante para hidratación
-   * La perfusión tisular es un fuerte indicador del estado de hidratación
+   * Enhance amplitude characteristics related to hydration
    */
-  private calculatePerfusionComponent(value: number, baseline: number): number {
-    if (this.fastComponentBuffer.length < 10) {
+  private enhanceAmplitude(value: number, baseline: number): number {
+    if (this.recentValues.length < 10) {
       return value - baseline;
     }
     
-    // Calcular amplitud de pulsatilidad (indicador de perfusión)
-    const pulsatilityValues = this.fastComponentBuffer.slice(-10);
-    const minVal = Math.min(...pulsatilityValues);
-    const maxVal = Math.max(...pulsatilityValues);
-    const pulsatilityAmplitude = maxVal - minVal;
+    // Amplitude enhancement based on recent values
+    const recentAmplitude = Math.max(...this.recentValues) - Math.min(...this.recentValues);
     
-    // Factor de perfusión basado en amplitud y valor actual
-    const perfusionFactor = 1.0 + (pulsatilityAmplitude * 5.0);
+    // Apply enhancement factor (higher for signals with stronger amplitude)
+    const enhancementFactor = this.AMPLITUDE_EMPHASIS * (1 + Math.min(0.5, recentAmplitude / 10));
     
-    // Aplicar factor de perfusión al componente
-    return (value - baseline) * perfusionFactor;
+    return (value - baseline) * enhancementFactor;
   }
   
   /**
-   * Calcula componente de conductancia correlacionado con hidratación
-   * La conductancia eléctrica del tejido varía con la hidratación
+   * Apply frequency weighting for hydration-related components
    */
-  private calculateConductanceComponent(value: number, baseline: number): number {
-    if (this.temporalBuffer.length < 10) {
+  private applyFrequencyWeighting(value: number, baseline: number): number {
+    if (this.recentValues.length < 10) {
       return value - baseline;
     }
     
-    // Análisis de variabilidad (correlaciona con conductancia tisular)
-    const recentValues = this.temporalBuffer.slice(-15);
-    let variabilitySum = 0;
+    // Separate into low and high frequency components (simplified)
+    const lowFreqComponent = this.extractLowFrequencyComponent();
+    const highFreqComponent = (value - baseline) - lowFreqComponent;
     
-    for (let i = 1; i < recentValues.length; i++) {
-      variabilitySum += Math.abs(recentValues[i] - recentValues[i-1]);
-    }
-    
-    const averageVariability = variabilitySum / (recentValues.length - 1);
-    
-    // La conductancia influye en la propagación de la señal
-    // En tejidos bien hidratados, la señal se propaga mejor (mayor variabilidad)
-    const conductanceFactor = 1.0 + (averageVariability * 4.0);
-    
-    // Retornar componente ajustado por conductancia
-    return (value - baseline) * conductanceFactor;
+    // Apply weighting and combine
+    return (lowFreqComponent * this.LOW_FREQ_WEIGHT) + 
+           (highFreqComponent * this.HIGH_FREQ_WEIGHT);
   }
   
   /**
-   * Reiniciar canal
+   * Extract low frequency component using simple moving average
+   */
+  private extractLowFrequencyComponent(): number {
+    if (this.recentValues.length < 8) {
+      return 0;
+    }
+    
+    // Use recent values to calculate a smoothed component (low-pass filter)
+    const window = this.recentValues.slice(-8);
+    const avg = window.reduce((sum, val) => sum + val, 0) / window.length;
+    
+    // Subtract baseline for the AC component
+    const baseline = this.calculateBaseline();
+    return avg - baseline;
+  }
+  
+  /**
+   * Calculate pulse wave features related to hydration
+   */
+  private calculatePulseWaveFeatures(value: number, baseline: number): number {
+    if (this.recentValues.length < 15 || this.amplitudeRatios.length === 0) {
+      return value - baseline;
+    }
+    
+    // Average amplitude ratio (correlates with hydration levels)
+    const avgRatio = this.amplitudeRatios.reduce((sum, r) => sum + r, 0) / 
+                     this.amplitudeRatios.length;
+    
+    // Emphasize based on amplitude ratio (higher ratio = better hydration)
+    const emphasisFactor = Math.min(1.5, 0.8 + (avgRatio * 0.5));
+    
+    return (value - baseline) * emphasisFactor;
+  }
+  
+  /**
+   * Reset channel state
    */
   public override reset(): void {
     super.reset();
-    this.temporalBuffer = [];
-    this.slowComponentBuffer = [];
-    this.fastComponentBuffer = [];
+    this.waveformBuffer = [];
+    this.amplitudeRatios = [];
+  }
+  
+  /**
+   * Get average amplitude ratio for hydration assessment
+   */
+  public getAmplitudeRatio(): number {
+    if (this.amplitudeRatios.length === 0) return 0;
+    
+    return this.amplitudeRatios.reduce((sum, r) => sum + r, 0) / 
+           this.amplitudeRatios.length;
   }
 }

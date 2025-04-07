@@ -1,4 +1,3 @@
-
 /**
  * Specialized channel for SpO2 signal processing
  * Optimizes the signal specifically for oxygen saturation measurement
@@ -152,7 +151,7 @@ export class SpO2Channel extends SpecializedChannel {
   /**
    * Calculate SpO2-specific signal quality
    */
-  protected override updateQuality(): void {
+  protected override updateQuality(value: number): void {
     super.updateQuality();
     
     // Add SpO2-specific quality metrics if we have enough data
@@ -176,6 +175,9 @@ export class SpO2Channel extends SpecializedChannel {
       // Blend with existing quality metric
       this.quality = this.quality * 0.6 + ratioStability * 0.4;
     }
+    
+    // Ensure quality is between 0 and 1
+    this.quality = Math.max(0, Math.min(1, this.quality));
   }
   
   /**

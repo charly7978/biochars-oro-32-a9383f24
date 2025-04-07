@@ -1,77 +1,156 @@
-
 /**
- * Buffer circular optimizado para procesamiento de señales PPG
- * Mejora el rendimiento y reduce la presión sobre el recolector de basura
+ * Optimized circular buffer implementation for signal processing
+ * With advanced diagnostics capabilities
  */
 
-import { CircularBuffer } from '../../../utils/CircularBuffer';
-import { PPGDataPoint, TimestampedPPGData } from '../../../types/signal';
+export interface BufferDiagnostics {
+  size: number;
+  capacity: number;
+  isEmpty: boolean;
+  isFull: boolean;
+  averageValue?: number;
+  minValue?: number;
+  maxValue?: number;
+  latestItemAge?: number;
+  averageLatency?: number;
+  maxLatency?: number;
+  droppedItems?: number;
+  processingTime?: number;
+}
 
-/**
- * Buffer circular optimizado para datos PPG
- * Implementa un buffer de tamaño fijo preasignado en memoria
- */
-export class OptimizedPPGBuffer<T extends TimestampedPPGData = TimestampedPPGData> {
-  private buffer: Array<T | null>;
+export class OptimizedBuffer<T> {
+  private buffer: Array<T>;
+  private capacity: number;
   private head: number = 0;
   private tail: number = 0;
-  private _size: number = 0;
-  private readonly capacity: number;
+  private size: number = 0;
+  private trackDiagnostics: boolean;
+  
+  // Diagnostics data
+  private droppedItems: number = 0;
+  private recentLatencies: number[] = [];
+  private processingTimes: number[] = [];
   
   /**
-   * Constructor del buffer optimizado
-   * @param capacity Capacidad máxima del buffer
+   * Create a new optimized buffer
    */
-  constructor(capacity: number) {
-    if (capacity <= 0) {
-      throw new Error('La capacidad del buffer debe ser mayor que cero');
-    }
-    
-    // Preasignar el array completo
-    this.buffer = new Array<T | null>(capacity).fill(null);
-    this.capacity = capacity;
+  constructor(capacity: number, trackDiagnostics: boolean = false) {
+    this.capacity = Math.max(1, capacity);
+    this.buffer = new Array<T>(this.capacity);
+    this.trackDiagnostics = trackDiagnostics;
   }
   
   /**
-   * Añade un dato al buffer
-   * Si el buffer está lleno, sobrescribe el dato más antiguo
+   * Add an item to the buffer
    */
-  public push(item: T): void {
-    this.buffer[this.head] = item;
-    this.head = (this.head + 1) % this.capacity;
-    
-    if (this._size === this.capacity) {
-      this.tail = (this.tail + 1) % this.capacity;
+  public add(item: T): void {
+    if (this.isFull()) {
+      // Buffer is full, overwrite oldest item
+      this.head = (this.head + 1) % this.capacity;
+      this.droppedItems++;
     } else {
-      this._size++;
-    }
-  }
-  
-  /**
-   * Obtiene un elemento en una posición específica
-   * @param index Índice relativo al elemento más antiguo (0 es el más antiguo)
-   */
-  public get(index: number): T | null {
-    if (index < 0 || index >= this._size) {
-      return null;
+      // Buffer has space
+      this.size++;
     }
     
-    const actualIndex = (this.tail + index) % this.capacity;
-    return this.buffer[actualIndex];
-  }
-  
-  /**
-   * Obtiene todos los elementos válidos del buffer como un array
-   */
-  public getPoints(): T[] {
-    const result: T[] = [];
-    let current = this.tail;
+    // Add new item
+    this.buffer[this.tail] = item;
+    this.tail = (this.tail + 1) % this.capacity;
     
-    for (let i = 0; i < this._size; i++) {
-      const item = this.buffer[current];
-      if (item !== null) {
-        result.push(item);
+    // Track diagnostics if enabled
+    if (this.trackDiagnostics) {
+      const now = Date.now();
+      
+      // Check if item has timestamp
+      if (item && typeof item === 'object' && 'timestamp' in item) {
+        const timestamp = (item as any).timestamp;
+        if (typeof timestamp === 'number') {
+          this.recentLatencies.push(now - timestamp);
+          
+          // Keep only recent latencies
+          if (this.recentLatencies.length > 100) {
+            this.recentLatencies.shift();
+          }
+        }
       }
+    }
+  }
+  
+  /**
+   * Add many items to the buffer
+   */
+  public addMany(items: Array<any>): void {
+    // Fast path for empty array
+    if (items.length === 0) return;
+    
+    // Fast path for single item
+    if (items.length === 1) {
+      this.add(items[0]);
+      return;
+    }
+    
+    // Handle multiple items
+    if (items.length >= this.capacity) {
+      // If more items than capacity, just take the most recent ones
+      const startIdx = items.length - this.capacity;
+      for (let i = 0; i < this.capacity; i++) {
+        this.buffer[i] = items[startIdx + i];
+      }
+      this.head = 0;
+      this.tail = 0;
+      this.size = this.capacity;
+      this.droppedItems += items.length - this.capacity;
+    } else {
+      // Add items one by one
+      for (let i = 0; i < items.length; i++) {
+        this.add(items[i]);
+      }
+    }
+    
+    // Update stats for diagnostics
+    if (this.trackDiagnostics && items.length > 0) {
+      // Ensure all items have a timestamp, or use current time
+      const now = Date.now();
+      
+      const itemsWithTime = items.map(item => {
+        // Check if item is an object with timestamp
+        if (item && typeof item === 'object' && 'timestamp' in item) {
+          return item;
+        }
+        
+        // Otherwise, use a number or create an object with current time
+        return typeof item === 'number' 
+          ? { value: item, timestamp: now }
+          : { ...item, timestamp: now };
+      });
+      
+      // Calculate latencies
+      this.recentLatencies = itemsWithTime.map(item => {
+        return now - item.timestamp;
+      });
+      
+      // Keep only recent latencies
+      if (this.recentLatencies.length > 100) {
+        this.recentLatencies = this.recentLatencies.slice(-100);
+      }
+    }
+  }
+  
+  /**
+   * Get all items in the buffer as an array
+   */
+  public getAll(): Array<T> {
+    if (this.isEmpty()) {
+      return [];
+    }
+    
+    const result = new Array<T>(this.size);
+    let idx = 0;
+    
+    // Start from head and go to tail
+    let current = this.head;
+    while (current !== this.tail) {
+      result[idx++] = this.buffer[current];
       current = (current + 1) % this.capacity;
     }
     
@@ -79,147 +158,164 @@ export class OptimizedPPGBuffer<T extends TimestampedPPGData = TimestampedPPGDat
   }
   
   /**
-   * Limpia el buffer
+   * Get the last n items from the buffer
    */
-  public clear(): void {
-    this.buffer.fill(null);
-    this.head = 0;
-    this.tail = 0;
-    this._size = 0;
-  }
-  
-  /**
-   * Retorna el número de elementos en el buffer
-   */
-  public size(): number {
-    return this._size;
-  }
-  
-  /**
-   * Comprueba si el buffer está vacío
-   */
-  public isEmpty(): boolean {
-    return this._size === 0;
-  }
-  
-  /**
-   * Comprueba si el buffer está lleno
-   */
-  public isFull(): boolean {
-    return this._size === this.capacity;
-  }
-  
-  /**
-   * Obtiene la capacidad del buffer
-   */
-  public getCapacity(): number {
-    return this.capacity;
-  }
-  
-  /**
-   * Obtiene los valores de los datos en el buffer como un array
-   */
-  public getValues(): number[] {
-    return this.getPoints().map(point => point.value);
-  }
-  
-  /**
-   * Obtiene los últimos N elementos del buffer
-   */
-  public getLastN(n: number): T[] {
-    const count = Math.min(n, this._size);
-    const result: T[] = [];
+  public getLast(n: number): Array<T> {
+    if (this.isEmpty() || n <= 0) {
+      return [];
+    }
     
+    const count = Math.min(n, this.size);
+    const result = new Array<T>(count);
+    
+    // Calculate starting position
+    let startPos = (this.tail - count + this.capacity) % this.capacity;
+    
+    // Copy items
     for (let i = 0; i < count; i++) {
-      const index = (this.head - 1 - i + this.capacity) % this.capacity;
-      const item = this.buffer[index];
-      if (item !== null) {
-        result.unshift(item); // Añadir al principio para mantener el orden
-      }
+      result[i] = this.buffer[(startPos + i) % this.capacity];
     }
     
     return result;
   }
   
   /**
-   * Crea un buffer optimizado a partir de un buffer circular estándar
-   * @param circularBuffer Buffer circular estándar
+   * Get the item at the specified index
    */
-  public static fromCircularBuffer<U extends TimestampedPPGData>(circularBuffer: CircularBuffer<U>): OptimizedPPGBuffer<U> {
-    const points = circularBuffer.getPoints();
-    const optimizedBuffer = new OptimizedPPGBuffer<U>(Math.max(points.length, 10));
-    
-    // Transferir los datos al nuevo buffer
-    points.forEach(point => {
-      // Ensure point has all required properties
-      const enhancedPoint = { ...point } as U;
-      
-      // Garantizar que tanto time como timestamp existan
-      if ('timestamp' in point && !('time' in point)) {
-        (enhancedPoint as unknown as { time: number }).time = point.timestamp;
-      } else if ('time' in point && !('timestamp' in point)) {
-        (enhancedPoint as unknown as { timestamp: number }).timestamp = point.time;
-      }
-      
-      optimizedBuffer.push(enhancedPoint);
-    });
-    
-    return optimizedBuffer;
-  }
-}
-
-/**
- * Adaptador para compatibilidad con CircularBuffer existente
- * Permite una transición gradual al nuevo buffer optimizado
- */
-export class CircularBufferAdapter<T extends TimestampedPPGData = TimestampedPPGData> extends CircularBuffer<T> {
-  private optimizedBuffer: OptimizedPPGBuffer<T>;
-  
-  constructor(capacity: number) {
-    super(capacity);
-    this.optimizedBuffer = new OptimizedPPGBuffer<T>(capacity);
-  }
-  
-  public override push(item: T): void {
-    // Ensure item has all required properties
-    const enhancedItem = { ...item } as T;
-    
-    // Garantizar que tanto time como timestamp existan
-    if ('timestamp' in item && !('time' in item)) {
-      (enhancedItem as unknown as { time: number }).time = item.timestamp;
-    } else if ('time' in item && !('timestamp' in item)) {
-      (enhancedItem as unknown as { timestamp: number }).timestamp = item.time;
+  public get(index: number): T | undefined {
+    if (index < 0 || index >= this.size) {
+      return undefined;
     }
     
-    super.push(enhancedItem);
-    this.optimizedBuffer.push(enhancedItem);
-  }
-  
-  public override get(index: number): T | undefined {
-    return this.optimizedBuffer.get(index) || undefined;
-  }
-  
-  public override getPoints(): T[] {
-    return this.optimizedBuffer.getPoints();
-  }
-  
-  public override clear(): void {
-    super.clear();
-    this.optimizedBuffer.clear();
-  }
-  
-  public override size(): number {
-    return this.optimizedBuffer.size();
-  }
-  
-  public override isEmpty(): boolean {
-    return this.optimizedBuffer.isEmpty();
+    const bufferIndex = (this.head + index) % this.capacity;
+    return this.buffer[bufferIndex];
   }
   
   /**
-   * Obtiene el buffer optimizado interno
+   * Check if the buffer is empty
    */
-  public getOptimizedBuffer(): OptimizedPPGBuffer<T> {
-    return this.optimizedBuffer;
+  public isEmpty(): boolean {
+    return this.size === 0;
+  }
+  
+  /**
+   * Check if the buffer is full
+   */
+  public isFull(): boolean {
+    return this.size === this.capacity;
+  }
+  
+  /**
+   * Get the current size of the buffer
+   */
+  public getSize(): number {
+    return this.size;
+  }
+  
+  /**
+   * Get the capacity of the buffer
+   */
+  public getCapacity(): number {
+    return this.capacity;
+  }
+  
+  /**
+   * Clear the buffer
+   */
+  public clear(): void {
+    this.head = 0;
+    this.tail = 0;
+    this.size = 0;
+    this.droppedItems = 0;
+    this.recentLatencies = [];
+    this.processingTimes = [];
+  }
+  
+  /**
+   * Get diagnostic data about the buffer
+   */
+  public getDiagnostics(): BufferDiagnostics {
+    // Base diagnostics
+    const diagnostics: BufferDiagnostics = {
+      size: this.size,
+      capacity: this.capacity,
+      isEmpty: this.isEmpty(),
+      isFull: this.isFull(),
+    };
+    
+    // Add detailed performance metrics if available
+    if (this.trackDiagnostics && this.buffer.length > 0) {
+      const latestItem = this.buffer[this.tail > 0 ? this.tail - 1 : this.capacity - 1];
+      const now = Date.now();
+      
+      // Ensure latestItem has a timestamp property, or use 0
+      const timestamp = (latestItem && typeof latestItem === 'object' && 'timestamp' in latestItem)
+        ? (latestItem as any).timestamp
+        : 0;
+      
+      diagnostics.latestItemAge = timestamp ? now - timestamp : 0;
+      
+      // Calculate average and max latency
+      if (this.recentLatencies.length > 0) {
+        const sum = this.recentLatencies.reduce((a, b) => a + b, 0);
+        diagnostics.averageLatency = sum / this.recentLatencies.length;
+        diagnostics.maxLatency = Math.max(...this.recentLatencies);
+      }
+      
+      // Calculate average processing time
+      if (this.processingTimes.length > 0) {
+        const sum = this.processingTimes.reduce((a, b) => a + b, 0);
+        diagnostics.processingTime = sum / this.processingTimes.length;
+      }
+      
+      // Calculate min, max, and average values if items are numbers or have value property
+      const values: number[] = [];
+      for (let i = 0; i < this.size; i++) {
+        const item = this.get(i);
+        if (typeof item === 'number') {
+          values.push(item);
+        } else if (item && typeof item === 'object' && 'value' in item) {
+          values.push((item as any).value);
+        }
+      }
+      
+      if (values.length > 0) {
+        diagnostics.minValue = Math.min(...values);
+        diagnostics.maxValue = Math.max(...values);
+        diagnostics.averageValue = values.reduce((a, b) => a + b, 0) / values.length;
+      }
+      
+      // Add dropped items count
+      diagnostics.droppedItems = this.droppedItems;
+    }
+    
+    return diagnostics;
+  }
+  
+  /**
+   * Record processing time for diagnostics
+   */
+  public recordProcessingTime(timeMs: number): void {
+    if (this.trackDiagnostics) {
+      this.processingTimes.push(timeMs);
+      
+      // Keep only recent times
+      if (this.processingTimes.length > 100) {
+        this.processingTimes.shift();
+      }
+    }
+  }
+  
+  /**
+   * Enable or disable diagnostics tracking
+   */
+  public setDiagnosticsTracking(enabled: boolean): void {
+    this.trackDiagnostics = enabled;
+    
+    // Clear diagnostics data if disabled
+    if (!enabled) {
+      this.recentLatencies = [];
+      this.processingTimes = [];
+    }
   }
 }

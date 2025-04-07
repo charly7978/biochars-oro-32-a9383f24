@@ -1,109 +1,248 @@
 
 /**
- * Sistema de filtros adaptativos para optimización móvil
- * Mejora el rendimiento del procesamiento de señales en dispositivos con recursos limitados
+ * Adaptive filters for signal processing
+ * Provides various filters that can adapt to changing signal characteristics
  */
 
-export class AdaptiveFilters {
-  private static instance: AdaptiveFilters;
-  private readonly bufferSize: number = 30;
-  private readonly adaptationRate: number = 0.05;
-  
-  // Coeficientes de filtro dinámicos
-  private coefficients: number[] = [];
-  private signalBuffer: number[] = [];
-  
-  private constructor() {
-    // Inicializar coeficientes con valores predeterminados
-    this.coefficients = Array(5).fill(0).map((_, i) => 
-      i === 0 ? 0.4 : i === 1 ? 0.3 : i === 2 ? 0.15 : i === 3 ? 0.1 : 0.05
-    );
-  }
-  
-  public static getInstance(): AdaptiveFilters {
-    if (!AdaptiveFilters.instance) {
-      AdaptiveFilters.instance = new AdaptiveFilters();
-    }
-    return AdaptiveFilters.instance;
-  }
+/**
+ * Configuration for adaptive filters
+ */
+export interface AdaptiveFilterConfig {
+  initialCoefficients: number[];
+  adaptationRate: number;
+  signalPeriod?: number;
+  leakageFactor?: number;
+}
+
+/**
+ * Base class for adaptive filters
+ */
+export abstract class AdaptiveFilter {
+  protected coefficients: number[];
+  protected _adaptationRate: number;  // Changed to private field with getter/setter
+  protected readonly leakageFactor: number;
+  protected signalBuffer: number[] = [];
+  protected readonly signalPeriod: number;
   
   /**
-   * Aplica el filtro adaptativo a un valor de señal
-   * @param value Valor de señal actual
-   * @returns Valor filtrado
+   * Constructor
    */
-  public applyFilter(value: number): number {
-    // Añadir valor al buffer
-    this.signalBuffer.unshift(value);
-    if (this.signalBuffer.length > this.bufferSize) {
-      this.signalBuffer.pop();
-    }
-    
-    // Si el buffer no está lo suficientemente lleno, devolver el valor original
-    if (this.signalBuffer.length < this.coefficients.length) {
-      return value;
-    }
-    
-    // Aplicar filtro con coeficientes actuales
-    let filteredValue = 0;
-    for (let i = 0; i < this.coefficients.length; i++) {
-      filteredValue += this.coefficients[i] * this.signalBuffer[i];
-    }
-    
-    // Adaptar coeficientes si hay suficientes muestras
-    if (this.signalBuffer.length >= this.coefficients.length * 2) {
-      this.adaptCoefficients();
-    }
-    
-    return filteredValue;
+  constructor(config: AdaptiveFilterConfig) {
+    this.coefficients = [...config.initialCoefficients];
+    this._adaptationRate = config.adaptationRate;
+    this.leakageFactor = config.leakageFactor || 0.9999;
+    this.signalPeriod = config.signalPeriod || 30;
   }
   
   /**
-   * Ajusta los coeficientes del filtro basándose en la señal reciente
-   * Optimizado para dispositivos móviles con cálculos más ligeros
+   * Apply the filter to a sample
    */
-  private adaptCoefficients(): void {
-    // Calcular error entre la predicción y el valor real
-    const recentValues = this.signalBuffer.slice(0, this.coefficients.length);
-    const prediction = recentValues.reduce((sum, val, i) => 
-      sum + val * this.coefficients[i], 0);
-    const actual = this.signalBuffer[this.coefficients.length];
-    const error = actual - prediction;
-    
-    // Actualizar coeficientes basado en el error
-    for (let i = 0; i < this.coefficients.length; i++) {
-      this.coefficients[i] += this.adaptationRate * error * recentValues[i];
-    }
-    
-    // Normalizar coeficientes para mantener estabilidad
-    const sum = this.coefficients.reduce((s, c) => s + Math.abs(c), 0);
-    if (sum > 0) {
-      this.coefficients = this.coefficients.map(c => c / sum);
-    }
-  }
+  public abstract process(sample: number): number;
   
   /**
-   * Optimiza los parámetros del filtro según el tipo de dispositivo
-   * @param isMobile Si es verdadero, optimiza para móvil
-   */
-  public optimizeForDevice(isMobile: boolean): void {
-    if (isMobile) {
-      // Optimizaciones para dispositivos móviles
-      this.coefficients = this.coefficients.slice(0, 3); // Menos coeficientes
-    } else {
-      // Restaurar a la configuración completa para escritorio
-      this.adaptationRate = 0.05;
-    }
-  }
-  
-  /**
-   * Restablece el estado del filtro
+   * Reset the filter state
    */
   public reset(): void {
     this.signalBuffer = [];
-    // Restaurar coeficientes predeterminados
-    this.coefficients = Array(5).fill(0).map((_, i) => 
-      i === 0 ? 0.4 : i === 1 ? 0.3 : i === 2 ? 0.15 : i === 3 ? 0.1 : 0.05
+  }
+  
+  /**
+   * Get the current filter coefficients
+   */
+  public getCoefficients(): number[] {
+    return [...this.coefficients];
+  }
+  
+  /**
+   * Get the adaptation rate
+   */
+  public get adaptationRate(): number {
+    return this._adaptationRate;
+  }
+  
+  /**
+   * Set the adaptation rate
+   */
+  public set adaptationRate(value: number) {
+    this._adaptationRate = Math.max(0, Math.min(1, value));
+  }
+}
+
+/**
+ * Least Mean Squares adaptive filter
+ * Good for general noise reduction and tracking changing signal characteristics
+ */
+export class LMSFilter extends AdaptiveFilter {
+  private errorHistory: number[] = [];
+  private readonly maxErrorHistory: number = 50;
+  
+  /**
+   * Process a sample with LMS algorithm
+   * @param sample Input sample
+   * @returns Filtered output
+   */
+  public override process(sample: number): number {
+    // Add sample to buffer
+    this.signalBuffer.unshift(sample);
+    if (this.signalBuffer.length > this.coefficients.length) {
+      this.signalBuffer.pop();
+    }
+    
+    // Not enough samples yet
+    if (this.signalBuffer.length < this.coefficients.length) {
+      return sample;
+    }
+    
+    // Calculate filtered output
+    let output = 0;
+    for (let i = 0; i < this.coefficients.length; i++) {
+      output += this.coefficients[i] * this.signalBuffer[i];
+    }
+    
+    // Calculate error
+    const error = sample - output;
+    
+    // Update error history
+    this.errorHistory.push(error);
+    if (this.errorHistory.length > this.maxErrorHistory) {
+      this.errorHistory.shift();
+    }
+    
+    // Update filter coefficients
+    for (let i = 0; i < this.coefficients.length; i++) {
+      if (i < this.signalBuffer.length) {
+        // Apply leakage to prevent coefficient explosion
+        this.coefficients[i] = this.leakageFactor * this.coefficients[i] + 
+                              this._adaptationRate * error * this.signalBuffer[i];
+      }
+    }
+    
+    return output;
+  }
+  
+  /**
+   * Get mean square error
+   */
+  public getMeanSquareError(): number {
+    if (this.errorHistory.length === 0) return 0;
+    
+    const sumSquaredError = this.errorHistory.reduce((sum, err) => sum + err * err, 0);
+    return sumSquaredError / this.errorHistory.length;
+  }
+  
+  /**
+   * Reset filter state including error history
+   */
+  public override reset(): void {
+    super.reset();
+    this.errorHistory = [];
+  }
+}
+
+/**
+ * Recursive Least Squares filter
+ * Faster convergence than LMS but more computationally intensive
+ * Useful for accurate tracking of rapidly changing signals
+ */
+export class RLSFilter extends AdaptiveFilter {
+  private P: number[][] = []; // Inverse correlation matrix
+  private readonly forgettingFactor: number;
+  
+  constructor(config: AdaptiveFilterConfig & { forgettingFactor?: number }) {
+    super(config);
+    this.forgettingFactor = config.forgettingFactor || 0.99;
+    
+    // Initialize P matrix as identity matrix * reciprocal of regularization param
+    const regularization = 0.01;
+    this.P = Array(this.coefficients.length).fill(0).map((_, i) => 
+      Array(this.coefficients.length).fill(0).map((_, j) => i === j ? 1 / regularization : 0)
+    );
+  }
+  
+  /**
+   * Process a sample with RLS algorithm
+   * @param sample Input sample
+   * @returns Filtered output
+   */
+  public override process(sample: number): number {
+    // Add sample to buffer
+    this.signalBuffer.unshift(sample);
+    if (this.signalBuffer.length > this.coefficients.length) {
+      this.signalBuffer.pop();
+    }
+    
+    // Not enough samples yet
+    if (this.signalBuffer.length < this.coefficients.length) {
+      return sample;
+    }
+    
+    const x = this.signalBuffer.slice(0, this.coefficients.length);
+    
+    // Calculate filtered output
+    let y = 0;
+    for (let i = 0; i < this.coefficients.length; i++) {
+      y += this.coefficients[i] * x[i];
+    }
+    
+    // Calculate error
+    const error = sample - y;
+    
+    // Calculate gain vector k
+    const Px: number[] = new Array(this.coefficients.length).fill(0);
+    for (let i = 0; i < this.coefficients.length; i++) {
+      for (let j = 0; j < this.coefficients.length; j++) {
+        Px[i] += this.P[i][j] * x[j];
+      }
+    }
+    
+    // Calculate denominator for k
+    let denominator = this.forgettingFactor;
+    for (let i = 0; i < this.coefficients.length; i++) {
+      denominator += x[i] * Px[i];
+    }
+    
+    // Calculate k
+    const k: number[] = new Array(this.coefficients.length).fill(0);
+    for (let i = 0; i < this.coefficients.length; i++) {
+      k[i] = Px[i] / denominator;
+    }
+    
+    // Update coefficients
+    for (let i = 0; i < this.coefficients.length; i++) {
+      this.coefficients[i] += k[i] * error;
+    }
+    
+    // Update P matrix
+    const newP: number[][] = Array(this.coefficients.length).fill(0).map(() => 
+      Array(this.coefficients.length).fill(0)
+    );
+    
+    // P = (P - k*x^T*P) / forgettingFactor
+    for (let i = 0; i < this.coefficients.length; i++) {
+      for (let j = 0; j < this.coefficients.length; j++) {
+        let sum = 0;
+        for (let m = 0; m < this.coefficients.length; m++) {
+          sum += k[i] * x[m] * this.P[m][j];
+        }
+        newP[i][j] = (this.P[i][j] - sum) / this.forgettingFactor;
+      }
+    }
+    
+    this.P = newP;
+    
+    return y;
+  }
+  
+  /**
+   * Reset filter state including P matrix
+   */
+  public override reset(): void {
+    super.reset();
+    
+    // Reset P matrix
+    const regularization = 0.01;
+    this.P = Array(this.coefficients.length).fill(0).map((_, i) => 
+      Array(this.coefficients.length).fill(0).map((_, j) => i === j ? 1 / regularization : 0)
     );
   }
 }

@@ -14,11 +14,11 @@ export interface VitalSignsResult {
   glucose: number;
   lipids: {
     totalCholesterol: number;
-    triglycerides: number;
+    hydrationPercentage: number;  // Changed from triglycerides to hydrationPercentage
   };
   confidence?: {
     glucose: number;
-    lipids: number;
+    lipids: number;  // Kept as 'lipids' for backward compatibility
     overall: number;
   };
   lastArrhythmiaData?: {
