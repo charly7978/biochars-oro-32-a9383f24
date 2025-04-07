@@ -3,6 +3,8 @@ import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import { Toaster } from "@/components/ui/toaster";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
+import { useEffect } from 'react';
+import './App.css';
 
 const App = () => {
   return (
