@@ -1,53 +1,89 @@
 
+/**
+ * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
+ */
+
+import { VitalSignType, ChannelFeedback } from '../../../types/signal';
 import { SpecializedChannel, ChannelConfig } from './SpecializedChannel';
-import { VitalSignType } from '../../../types/vital-sign-types';
 
 /**
- * Specialized channel for blood pressure signal processing
+ * Canal especializado para presión arterial
  */
 export class BloodPressureChannel extends SpecializedChannel {
-  private systolicFactor: number = 1.2;
-  private diastolicFactor: number = 0.8;
-  private pulseWeight: number = 0.3;
-  
-  constructor() {
-    // Default configuration optimized for blood pressure signals
-    const config: ChannelConfig = {
-      initialAmplification: 1.3,
-      initialFilterStrength: 0.25,
-      frequencyBandMin: 0.5,
-      frequencyBandMax: 2.0
-    };
-    
+  private amplificationFactor: number = 1.2;
+  private filterStrength: number = 0.25;
+  private baselineCorrection: number = 0.5;
+
+  constructor(config?: ChannelConfig) {
     super(VitalSignType.BLOOD_PRESSURE, config);
+    
+    // Aplicar configuración si se proporciona
+    if (config) {
+      this.amplificationFactor = config.initialAmplification || this.amplificationFactor;
+      this.filterStrength = config.initialFilterStrength || this.filterStrength;
+    }
+  }
+
+  /**
+   * Implementación específica para canal de presión arterial
+   */
+  protected applyChannelSpecificOptimization(value: number): number {
+    // Simulación de procesamiento específico para presión arterial
+    const filteredValue = this.applyFilter(value);
+    const correctedValue = this.applyBaselineCorrection(filteredValue);
+    const amplifiedValue = correctedValue * this.amplificationFactor;
+    
+    return amplifiedValue;
   }
   
   /**
-   * Apply specialized processing for blood pressure signals
+   * Aplica retroalimentación para ajustar el canal
    */
-  protected specializedProcessing(value: number): number {
-    // Blood pressure requires analyzing both systolic and pulse component
+  public override applyFeedback(feedback: ChannelFeedback): void {
+    super.applyFeedback(feedback);
     
-    // Here we apply a specialized transformation focusing on the
-    // physiological characteristics of blood pressure signals
-    let processedValue = value;
-    
-    // Include a pulse wavelet component
-    if (this.recentValues.length > 0) {
-      const pulseFactor = Math.cos(this.recentValues.length * 0.2) * this.pulseWeight;
-      processedValue = processedValue * (1 + pulseFactor);
+    if (feedback.suggestedAdjustments) {
+      // Actualizar factores específicos
+      if (feedback.suggestedAdjustments.amplificationFactor !== undefined) {
+        this.amplificationFactor = feedback.suggestedAdjustments.amplificationFactor;
+      }
       
-      // Adjust based on signal history
-      const avgValue = this.recentValues.reduce((sum, val) => sum + val, 0) / this.recentValues.length;
-      if (processedValue > avgValue) {
-        // Enhance systolic component
-        processedValue *= this.systolicFactor;
-      } else {
-        // Enhance diastolic component
-        processedValue *= this.diastolicFactor;
+      if (feedback.suggestedAdjustments.filterStrength !== undefined) {
+        this.filterStrength = feedback.suggestedAdjustments.filterStrength;
+      }
+      
+      if (feedback.suggestedAdjustments.baselineCorrection !== undefined) {
+        this.baselineCorrection = feedback.suggestedAdjustments.baselineCorrection;
       }
     }
+  }
+
+  /**
+   * Aplicar filtrado específico
+   */
+  private applyFilter(value: number): number {
+    if (this.recentValues.length < 3) return value;
     
-    return processedValue;
+    // Filtro simple para este ejemplo
+    const lastValues = this.recentValues.slice(-3);
+    const sum = lastValues.reduce((total, val) => total + val, 0);
+    const avg = sum / lastValues.length;
+    
+    // Mezclar valor actual con promedio usando filterStrength
+    return value * (1 - this.filterStrength) + avg * this.filterStrength;
+  }
+  
+  /**
+   * Aplicar corrección de línea base
+   */
+  private applyBaselineCorrection(value: number): number {
+    if (this.recentValues.length < 10) return value;
+    
+    // Calcular línea base como promedio
+    const baselineValues = this.recentValues.slice(-10);
+    const baseline = baselineValues.reduce((sum, val) => sum + val, 0) / baselineValues.length;
+    
+    // Aplicar corrección
+    return value - (baseline * this.baselineCorrection);
   }
 }

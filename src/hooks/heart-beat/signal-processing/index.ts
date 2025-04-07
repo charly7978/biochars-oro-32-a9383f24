@@ -18,20 +18,13 @@ export {
   isFingerDetected
 } from './signal-quality';
 
-// Export specific functions from peak-detection
-export {
-  detectPeaks,
-  calculateHeartRate,
-  getDiagnosticsData,
-  clearDiagnosticsData,
-  handlePeakDetection
+export { 
+  handlePeakDetection 
 } from './peak-detection';
 
 export { 
   updateLastValidBpm, 
-  processLowConfidenceResult,
-  getLastValidMeasurements,
-  resetValidMeasurements
+  processLowConfidenceResult 
 } from './result-processor';
 
 export {
@@ -45,7 +38,3 @@ export {
   applyGaussianProcessModeling,
   applyMixedModelPrediction
 } from './adaptive-control';
-
-// Export buffer utilities
-export * from './optimized-buffer';
-export * from './safe-buffer';

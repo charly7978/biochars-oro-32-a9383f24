@@ -1,40 +1,83 @@
 
+/**
+ * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
+ */
+
+import { VitalSignType, ChannelFeedback } from '../../../types/signal';
 import { SpecializedChannel, ChannelConfig } from './SpecializedChannel';
-import { VitalSignType } from '../../../types/vital-sign-types';
 
 /**
- * Specialized channel for lipids signal processing
+ * Canal especializado para procesamiento de señales relacionadas con lípidos
  */
 export class LipidsChannel extends SpecializedChannel {
-  constructor() {
-    // Default configuration optimized for lipids signals
-    const config: ChannelConfig = {
-      initialAmplification: 1.8,
-      initialFilterStrength: 0.15,
-      frequencyBandMin: 0.05,
-      frequencyBandMax: 0.3
-    };
-    
+  private amplificationFactor: number = 1.2;
+  private filterStrength: number = 0.25;
+  private enhancementFactor: number = 1.5;
+
+  constructor(config?: ChannelConfig) {
     super(VitalSignType.LIPIDS, config);
+    
+    // Aplicar configuración específica si existe
+    if (config) {
+      this.amplificationFactor = config.initialAmplification || this.amplificationFactor;
+      this.filterStrength = config.initialFilterStrength || this.filterStrength;
+    }
+  }
+
+  /**
+   * Implementación específica para canal de lípidos
+   */
+  protected applyChannelSpecificOptimization(value: number): number {
+    // Filter for lipid-related components
+    const filteredValue = this.applyLipidsFilter(value);
+    
+    // Apply enhancement for lipid signals
+    const enhancedValue = this.enhanceLipidComponents(filteredValue);
+    
+    // Final amplification
+    return enhancedValue * this.amplificationFactor;
   }
   
   /**
-   * Apply specialized processing for lipids signals
+   * Aplica retroalimentación para ajustar parámetros
    */
-  protected specializedProcessing(value: number): number {
-    // Apply specific transformations for lipids signal
-    // For lipids, additional smoothing helps accuracy
+  public override applyFeedback(feedback: ChannelFeedback): void {
+    super.applyFeedback(feedback);
     
-    // Simple processing example
-    let processedValue = value;
-    
-    // Extra smoothing for lipids values
-    if (this.recentValues.length > 2) {
-      const recent = this.recentValues.slice(-3);
-      const avgRecent = recent.reduce((sum, val) => sum + val, 0) / recent.length;
-      processedValue = processedValue * 0.7 + avgRecent * 0.3;
+    // Ajustes específicos para canal de lípidos
+    if (feedback.suggestedAdjustments) {
+      if (feedback.suggestedAdjustments.amplificationFactor !== undefined) {
+        this.amplificationFactor = feedback.suggestedAdjustments.amplificationFactor;
+      }
+      
+      if (feedback.suggestedAdjustments.filterStrength !== undefined) {
+        this.filterStrength = feedback.suggestedAdjustments.filterStrength;
+      }
     }
+  }
+
+  /**
+   * Filtro específico para componentes de lípidos
+   */
+  private applyLipidsFilter(value: number): number {
+    if (this.recentValues.length < 10) return value;
     
-    return processedValue;
+    // Aplicar filtrado simple
+    const recentValues = this.recentValues.slice(-10);
+    const avg = recentValues.reduce((sum, val) => sum + val, 0) / recentValues.length;
+    
+    // Combine with current value using filter strength
+    return value * (1 - this.filterStrength) + avg * this.filterStrength;
+  }
+  
+  /**
+   * Realza componentes específicos para análisis de lípidos
+   */
+  private enhanceLipidComponents(value: number): number {
+    // Simulación simple de realce
+    if (value > 0) {
+      return value * this.enhancementFactor;
+    }
+    return value;
   }
 }

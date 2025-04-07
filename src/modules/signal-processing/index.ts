@@ -4,46 +4,35 @@
  * 
  * Signal processing module
  * Central export for all signal processing utilities
+ * Consolidated architecture that maintains all existing functionality
  */
 
 // Export signal distributor
 export { OptimizedSignalDistributor } from './OptimizedSignalDistributor';
 
-// Export vital sign types from central location
-export { VitalSignType, type ChannelFeedback } from '../../types/vital-sign-types';
+// Export channel types
+export { VitalSignType, type ChannelFeedback } from '../../types/signal';
 
 // Export specialized channels
-export { SpecializedChannel, type OptimizedSignalChannel } from './channels/SpecializedChannel';
+export { SpecializedChannel } from './channels/SpecializedChannel';
 export { GlucoseChannel } from './channels/GlucoseChannel';
 export { LipidsChannel } from './channels/LipidsChannel';
 export { BloodPressureChannel } from './channels/BloodPressureChannel';
 export { SpO2Channel } from './channels/SpO2Channel';
 export { CardiacChannel } from './channels/CardiacChannel';
-export { HydrationChannel } from './channels/HydrationChannel';
 
-// Export utility functions
-export { applySMAFilter, amplifySignal } from './utils/filter-utils';
+// Export unified processor
+export { UnifiedSignalProcessor } from './UnifiedSignalProcessor';
 
-// Export diagnostic and validation utilities
-export { createDiagnosticInfo, logDiagnostics, getDiagnostics } from './diagnostics';
-export { validateSignalData, validateSampleTiming } from './signal-validator';
-export { handleProcessingError, isRecoverableError } from './error-handler';
+// Export unified vital signs processor
+export { UnifiedVitalSignsProcessor } from './UnifiedVitalSignsProcessor';
 
-// Export signal processors for hooks
-export { PPGSignalProcessor } from './PPGSignalProcessor';
-export { HeartbeatProcessor } from './HeartbeatProcessor';
-export { type ProcessedPPGSignal } from './types';
-export { type ProcessedHeartbeatSignal } from './types';
-export { type SignalProcessingOptions } from './types';
+// Export from compatibility layer
+export { VitalSignsProcessorAdapter, createCompatibleVitalSignsProcessor } from './CompatibilityLayer';
 
-// Export utility for finger detection
-export { resetFingerDetector } from './FingerDetector';
-
-// Re-export utility types
+// Re-export types
 export type { SignalDistributorConfig } from '../../types/signal';
+export type { SignalProcessor, ProcessedSignal } from '../../types/signal';
 
-// Anti-simulation protection
-export { AntiSimulationGuard } from './security/anti-simulation-guard';
-
-// Guardian Shield system
-export { GuardianShield, getGuardianShield } from '../guardian-shield/index';
+// Export from unified types
+export * from '../../types/signal-processing';

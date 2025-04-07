@@ -6,27 +6,16 @@
 /**
  * Aplica un filtro de Media Móvil Simple (SMA) a datos reales
  */
-export function applySMAFilter(values: number[], windowSize: number): number[] {
-  if (!values || values.length === 0) {
-    return [];
+export function applySMAFilter(value: number, buffer: number[], windowSize: number): {
+  filteredValue: number;
+  updatedBuffer: number[];
+} {
+  const updatedBuffer = [...buffer, value];
+  if (updatedBuffer.length > windowSize) {
+    updatedBuffer.shift();
   }
-  
-  const result: number[] = [];
-  
-  for (let i = 0; i < values.length; i++) {
-    let sum = 0;
-    let count = 0;
-    
-    // Take the current value and previous (windowSize-1) values if they exist
-    for (let j = Math.max(0, i - windowSize + 1); j <= i; j++) {
-      sum += values[j];
-      count++;
-    }
-    
-    result.push(sum / count);
-  }
-  
-  return result;
+  const filteredValue = updatedBuffer.reduce((a, b) => a + b, 0) / updatedBuffer.length;
+  return { filteredValue, updatedBuffer };
 }
 
 /**
