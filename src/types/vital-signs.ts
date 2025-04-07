@@ -12,7 +12,11 @@ export interface VitalSignsResult {
   spo2: number;
   pressure: string;
   arrhythmiaStatus: string;
-  lastArrhythmiaData?: any;
+  lastArrhythmiaData?: {
+    timestamp: number;
+    rmssd?: number;
+    rrVariation?: number;
+  } | null;
 }
 
 export interface ArrhythmiaData {

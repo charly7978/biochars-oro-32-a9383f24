@@ -1,6 +1,10 @@
 
 import React, { useEffect, useRef } from 'react';
-import { ArrhythmiaWindow } from '../types/signal';
+
+export interface ArrhythmiaWindow {
+  start: number;
+  end: number;
+}
 
 interface ArrhythmiaVisualizationProps {
   arrhythmiaDetected: boolean;

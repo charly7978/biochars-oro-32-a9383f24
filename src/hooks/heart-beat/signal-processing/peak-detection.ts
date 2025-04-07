@@ -1,150 +1,128 @@
 
-import { useRef } from 'react';
+/**
+ * Peak detection utilities for heart rate analysis
+ */
+
+// Peak detection diagnostics
+let diagnosticsData = {
+  peakCounts: 0,
+  totalPeaks: 0,
+  lastPeakTime: 0,
+  peakIntervals: [] as number[],
+  thresholdCrossings: 0,
+  falsePositives: 0
+};
 
 /**
- * Detect peaks in a signal
+ * Detect if a value is a peak based on value and time
  */
 export const detectPeak = (
-  value: number,
-  threshold: number,
-  minTimeBetweenPeaks: number,
-  lastPeakTime: number | null
+  value: number, 
+  lastPeakTime: number | null, 
+  threshold: number = 0.1,
+  minInterval: number = 300
 ): boolean => {
   const now = Date.now();
   
-  // Check if enough time has passed since last peak
-  if (lastPeakTime !== null && (now - lastPeakTime) < minTimeBetweenPeaks) {
+  // Ensure enough time has passed since last peak
+  if (lastPeakTime && (now - lastPeakTime) < minInterval) {
     return false;
   }
   
-  // Simple threshold-based peak detection
-  return value >= threshold;
-};
-
-/**
- * Detect multiple peaks in a signal array
- * (Added function to match imports)
- */
-export const detectPeaks = (
-  signalValues: number[],
-  threshold: number,
-  minDistance = 5
-): number[] => {
-  const peaks: number[] = [];
-  
-  if (signalValues.length <= 2) return peaks;
-  
-  for (let i = 1; i < signalValues.length - 1; i++) {
-    // Check if this point is higher than threshold and higher than neighbors
-    if (signalValues[i] >= threshold && 
-        signalValues[i] > signalValues[i-1] && 
-        signalValues[i] > signalValues[i+1]) {
-      
-      // Check if we're far enough from the last detected peak
-      if (peaks.length === 0 || (i - peaks[peaks.length - 1]) >= minDistance) {
-        peaks.push(i);
-      }
-    }
+  // Check if value exceeds threshold
+  if (value > threshold) {
+    diagnosticsData.thresholdCrossings++;
+    diagnosticsData.totalPeaks++;
+    return true;
   }
   
-  return peaks;
+  return false;
 };
 
 /**
- * Calculate heart rate from peaks
+ * Calculate heart rate from peak times
  */
-export const calculateHeartRate = (peakTimes: number[], minBpm: number = 40, maxBpm: number = 180): number => {
-  if (peakTimes.length < 3) {
+export const calculateHeartRate = (peakTimes: number[]): number => {
+  if (peakTimes.length < 2) {
     return 0;
   }
   
   // Calculate intervals
   const intervals: number[] = [];
   for (let i = 1; i < peakTimes.length; i++) {
-    intervals.push(peakTimes[i] - peakTimes[i-1]);
+    intervals.push(peakTimes[i] - peakTimes[i - 1]);
+  }
+  
+  // Filter out outliers (intervals too short or too long)
+  const validIntervals = intervals.filter(
+    interval => interval >= 300 && interval <= 1500
+  );
+  
+  if (validIntervals.length === 0) {
+    return 0;
   }
   
   // Calculate average interval
-  const avgInterval = intervals.reduce((a, b) => a + b, 0) / intervals.length;
+  const avgInterval = validIntervals.reduce((sum, interval) => sum + interval, 0) / validIntervals.length;
   
   // Convert to BPM
-  const bpm = Math.round(60000 / avgInterval);
-  
-  // Ensure it's in physiological range
-  return Math.min(maxBpm, Math.max(minBpm, bpm));
-};
-
-// Diagnostics-related functions
-let diagnosticsData: {
-  peakValues: number[];
-  timestamps: number[];
-  thresholds: number[];
-} = {
-  peakValues: [],
-  timestamps: [],
-  thresholds: []
+  return Math.round(60000 / avgInterval);
 };
 
 /**
- * Get diagnostic data for peak detection
+ * Get diagnostics data for debugging
  */
 export const getDiagnosticsData = () => {
   return { ...diagnosticsData };
 };
 
 /**
- * Clear diagnostic data
+ * Clear diagnostics data
  */
 export const clearDiagnosticsData = () => {
   diagnosticsData = {
-    peakValues: [],
-    timestamps: [],
-    thresholds: []
+    peakCounts: 0,
+    totalPeaks: 0,
+    lastPeakTime: 0,
+    peakIntervals: [],
+    thresholdCrossings: 0,
+    falsePositives: 0
   };
 };
 
 /**
- * Handle peak detection and update state
+ * Handle peak detection and trigger beep if needed
  */
 export const handlePeakDetection = (
-  value: number,
-  threshold: number,
-  minTimeBetweenPeaks: number,
+  result: any,
   lastPeakTimeRef: React.MutableRefObject<number | null>,
-  peakTimesRef: React.MutableRefObject<number[]>,
-  callback?: () => void
-): boolean => {
-  const now = Date.now();
-  
-  // Check if it's a peak
-  const isPeak = detectPeak(value, threshold, minTimeBetweenPeaks, lastPeakTimeRef.current);
-  
-  if (isPeak) {
+  requestBeep: (value: number) => boolean,
+  isMonitoringRef: React.MutableRefObject<boolean>,
+  value: number
+): void => {
+  // Skip if not monitoring
+  if (!isMonitoringRef.current) return;
+
+  // Check if peak detected
+  if (result && result.isPeak) {
+    const now = Date.now();
+    diagnosticsData.lastPeakTime = now;
+    
     // Update last peak time
+    if (lastPeakTimeRef.current) {
+      const interval = now - lastPeakTimeRef.current;
+      diagnosticsData.peakIntervals.push(interval);
+      
+      // Limit array size
+      if (diagnosticsData.peakIntervals.length > 10) {
+        diagnosticsData.peakIntervals.shift();
+      }
+    }
+    
     lastPeakTimeRef.current = now;
+    diagnosticsData.peakCounts++;
     
-    // Add to peak times array
-    peakTimesRef.current.push(now);
-    
-    // Keep array size manageable
-    if (peakTimesRef.current.length > 20) {
-      peakTimesRef.current.shift();
-    }
-    
-    // Store diagnostics data
-    diagnosticsData.peakValues.push(value);
-    diagnosticsData.timestamps.push(now);
-    diagnosticsData.thresholds.push(threshold);
-    
-    if (diagnosticsData.peakValues.length > 50) {
-      diagnosticsData.peakValues.shift();
-      diagnosticsData.timestamps.shift();
-      diagnosticsData.thresholds.shift();
-    }
-    
-    // Execute callback if provided
-    if (callback) callback();
+    // Request beep sound
+    requestBeep(value);
   }
-  
-  return isPeak;
 };
