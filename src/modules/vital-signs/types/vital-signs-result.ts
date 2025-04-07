@@ -14,9 +14,9 @@ export interface VitalSignsResult {
   };
   hydration: number; // Required field
   confidence?: {
-    glucose?: number;
-    lipids?: number;
-    overall?: number;
+    glucose: number;
+    lipids: number;
+    overall: number;
   };
   lastArrhythmiaData?: {
     timestamp: number;
@@ -42,3 +42,4 @@ export interface VitalSignsProcessorParams {
   };
   isWeakSignal?: boolean;
 }
+

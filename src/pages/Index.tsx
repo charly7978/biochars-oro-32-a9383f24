@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect } from "react";
 import VitalSign from "@/components/VitalSign";
 import CameraView from "@/components/CameraView";
@@ -69,7 +68,16 @@ const Index = () => {
 
   useEffect(() => {
     if (lastValidResults && !isMonitoring) {
-      setVitalSigns(lastValidResults as LocalVitalSignsResult);
+      const convertedResult: LocalVitalSignsResult = {
+        ...lastValidResults,
+        lastArrhythmiaData: lastValidResults.lastArrhythmiaData ? {
+          timestamp: lastValidResults.lastArrhythmiaData.timestamp,
+          rmssd: lastValidResults.lastArrhythmiaData.rmssd || 0,
+          rrVariation: lastValidResults.lastArrhythmiaData.rrVariation || 0
+        } : null
+      };
+      
+      setVitalSigns(convertedResult);
       setShowResults(true);
     }
   }, [lastValidResults, isMonitoring]);
@@ -96,7 +104,17 @@ const Index = () => {
           const vitals = processVitalSigns(lastSignal.filteredValue, heartBeatResult.rrData);
           if (vitals) {
             console.log("Vital signs processed:", vitals);
-            setVitalSigns(vitals as LocalVitalSignsResult);
+            
+            const convertedResult: LocalVitalSignsResult = {
+              ...vitals,
+              lastArrhythmiaData: vitals.lastArrhythmiaData ? {
+                timestamp: vitals.lastArrhythmiaData.timestamp,
+                rmssd: vitals.lastArrhythmiaData.rmssd || 0,
+                rrVariation: vitals.lastArrhythmiaData.rrVariation || 0
+              } : null
+            };
+            
+            setVitalSigns(convertedResult);
           }
         }
         
@@ -163,7 +181,16 @@ const Index = () => {
     
     const savedResults = resetVitalSigns();
     if (savedResults) {
-      setVitalSigns(savedResults as LocalVitalSignsResult);
+      const convertedResult: LocalVitalSignsResult = {
+        ...savedResults,
+        lastArrhythmiaData: savedResults.lastArrhythmiaData ? {
+          timestamp: savedResults.lastArrhythmiaData.timestamp,
+          rmssd: savedResults.lastArrhythmiaData.rmssd || 0,
+          rrVariation: savedResults.lastArrhythmiaData.rrVariation || 0
+        } : null
+      };
+      
+      setVitalSigns(convertedResult);
       setShowResults(true);
     }
     
@@ -329,7 +356,6 @@ const Index = () => {
               onStartMeasurement={startMonitoring}
               onReset={handleReset}
               arrhythmiaStatus={vitalSigns.arrhythmiaStatus}
-              rawArrhythmiaData={vitalSigns.lastArrhythmiaData}
               preserveResults={showResults}
               isArrhythmia={isArrhythmia}
             />

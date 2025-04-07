@@ -16,12 +16,12 @@ export * from './screen-orientation';
 
 // Export the ArrhythmiaProcessingResult from the arrhythmia module
 import { ArrhythmiaProcessingResult } from '../modules/vital-signs/arrhythmia/types';
-export type { ArrhythmiaProcessingResult };
+export { ArrhythmiaProcessingResult };
 
 // Export RRIntervalData from vital-signs
 import { RRIntervalData } from './vital-signs';
-export type { RRIntervalData };
+export { RRIntervalData };
 
 // Signal processor types
 import { SignalProcessor } from '../modules/signal-processing/types';
-export type { SignalProcessor };
+export { SignalProcessor };
