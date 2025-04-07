@@ -4,38 +4,54 @@
  */
 
 /**
- * Calculator for confidence levels of measurements
- * Works with real data only, no simulation
+ * Calculator for confidence levels in vital measurements
  */
 export class ConfidenceCalculator {
-  private readonly MIN_CONFIDENCE_THRESHOLD: number;
+  private readonly confidenceThreshold: number;
   
   /**
    * Create a new confidence calculator
+   * @param confidenceThreshold Minimum confidence level to consider a measurement valid (0-1)
    */
-  constructor(minConfidenceThreshold: number = 0.15) {
-    this.MIN_CONFIDENCE_THRESHOLD = minConfidenceThreshold;
+  constructor(confidenceThreshold: number = 0.5) {
+    this.confidenceThreshold = Math.max(0, Math.min(1, confidenceThreshold));
   }
   
   /**
-   * Calculate overall confidence from individual metrics
+   * Calculate overall confidence from individual measurements
    */
-  public calculateOverallConfidence(glucoseConfidence: number, lipidsConfidence: number): number {
-    return (glucoseConfidence * 0.5) + (lipidsConfidence * 0.5);
+  public calculateOverallConfidence(
+    glucoseConfidence: number,
+    lipidsConfidence: number,
+    hydrationConfidence: number
+  ): number {
+    // Calculate weighted average of individual confidences
+    const weights = {
+      glucose: 0.4,
+      lipids: 0.3,
+      hydration: 0.3
+    };
+    
+    const weightedConfidence = 
+      glucoseConfidence * weights.glucose +
+      lipidsConfidence * weights.lipids +
+      hydrationConfidence * weights.hydration;
+    
+    // Return normalized confidence (0-1)
+    return Math.max(0, Math.min(1, weightedConfidence));
   }
   
   /**
    * Check if confidence meets the threshold
    */
   public meetsThreshold(confidence: number): boolean {
-    return confidence > this.MIN_CONFIDENCE_THRESHOLD;
+    return confidence >= this.confidenceThreshold;
   }
   
   /**
-   * Get current confidence threshold
+   * Get the current confidence threshold
    */
   public getConfidenceThreshold(): number {
-    return this.MIN_CONFIDENCE_THRESHOLD;
+    return this.confidenceThreshold;
   }
 }
-

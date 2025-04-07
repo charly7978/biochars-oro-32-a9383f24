@@ -1,186 +1,120 @@
-/**
- * Signal processing diagnostics system
- * Centralizes diagnostic information and provides monitoring capabilities
- */
-import { SignalDiagnosticInfo } from '../../types/signal';
 
 /**
- * Interface for diagnostics subscriber
+ * Signal processing diagnostics module
  */
-export interface DiagnosticsSubscriber {
-  onDiagnosticUpdate: (info: SignalDiagnosticInfo) => void;
+
+/**
+ * Interface for diagnostic events
+ */
+export interface DiagnosticEvent {
+  timestamp: number;
+  category: string;
+  level: 'info' | 'warning' | 'error' | 'debug';
+  message: string;
+  data?: any;
 }
 
 /**
- * Signal processing diagnostics manager
+ * Interface for diagnostics subscribers
+ */
+export interface DiagnosticsSubscriber {
+  onDiagnosticEvent(event: DiagnosticEvent): void;
+}
+
+/**
+ * Core diagnostics service
  */
 export class SignalProcessingDiagnostics {
-  private static instance: SignalProcessingDiagnostics;
-  private diagnosticHistory: SignalDiagnosticInfo[] = [];
+  private events: DiagnosticEvent[] = [];
   private subscribers: DiagnosticsSubscriber[] = [];
-  private readonly MAX_HISTORY_SIZE = 1000; // Maximum items to keep in history
-  private enabled: boolean = true;
-  private performanceMetrics: Record<string, number[]> = {};
-
-  private constructor() {
-    // Initialize performance metrics
-    this.performanceMetrics = {
-      processingTime: [],
-      signalQuality: [],
-      fingerDetectionConfidence: []
-    };
-    console.log('Signal processing diagnostics system initialized');
+  private maxEvents: number;
+  
+  constructor(maxEvents: number = 1000) {
+    this.maxEvents = maxEvents;
   }
-
+  
   /**
-   * Get singleton instance
+   * Log a diagnostic event
    */
-  public static getInstance(): SignalProcessingDiagnostics {
-    if (!SignalProcessingDiagnostics.instance) {
-      SignalProcessingDiagnostics.instance = new SignalProcessingDiagnostics();
-    }
-    return SignalProcessingDiagnostics.instance;
-  }
-
-  /**
-   * Record diagnostic information
-   */
-  public recordDiagnosticInfo(info: SignalDiagnosticInfo): void {
-    if (!this.enabled) return;
-
-    // Add timestamp if not present
-    const enhancedInfo: SignalDiagnosticInfo = {
-      ...info,
-      timestamp: info.timestamp || Date.now()
+  public logEvent(event: Omit<DiagnosticEvent, 'timestamp'>): void {
+    const fullEvent: DiagnosticEvent = {
+      ...event,
+      timestamp: Date.now()
     };
-
-    // Add to history
-    this.diagnosticHistory.push(enhancedInfo);
     
-    // Trim history if needed
-    if (this.diagnosticHistory.length > this.MAX_HISTORY_SIZE) {
-      this.diagnosticHistory.shift();
+    this.events.push(fullEvent);
+    
+    if (this.events.length > this.maxEvents) {
+      this.events.shift();
     }
-
-    // Update performance metrics
-    if (info.processingTimeMs !== undefined) {
-      this.updateMetric('processingTime', info.processingTimeMs);
-    }
-    if (info.signalQualityMetrics?.snr !== undefined) {
-      this.updateMetric('signalQuality', info.signalQualityMetrics.snr);
-    }
-    if (info.fingerDetectionConfidence !== undefined) {
-      this.updateMetric('fingerDetectionConfidence', info.fingerDetectionConfidence);
-    }
-
+    
     // Notify subscribers
-    this.notifySubscribers(enhancedInfo);
+    this.subscribers.forEach(sub => sub.onDiagnosticEvent(fullEvent));
   }
-
+  
   /**
-   * Update a performance metric
+   * Get all events
    */
-  private updateMetric(name: string, value: number): void {
-    if (!this.performanceMetrics[name]) {
-      this.performanceMetrics[name] = [];
-    }
-    
-    this.performanceMetrics[name].push(value);
-    
-    // Keep only recent metrics
-    const MAX_METRICS = 100;
-    if (this.performanceMetrics[name].length > MAX_METRICS) {
-      this.performanceMetrics[name].shift();
-    }
+  public getEvents(): DiagnosticEvent[] {
+    return [...this.events];
   }
-
+  
   /**
-   * Subscribe to diagnostic updates
+   * Clear all events
+   */
+  public clearEvents(): void {
+    this.events = [];
+  }
+  
+  /**
+   * Add a subscriber
    */
   public subscribe(subscriber: DiagnosticsSubscriber): void {
     this.subscribers.push(subscriber);
   }
-
+  
   /**
-   * Unsubscribe from diagnostic updates
+   * Remove a subscriber
    */
   public unsubscribe(subscriber: DiagnosticsSubscriber): void {
-    this.subscribers = this.subscribers.filter(s => s !== subscriber);
-  }
-
-  /**
-   * Notify all subscribers
-   */
-  private notifySubscribers(info: SignalDiagnosticInfo): void {
-    this.subscribers.forEach(subscriber => {
-      try {
-        subscriber.onDiagnosticUpdate(info);
-      } catch (error) {
-        console.error('Error notifying diagnostics subscriber:', error);
-      }
-    });
-  }
-
-  /**
-   * Enable or disable diagnostics
-   */
-  public setEnabled(enabled: boolean): void {
-    this.enabled = enabled;
-    console.log(`Signal processing diagnostics ${enabled ? 'enabled' : 'disabled'}`);
-  }
-
-  /**
-   * Get diagnostic history
-   */
-  public getDiagnosticHistory(): SignalDiagnosticInfo[] {
-    return [...this.diagnosticHistory];
-  }
-
-  /**
-   * Get history for a specific processing stage
-   */
-  public getStageHistory(stage: string): SignalDiagnosticInfo[] {
-    return this.diagnosticHistory.filter(info => info.processingStage === stage);
-  }
-
-  /**
-   * Get performance metrics
-   */
-  public getPerformanceMetrics(): Record<string, { 
-    avg: number, 
-    min: number, 
-    max: number,
-    current: number
-  }> {
-    const metrics: Record<string, { avg: number, min: number, max: number, current: number }> = {};
-    
-    for (const [name, values] of Object.entries(this.performanceMetrics)) {
-      if (values.length === 0) {
-        metrics[name] = { avg: 0, min: 0, max: 0, current: 0 };
-      } else {
-        const avg = values.reduce((sum, val) => sum + val, 0) / values.length;
-        metrics[name] = {
-          avg,
-          min: Math.min(...values),
-          max: Math.max(...values),
-          current: values[values.length - 1]
-        };
-      }
-    }
-    
-    return metrics;
-  }
-
-  /**
-   * Clear all diagnostic data
-   */
-  public clearDiagnosticData(): void {
-    this.diagnosticHistory = [];
-    for (const key in this.performanceMetrics) {
-      this.performanceMetrics[key] = [];
-    }
+    this.subscribers = this.subscribers.filter(sub => sub !== subscriber);
   }
 }
 
-// Export factory function for easy access
-export const getDiagnostics = () => SignalProcessingDiagnostics.getInstance();
+/**
+ * Create diagnostic info
+ */
+export function createDiagnosticInfo(category: string, message: string, level: 'info' | 'warning' | 'error' | 'debug' = 'info', data?: any): Omit<DiagnosticEvent, 'timestamp'> {
+  return {
+    category,
+    level,
+    message,
+    data
+  };
+}
+
+/**
+ * Log diagnostics
+ */
+export function logDiagnostics(category: string, message: string, level: 'info' | 'warning' | 'error' | 'debug' = 'info', data?: any): void {
+  diagnosticsInstance.logEvent({
+    category,
+    level,
+    message,
+    data
+  });
+}
+
+/**
+ * Get diagnostics service
+ */
+export function getDiagnostics(): SignalProcessingDiagnostics {
+  return diagnosticsInstance;
+}
+
+/**
+ * Singleton instance
+ */
+const diagnosticsInstance = new SignalProcessingDiagnostics();
+
+export { diagnosticsInstance };

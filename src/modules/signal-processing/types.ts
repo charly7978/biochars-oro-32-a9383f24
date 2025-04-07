@@ -2,126 +2,107 @@
 /**
  * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
  * 
- * Definiciones de tipos para procesamiento de señal
+ * Type definitions for signal processing
  */
 
 /**
- * Opciones de configuración para procesadores de señal
+ * Options for signal processing
  */
 export interface SignalProcessingOptions {
-  // Factor de amplificación de señal
+  // Signal amplification factor
   amplificationFactor?: number;
   
-  // Fuerza de filtrado
+  // Filter strength
   filterStrength?: number;
   
-  // Umbral de calidad de señal
+  // Quality threshold
   qualityThreshold?: number;
   
-  // Sensibilidad de detección de dedo
+  // Finger detection sensitivity
   fingerDetectionSensitivity?: number;
   
-  // Nuevos parámetros para control adaptativo
+  // New parameters for adaptive control
   useAdaptiveControl?: boolean;
   
-  // Usar predicción para mejorar calidad
+  // Use prediction to improve quality
   qualityEnhancedByPrediction?: boolean;
   
-  // Horizonte de predicción
+  // Prediction horizon
   predictionHorizon?: number;
   
-  // Tasa de adaptación
+  // Adaptation rate
   adaptationRate?: number;
 }
 
 /**
- * Interfaz común para todos los procesadores de señal
- */
-export interface SignalProcessor<T> {
-  // Procesa un valor de señal y devuelve un resultado
-  processSignal(value: number): T;
-  
-  // Configuración del procesador
-  configure(options: SignalProcessingOptions): void;
-  
-  // Reinicia el procesador
-  reset(): void;
-}
-
-/**
- * Resultado del procesamiento de señal PPG
+ * Processed PPG signal
  */
 export interface ProcessedPPGSignal {
-  // Marca de tiempo de la señal
+  // Signal timestamp
   timestamp: number;
   
-  // Valor sin procesar
+  // Raw value
   rawValue: number;
   
-  // Valor filtrado
+  // Filtered value
   filteredValue: number;
   
-  // Valor normalizado
+  // Normalized value
   normalizedValue: number;
   
-  // Valor amplificado
+  // Amplified value
   amplifiedValue: number;
   
-  // Calidad de la señal (0-100)
+  // Signal quality (0-100)
   quality: number;
   
-  // Indicador de detección de dedo
+  // Finger detection indicator
   fingerDetected: boolean;
   
-  // Fuerza de la señal
+  // Signal strength
   signalStrength: number;
 }
 
 /**
- * Resultado del procesamiento de señal cardíaca
+ * Processed heartbeat signal
  */
 export interface ProcessedHeartbeatSignal {
-  // Marca de tiempo de la señal
+  // Signal timestamp
   timestamp: number;
   
-  // Valor de la señal
+  // Signal value
   value: number;
   
-  // Indicador de detección de pico
+  // Peak detection
   isPeak: boolean;
   
-  // Confianza en la detección del pico (0-1)
+  // Peak confidence (0-1)
   peakConfidence: number;
   
-  // BPM instantáneo (basado en intervalo RR)
+  // Instantaneous BPM
   instantaneousBPM: number | null;
   
-  // Intervalo RR en ms
+  // RR interval in ms
   rrInterval: number | null;
   
-  // Variabilidad del ritmo cardíaco
+  // Heart rate variability
   heartRateVariability: number | null;
 }
 
 /**
- * Tipos de procesadores disponibles
+ * Interface for all signal processors
  */
-export enum ProcessorType {
-  PPG = 'ppg',
-  HEARTBEAT = 'heartbeat'
+export interface SignalProcessor<T = any> {
+  processSignal(value: number): T;
+  reset(): void;
+  configure(options: SignalProcessingOptions): void;
 }
 
 /**
- * Opciones para el sistema de procesamiento completo
+ * Interface for base signal processor (non-generic)
  */
-export interface ProcessingSystemOptions extends SignalProcessingOptions {
-  // Tipo de procesador a utilizar
-  processorType?: ProcessorType;
-  
-  // Frecuencia de muestreo objetivo
-  targetSampleRate?: number;
-  
-  // Funciones de callback
-  onResultsReady?: (result: ProcessedPPGSignal | ProcessedHeartbeatSignal) => void;
-  onError?: (error: Error) => void;
+export interface BaseSignalProcessor {
+  processSignal(value: number): any;
+  reset(): void;
+  configure(options: SignalProcessingOptions): void;
 }

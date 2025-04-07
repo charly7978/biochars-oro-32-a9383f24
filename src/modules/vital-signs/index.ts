@@ -1,19 +1,21 @@
+
 /**
  * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
  * 
  * Central export for vital signs module
  */
 
-// Export the traditional processor
+// Export the VitalSignsProcessor
 export { VitalSignsProcessor } from './VitalSignsProcessor';
-export type { VitalSignsResult as TraditionalVitalSignsResult } from './types/vital-signs-result';
 
-// Export the new modular processor
+// Export VitalSignsResult type from types folder
+export type { VitalSignsResult } from './types/vital-signs-result';
+
+// Export the traditional processor
 export { ModularVitalSignsProcessor } from './ModularVitalSignsProcessor';
-export type { VitalSignsResult as ModularVitalSignsResult } from './ModularVitalSignsProcessor';
 
-// Export the new precision processor with advanced features
-export { PrecisionVitalSignsProcessor } from './PrecisionVitalSignsProcessor';
+// Export the precision processor with advanced features
+export { PrecisionVitalSignsProcessor } from './PrecisionVitalSignsProcessor'; 
 export type { PrecisionVitalSignsResult } from './PrecisionVitalSignsProcessor';
 
 // Export calibration module
@@ -38,8 +40,7 @@ export * from './specialized/CardiacProcessor';
 
 // Export shared signal utils and arrhythmia types
 export * from './arrhythmia/types';
-export * from './processors/signal-quality';
-export * from './processors/heart-rate-detector';
+export * from './shared-signal-utils';
 
 // Export specific utility functions
 export { 
@@ -62,6 +63,5 @@ export {
   calculatePerfusionIndex
 } from './utils';
 
-// Ensure other necessary exports remain
-export * from './types/vital-signs-result';
-export * from './arrhythmia/types';
+// Export the blood pressure processor for direct access
+export { BloodPressureProcessor } from './blood-pressure-processor';

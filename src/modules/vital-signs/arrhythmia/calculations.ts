@@ -1,30 +1,40 @@
 
 /**
- * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
+ * Calculations for arrhythmia detection
  */
 
 /**
- * Calculate RMSSD from real RR intervals
+ * Calculate RMSSD (Root Mean Square of Successive Differences)
+ * Measures short-term variability in RR intervals
  */
 export function calculateRMSSD(intervals: number[]): number {
   if (intervals.length < 2) return 0;
   
-  let sumSquaredDiff = 0;
+  let sumSquaredDiffs = 0;
   for (let i = 1; i < intervals.length; i++) {
-    sumSquaredDiff += Math.pow(intervals[i] - intervals[i-1], 2);
+    const diff = intervals[i] - intervals[i-1];
+    sumSquaredDiffs += diff * diff;
   }
   
-  return Math.sqrt(sumSquaredDiff / (intervals.length - 1));
+  return Math.sqrt(sumSquaredDiffs / (intervals.length - 1));
 }
 
 /**
- * Calculate RR interval variation from real data
+ * Calculate RR variation as coefficient of variation
+ * Measures overall variability in RR intervals
  */
 export function calculateRRVariation(intervals: number[]): number {
   if (intervals.length < 2) return 0;
   
   const mean = intervals.reduce((sum, val) => sum + val, 0) / intervals.length;
-  const lastRR = intervals[intervals.length - 1];
+  let sumSquaredDeviations = 0;
   
-  return Math.abs(lastRR - mean) / mean;
+  for (let i = 0; i < intervals.length; i++) {
+    const deviation = intervals[i] - mean;
+    sumSquaredDeviations += deviation * deviation;
+  }
+  
+  // Calculate coefficient of variation
+  const standardDeviation = Math.sqrt(sumSquaredDeviations / intervals.length);
+  return (standardDeviation / mean) * 100;
 }

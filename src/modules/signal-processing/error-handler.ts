@@ -1,163 +1,143 @@
-/**
- * Centralized error handling module for signal processing
- * Provides consistent error management across all modules
- */
-import { ProcessingError, ErrorHandlerConfig } from '../../types/signal';
 
-// Default error handler configuration
-const DEFAULT_CONFIG: ErrorHandlerConfig = {
+/**
+ * Error handling for signal processing
+ */
+import { ProcessingError } from '../../types/signal';
+
+/**
+ * Configuration for error handler
+ */
+export interface ErrorHandlerConfig {
+  logErrors: boolean;
+  throwOnCritical: boolean;
+  retryOnError: boolean;
+  maxRetries: number;
+  fallbackToLastGoodValue: boolean;
+}
+
+/**
+ * Default error handler configuration
+ */
+const DEFAULT_ERROR_CONFIG: ErrorHandlerConfig = {
   logErrors: true,
+  throwOnCritical: true,
   retryOnError: true,
   maxRetries: 3,
-  notifyUser: false,
   fallbackToLastGoodValue: true
 };
 
 /**
- * Singleton error handler for signal processing
+ * Store of last good values by component
  */
-export class SignalProcessingErrorHandler {
-  private static instance: SignalProcessingErrorHandler;
-  private config: ErrorHandlerConfig;
-  private errorLog: ProcessingError[] = [];
-  private lastGoodValues: Map<string, any> = new Map();
-  private retryCount: Map<string, number> = new Map();
-  private errorListeners: Array<(error: ProcessingError) => void> = [];
+const lastGoodValues: Record<string, any> = {};
 
-  private constructor(config?: Partial<ErrorHandlerConfig>) {
-    this.config = {
-      ...DEFAULT_CONFIG,
-      ...config
-    };
-    console.log('Signal processing error handler initialized with config:', this.config);
+/**
+ * Retry counters by error code
+ */
+const retryCounters: Record<string, number> = {};
+
+/**
+ * Error handling for signal processing
+ */
+export function handleProcessingError(
+  error: ProcessingError,
+  componentName: string,
+  fallbackValue?: any
+): { shouldRetry: boolean, fallbackValue: any | null } {
+  // Get error code for tracking
+  const errorCode = `${componentName}:${error.code}`;
+  
+  // Initialize retry counter if needed
+  if (!retryCounters[errorCode]) {
+    retryCounters[errorCode] = 0;
   }
-
-  /**
-   * Get the singleton instance of the error handler
-   */
-  public static getInstance(config?: Partial<ErrorHandlerConfig>): SignalProcessingErrorHandler {
-    if (!SignalProcessingErrorHandler.instance) {
-      SignalProcessingErrorHandler.instance = new SignalProcessingErrorHandler(config);
-    }
-    return SignalProcessingErrorHandler.instance;
-  }
-
-  /**
-   * Update the error handler configuration
-   */
-  public updateConfig(config: Partial<ErrorHandlerConfig>): void {
-    this.config = {
-      ...this.config,
-      ...config
-    };
-    console.log('Error handler config updated:', this.config);
-  }
-
-  /**
-   * Handle a processing error
-   * @returns Value to use (fallback value if available, otherwise null)
-   */
-  public handleError(error: ProcessingError, source: string, currentValue?: any): any {
-    // 1. Log the error if configured to do so
-    if (this.config.logErrors) {
-      console.error(`[${source}] Processing error:`, error);
-      this.errorLog.push({
-        ...error,
-        component: source,
-        timestamp: Date.now()
-      });
-      
-      // Only keep recent errors to prevent memory leaks
-      if (this.errorLog.length > 100) {
-        this.errorLog.shift();
-      }
-    }
-
-    // 2. Notify listeners
-    this.notifyErrorListeners({
-      ...error,
-      component: source,
-      timestamp: Date.now()
+  
+  // Increment retry counter
+  retryCounters[errorCode]++;
+  
+  // Check if we exceeded max retries
+  const shouldRetry = DEFAULT_ERROR_CONFIG.retryOnError && 
+                      retryCounters[errorCode] <= DEFAULT_ERROR_CONFIG.maxRetries;
+  
+  // Log error if configured
+  if (DEFAULT_ERROR_CONFIG.logErrors) {
+    console.error(`Signal processing error in ${componentName}:`, error, {
+      retryCount: retryCounters[errorCode],
+      shouldRetry,
+      hasFallback: !!lastGoodValues[componentName]
     });
-
-    // 3. Determine if we should retry
-    const errorKey = `${source}:${error.code}`;
-    const currentRetryCount = this.retryCount.get(errorKey) || 0;
-    
-    if (this.config.retryOnError && currentRetryCount < this.config.maxRetries) {
-      this.retryCount.set(errorKey, currentRetryCount + 1);
-      console.log(`Retry ${currentRetryCount + 1}/${this.config.maxRetries} for ${errorKey}`);
-      // Signal that caller should retry
-      return { shouldRetry: true, fallbackValue: this.lastGoodValues.get(source) };
-    }
-    
-    // 4. Reset retry count if we've exceeded max retries
-    if (currentRetryCount >= this.config.maxRetries) {
-      this.retryCount.set(errorKey, 0);
-    }
-
-    // 5. Return fallback value if available and configured to do so
-    if (this.config.fallbackToLastGoodValue) {
-      const fallbackValue = this.lastGoodValues.get(source);
-      if (fallbackValue !== undefined) {
-        return { shouldRetry: false, fallbackValue };
-      }
-    }
-
-    // No fallback available
-    return { shouldRetry: false, fallbackValue: null };
   }
-
-  /**
-   * Register a valid processing result to use as fallback
-   */
-  public registerGoodValue(source: string, value: any): void {
-    this.lastGoodValues.set(source, value);
+  
+  // Handle critical errors
+  if (error.severity === 'critical' && DEFAULT_ERROR_CONFIG.throwOnCritical) {
+    throw new Error(`Critical signal processing error: ${error.message}`);
   }
+  
+  // Return appropriate action
+  return {
+    shouldRetry,
+    fallbackValue: DEFAULT_ERROR_CONFIG.fallbackToLastGoodValue ? 
+      (fallbackValue || lastGoodValues[componentName] || null) : null
+  };
+}
 
-  /**
-   * Add an error listener
-   */
-  public addErrorListener(listener: (error: ProcessingError) => void): void {
-    this.errorListeners.push(listener);
-  }
+/**
+ * Check if an error is recoverable
+ */
+export function isRecoverableError(error: ProcessingError): boolean {
+  return error.recoverable || 
+         error.severity === 'low' || 
+         error.severity === 'medium';
+}
 
-  /**
-   * Remove an error listener
-   */
-  public removeErrorListener(listener: (error: ProcessingError) => void): void {
-    this.errorListeners = this.errorListeners.filter(l => l !== listener);
-  }
+/**
+ * Register a good value for a component
+ */
+export function registerGoodValue(componentName: string, value: any): void {
+  lastGoodValues[componentName] = value;
+}
 
-  /**
-   * Get all recorded errors
-   */
-  public getErrors(): ProcessingError[] {
-    return [...this.errorLog];
-  }
-
-  /**
-   * Clear error log
-   */
-  public clearErrors(): void {
-    this.errorLog = [];
-    this.retryCount.clear();
-  }
-
-  /**
-   * Notify all error listeners
-   */
-  private notifyErrorListeners(error: ProcessingError): void {
-    this.errorListeners.forEach(listener => {
-      try {
-        listener(error);
-      } catch (err) {
-        console.error('Error in error listener:', err);
-      }
-    });
+/**
+ * Reset error counters
+ */
+export function resetErrorCounters(): void {
+  for (const key in retryCounters) {
+    retryCounters[key] = 0;
   }
 }
 
-// Export factory function for easy access
-export const getErrorHandler = (config?: Partial<ErrorHandlerConfig>) => 
-  SignalProcessingErrorHandler.getInstance(config);
+/**
+ * Error handler interface
+ */
+export interface SignalProcessingErrorHandler {
+  handleError: (
+    error: ProcessingError, 
+    componentName: string, 
+    fallbackValue?: any
+  ) => { shouldRetry: boolean, fallbackValue: any | null };
+  
+  isRecoverableError: (error: ProcessingError) => boolean;
+  registerGoodValue: (componentName: string, value: any) => void;
+  resetErrorCounters: () => void;
+  getConfig: () => ErrorHandlerConfig;
+  setConfig: (config: Partial<ErrorHandlerConfig>) => void;
+}
+
+/**
+ * Get an error handler instance
+ */
+export function getErrorHandler(): SignalProcessingErrorHandler {
+  let config = { ...DEFAULT_ERROR_CONFIG };
+  
+  return {
+    handleError: (error, componentName, fallbackValue) => 
+      handleProcessingError(error, componentName, fallbackValue),
+    isRecoverableError,
+    registerGoodValue,
+    resetErrorCounters,
+    getConfig: () => ({ ...config }),
+    setConfig: (newConfig) => {
+      config = { ...config, ...newConfig };
+    }
+  };
+}

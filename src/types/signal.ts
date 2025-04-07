@@ -81,8 +81,11 @@ export interface ProcessingError {
  */
 export interface SignalValidationResult {
   isValid: boolean;
+  reason?: string;
   errorCode?: string;
   errorMessage?: string;
+  validationId?: string;
+  timestamp?: number;
   diagnosticInfo?: Record<string, any>;
 }
 
@@ -107,10 +110,10 @@ export interface SignalProcessor {
  */
 export interface ErrorHandlerConfig {
   logErrors: boolean;
-  retryOnError: boolean;
-  maxRetries: number;
-  notifyUser: boolean;
-  fallbackToLastGoodValue: boolean;
+  throwOnCritical: boolean;
+  retryOnError?: boolean;
+  fallbackToLastGoodValue?: boolean;
+  maxRetries?: number;
 }
 
 /**
@@ -118,10 +121,11 @@ export interface ErrorHandlerConfig {
  */
 export interface SignalValidationConfig {
   minAmplitude: number;
-  maxAmplitude: number;
-  minVariance: number;
-  maxVariance: number;
-  requiredSampleSize: number;
+  maxAmplitude?: number;
+  minVariance?: number;
+  maxVariance?: number;
+  requiredSampleSize?: number;
+  maxTimeGap?: number;
 }
 
 /**
@@ -145,7 +149,8 @@ export enum VitalSignType {
   LIPIDS = 'lipids',
   BLOOD_PRESSURE = 'blood_pressure',
   SPO2 = 'spo2',
-  CARDIAC = 'cardiac'
+  CARDIAC = 'cardiac',
+  HYDRATION = 'hydration'
 }
 
 /**

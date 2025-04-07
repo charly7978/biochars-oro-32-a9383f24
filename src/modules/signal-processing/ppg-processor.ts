@@ -1,151 +1,132 @@
 
 /**
- * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
- * 
- * Procesador avanzado de señal PPG
- * Se encarga del procesamiento especializado de señales PPG
+ * PPG signal processor
  */
-import { ProcessedPPGSignal, SignalProcessor, SignalProcessingOptions } from './types';
-import { detectFingerPresence } from './utils/finger-detector';
-import { evaluateSignalQuality } from './utils/quality-detector';
-import { normalizeSignal, amplifySignal } from './utils/signal-normalizer';
+import { SignalProcessor, ProcessedPPGSignal, SignalProcessingOptions } from './types';
 
-/**
- * Clase para el procesamiento avanzado de señales PPG
- */
-export class PPGSignalProcessor implements SignalProcessor<ProcessedPPGSignal> {
-  // Buffer de valores para análisis
-  private readonly VALUES_BUFFER_SIZE = 30;
-  private valuesBuffer: number[] = [];
-  
-  // Buffer de valores filtrados
-  private filteredBuffer: number[] = [];
-  
-  // Configuración del procesador
-  private amplificationFactor: number = 1.2;
-  private filterStrength: number = 0.25;
+export class PPGProcessor implements SignalProcessor<ProcessedPPGSignal> {
+  private buffer: number[] = [];
+  private filterBuffer: number[] = [];
+  private amplificationFactor: number = 1.0;
+  private filterStrength: number = 0.2;
   private qualityThreshold: number = 30;
-  private fingerDetectionSensitivity: number = 0.6;
+  private fingerDetectionThreshold: number = 0.1;
   
   /**
-   * Procesa una señal PPG y aplica algoritmos avanzados
+   * Process a signal value
    */
   public processSignal(value: number): ProcessedPPGSignal {
-    const timestamp = Date.now();
+    const now = Date.now();
     
-    // Almacenar valor bruto en buffer
-    this.valuesBuffer.push(value);
-    if (this.valuesBuffer.length > this.VALUES_BUFFER_SIZE) {
-      this.valuesBuffer.shift();
+    // Add to buffer
+    this.buffer.push(value);
+    if (this.buffer.length > 100) {
+      this.buffer.shift();
     }
     
-    // Aplicar filtrado adaptativo
-    const filteredValue = this.applyAdaptiveFilter(value);
+    // Apply filtering
+    const filteredValue = this.applyFiltering(value);
     
-    // Añadir a buffer de filtrados
-    this.filteredBuffer.push(filteredValue);
-    if (this.filteredBuffer.length > this.VALUES_BUFFER_SIZE) {
-      this.filteredBuffer.shift();
-    }
+    // Normalize and amplify
+    const normalizedValue = this.normalize(filteredValue);
+    const amplifiedValue = normalizedValue * this.amplificationFactor;
     
-    // Normalizar señal
-    const normalizedValue = normalizeSignal(filteredValue, this.filteredBuffer);
+    // Calculate quality and detect finger
+    const quality = this.calculateQuality(this.filterBuffer);
+    const fingerDetected = this.detectFinger(quality, amplifiedValue);
     
-    // Amplificar señal
-    const amplifiedValue = amplifySignal(normalizedValue, this.amplificationFactor);
-    
-    // Detección de dedo basada en patrones de señal
-    const fingerDetected = detectFingerPresence(
-      this.filteredBuffer,
-      this.fingerDetectionSensitivity
-    );
-    
-    // Evaluación de calidad de señal
-    const quality = evaluateSignalQuality(
-      value,
-      filteredValue,
-      this.filteredBuffer,
-      this.qualityThreshold
-    );
-    
-    // Calcular fuerza de señal
-    const signalStrength = this.calculateSignalStrength();
-    
+    // Return processed signal
     return {
-      timestamp,
+      timestamp: now,
       rawValue: value,
       filteredValue,
       normalizedValue,
       amplifiedValue,
       quality,
       fingerDetected,
-      signalStrength
+      signalStrength: Math.abs(amplifiedValue)
     };
   }
   
   /**
-   * Aplica un filtro adaptativo que se ajusta según características de la señal
+   * Apply filtering to the signal
    */
-  private applyAdaptiveFilter(value: number): number {
-    if (this.valuesBuffer.length < 3) return value;
+  private applyFiltering(value: number): number {
+    // Simple exponential moving average filter
+    if (this.filterBuffer.length === 0) {
+      this.filterBuffer.push(value);
+      return value;
+    }
     
-    // Calcular variabilidad reciente
-    const recent = this.valuesBuffer.slice(-5);
-    const variance = this.calculateVariance(recent);
+    const lastFiltered = this.filterBuffer[this.filterBuffer.length - 1];
+    const filtered = lastFiltered * (1 - this.filterStrength) + value * this.filterStrength;
     
-    // Ajustar fuerza de filtrado según varianza
-    const adaptiveAlpha = this.adjustFilterStrength(variance);
+    this.filterBuffer.push(filtered);
+    if (this.filterBuffer.length > 100) {
+      this.filterBuffer.shift();
+    }
     
-    // Aplicar filtro exponencial con alfa adaptativo
-    const lastFiltered = this.filteredBuffer.length > 0 
-      ? this.filteredBuffer[this.filteredBuffer.length - 1] 
-      : value;
-      
-    return adaptiveAlpha * value + (1 - adaptiveAlpha) * lastFiltered;
+    return filtered;
   }
   
   /**
-   * Ajusta la fuerza del filtrado según la varianza
+   * Normalize value
    */
-  private adjustFilterStrength(variance: number): number {
-    // Si la varianza es alta (señal ruidosa), filtrar más fuerte
-    if (variance > 0.05) return Math.min(0.15, this.filterStrength / 2);
+  private normalize(value: number): number {
+    if (this.filterBuffer.length < 10) return value;
     
-    // Si la varianza es baja (señal estable), filtrar más suave
-    if (variance < 0.01) return Math.min(0.4, this.filterStrength * 1.5);
+    const recent = this.filterBuffer.slice(-10);
+    const min = Math.min(...recent);
+    const max = Math.max(...recent);
+    const range = max - min;
     
-    // Caso intermedio
-    return this.filterStrength;
+    return range > 0 ? (value - min) / range : value;
   }
   
   /**
-   * Calcula la varianza de un conjunto de valores
+   * Calculate signal quality (0-100)
    */
-  private calculateVariance(values: number[]): number {
-    if (values.length < 2) return 0;
+  private calculateQuality(values: number[]): number {
+    if (values.length < 10) return 0;
     
-    const mean = values.reduce((sum, val) => sum + val, 0) / values.length;
-    const squaredDiffs = values.map(val => Math.pow(val - mean, 2));
-    return squaredDiffs.reduce((sum, diff) => sum + diff, 0) / values.length;
+    const recent = values.slice(-10);
+    const min = Math.min(...recent);
+    const max = Math.max(...recent);
+    const range = max - min;
+    
+    // Higher range (amplitude) generally means better quality
+    const amplitudeQuality = Math.min(100, range * 200);
+    
+    // Check for variability (too much is bad)
+    let variability = 0;
+    for (let i = 1; i < recent.length; i++) {
+      variability += Math.abs(recent[i] - recent[i-1]);
+    }
+    variability /= recent.length - 1;
+    
+    const variabilityScore = Math.max(0, 100 - variability * 500);
+    
+    // Combined quality score
+    return (amplitudeQuality * 0.7 + variabilityScore * 0.3);
   }
   
   /**
-   * Calcula la fuerza de la señal basada en amplitud
+   * Detect if finger is present on sensor
    */
-  private calculateSignalStrength(): number {
-    if (this.filteredBuffer.length < 5) return 0;
-    
-    const recentFiltered = this.filteredBuffer.slice(-10);
-    const min = Math.min(...recentFiltered);
-    const max = Math.max(...recentFiltered);
-    const amplitude = max - min;
-    
-    // Normalizar a un rango 0-100
-    return Math.min(100, Math.max(0, amplitude * 100));
+  private detectFinger(quality: number, value: number): boolean {
+    return quality > this.qualityThreshold && Math.abs(value) > this.fingerDetectionThreshold;
   }
   
   /**
-   * Configura el procesador con opciones personalizadas
+   * Reset the processor
+   */
+  public reset(): void {
+    this.buffer = [];
+    this.filterBuffer = [];
+  }
+  
+  /**
+   * Configure processor parameters
    */
   public configure(options: SignalProcessingOptions): void {
     if (options.amplificationFactor !== undefined) {
@@ -161,22 +142,7 @@ export class PPGSignalProcessor implements SignalProcessor<ProcessedPPGSignal> {
     }
     
     if (options.fingerDetectionSensitivity !== undefined) {
-      this.fingerDetectionSensitivity = options.fingerDetectionSensitivity;
+      this.fingerDetectionThreshold = 0.1 / options.fingerDetectionSensitivity;
     }
   }
-  
-  /**
-   * Reinicia el procesador y todos sus buffers
-   */
-  public reset(): void {
-    this.valuesBuffer = [];
-    this.filteredBuffer = [];
-  }
-}
-
-/**
- * Crea una nueva instancia del procesador de señal PPG
- */
-export function createPPGSignalProcessor(): PPGSignalProcessor {
-  return new PPGSignalProcessor();
 }

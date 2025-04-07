@@ -135,15 +135,19 @@ export function usePrecisionVitalSigns() {
       return;
     }
     
-    // Crear objeto de señal procesada
+    // Crear objeto de señal procesada completo con todos los campos requeridos
     const processedSignal: ProcessedSignal = {
       timestamp: Date.now(),
-      rawValue: signalProcessing.rawValue || 0,
-      filteredValue: signalProcessing.filteredValue || 0,
+      rawValue: signalProcessing.lastResult?.rawValue || 0,
+      filteredValue: signalProcessing.lastResult?.filteredValue || 0,
       quality: signalProcessing.signalQuality,
       fingerDetected: signalProcessing.fingerDetected,
-      perfusionIndex: 0,
-      roi: { x: 0, y: 0, width: 0, height: 0 }
+      roi: {
+        x: 0,
+        y: 0,
+        width: 100,
+        height: 100
+      }
     };
     
     // Procesar señal
@@ -151,7 +155,7 @@ export function usePrecisionVitalSigns() {
     
   }, [
     state.isProcessing,
-    signalProcessing.filteredValue,
+    signalProcessing.lastResult,
     signalProcessing.fingerDetected,
     signalProcessing.signalQuality,
     processSignal
@@ -202,7 +206,9 @@ export function usePrecisionVitalSigns() {
     if (!processorRef.current) return;
     
     processorRef.current.reset();
-    signalProcessing.reset();
+    
+    // Use stopProcessing instead of directly accessing reset method on signalProcessing
+    stopProcessing();
     
     setState({
       isProcessing: false,
@@ -219,7 +225,7 @@ export function usePrecisionVitalSigns() {
     });
     
     console.log("usePrecisionVitalSigns: Estado reiniciado");
-  }, [signalProcessing]);
+  }, [stopProcessing]);
   
   // Obtener diagnósticos
   const getDiagnostics = useCallback(() => {
