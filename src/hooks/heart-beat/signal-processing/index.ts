@@ -20,15 +20,15 @@ export {
 
 export { 
   handlePeakDetection,
-  detectArrhythmia,
-  calculateArrhythmiaRisk,
-  getArrhythmiaStatusMessage
+  getDiagnosticsData,
+  clearDiagnosticsData,
+  getAverageDiagnostics,
+  getDetailedQualityStats
 } from './peak-detection';
 
 export { 
   updateLastValidBpm, 
-  processLowConfidenceResult,
-  enhanceDiagnosticData
+  processLowConfidenceResult 
 } from './result-processor';
 
 export {
