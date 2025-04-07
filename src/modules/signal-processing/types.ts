@@ -1,16 +1,56 @@
-
 /**
  * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
  * 
  * Definiciones de tipos para procesamiento de señal
  */
 
-import { VitalSignType, SignalProcessingOptions, SignalProcessor } from '../../types/signal';
+import { VitalSignType } from '../../types/signal';
+
+/**
+ * Opciones de configuración para procesadores de señal
+ */
+export interface SignalProcessingOptions {
+  // Factor de amplificación de señal
+  amplificationFactor?: number;
+  
+  // Fuerza de filtrado
+  filterStrength?: number;
+  
+  // Umbral de calidad de señal
+  qualityThreshold?: number;
+  
+  // Sensibilidad de detección de dedo
+  fingerDetectionSensitivity?: number;
+  
+  // Nuevos parámetros para control adaptativo
+  useAdaptiveControl?: boolean;
+  
+  // Usar predicción para mejorar calidad
+  qualityEnhancedByPrediction?: boolean;
+  
+  // Horizonte de predicción
+  predictionHorizon?: number;
+  
+  // Tasa de adaptación
+  adaptationRate?: number;
+}
 
 // Export the enhanced VitalSignType for use in other modules
 export { VitalSignType };
-export { SignalProcessingOptions };
-export { SignalProcessor };
+
+/**
+ * Interfaz común para todos los procesadores de señal
+ */
+export interface SignalProcessor<T> {
+  // Procesa un valor de señal y devuelve un resultado
+  processSignal(value: number): T;
+  
+  // Configuración del procesador
+  configure(options: SignalProcessingOptions): void;
+  
+  // Reinicia el procesador
+  reset(): void;
+}
 
 /**
  * Resultado del procesamiento de señal PPG
@@ -65,9 +105,6 @@ export interface ProcessedHeartbeatSignal {
   
   // Variabilidad del ritmo cardíaco
   heartRateVariability: number | null;
-  
-  // BPM promedio (necesario para la interfaz)
-  averageBPM?: number | null;
 }
 
 /**
@@ -91,56 +128,4 @@ export interface ProcessingSystemOptions extends SignalProcessingOptions {
   // Funciones de callback
   onResultsReady?: (result: ProcessedPPGSignal | ProcessedHeartbeatSignal) => void;
   onError?: (error: Error) => void;
-}
-
-// Definición para el adaptador predictivo
-export interface AdaptivePredictor {
-  update(time: number, value: number, quality: number): void;
-  predict(time?: number): PredictionResult;
-  correctAnomaly(time: number, value: number, quality: number): number;
-  calculateArtifactProbability(): number;
-  getState(): AdaptiveModelState;
-  configure(options: SignalProcessingOptions): void;
-  reset(): void;
-}
-
-export interface PredictionResult {
-  predictedValue: number;
-  confidence: number;
-}
-
-export interface AdaptiveModelState {
-  coefficients?: number[];
-  lastValues?: number[];
-  lastTimes?: number[];
-  lastQualities?: number[];
-  confidence?: number;
-  adaptationRate?: number;
-}
-
-export interface CircularBufferState {
-  buffer: number[];
-  capacity: number;
-  head: number;
-}
-
-// Add BayesianOptimizerConfig interface
-export interface BayesianOptimizerConfig {
-  parameters: Array<{
-    name: string;
-    min: number;
-    max: number;
-    current: number;
-  }>;
-  explorationFactor?: number;
-  historySize?: number;
-}
-
-// Errores 
-export enum ErrorLevel {
-  INFO = 'info',
-  WARNING = 'warning',
-  ERROR = 'error',
-  CRITICAL = 'critical',
-  DEBUG = 'debug'
 }

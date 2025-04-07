@@ -10,8 +10,7 @@
 export { OptimizedSignalDistributor } from './OptimizedSignalDistributor';
 
 // Export channel types
-export { VitalSignType } from '../../types/signal';
-export type { ChannelFeedback } from '../../types/signal';
+export { VitalSignType, type ChannelFeedback } from '../../types/signal';
 
 // Export specialized channels
 export { SpecializedChannel } from './channels/SpecializedChannel';

@@ -1,4 +1,3 @@
-
 /**
  * Types for signal processing and vital sign extraction
  */
@@ -32,34 +31,4 @@ export enum ProcessingMode {
   BASELINE = 'baseline',      // Establish baseline
   CALIBRATED = 'calibrated',  // Use calibration data
   HYBRID = 'hybrid'           // Mix of direct and calibrated
-}
-
-// Add interface for signal processor
-export interface SignalProcessor<T> {
-  processSignal(value: number): T;
-  configure(options: SignalProcessingOptions): void;
-  reset(): void;
-}
-
-// Add signal processing options
-export interface SignalProcessingOptions {
-  amplification?: number;
-  amplificationFactor?: number;
-  filterStrength?: number;
-  qualityThreshold?: number;
-  fingerDetectionSensitivity?: number;
-  useAdaptiveControl?: boolean;
-  qualityEnhancedByPrediction?: boolean;
-  predictionHorizon?: number;
-  adaptationRate?: number;
-}
-
-/**
- * Configuration for signal distributor
- */
-export interface SignalDistributorConfig {
-  channels?: VitalSignType[];
-  qualityThreshold?: number;
-  processingMode?: ProcessingMode;
-  fingerDetectionSensitivity?: number;
 }
