@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
@@ -34,6 +33,10 @@ const VitalSign = ({
           if (value > 126) return 'Hiperglucemia';
           if (value < 70) return 'Hipoglucemia';
           return '';
+        case 'HIDRATACIÓN':
+          if (value < 50) return 'Deshidratación';
+          if (value < 60) return 'Hidratación baja';
+          return '';
         default:
           return '';
       }
@@ -58,12 +61,6 @@ const VitalSign = ({
             if (cholesterol > 200) return 'Hipercolesterolemia';
           }
           return '';
-        case 'TRIGLICÉRIDOS':
-          const triglycerides = parseInt(String(value), 10);
-          if (!isNaN(triglycerides)) {
-            if (triglycerides > 150) return 'Hipertrigliceridemia';
-          }
-          return '';
         default:
           return '';
       }
@@ -79,11 +76,12 @@ const VitalSign = ({
       case 'Hiperglucemia':
       case 'Hipertensión':
       case 'Hipercolesterolemia':
-      case 'Hipertrigliceridemia':
+      case 'Deshidratación':
         return 'text-[#ea384c]';
       case 'Bradicardia':
       case 'Hipoglucemia':
       case 'Hipotensión':
+      case 'Hidratación baja':
         return 'text-[#F97316]';
       default:
         return '';
@@ -177,20 +175,20 @@ const VitalSign = ({
           'Genética'
         ];
         break;
-      case 'TRIGLICÉRIDOS':
-        info.normalRange = 'Triglicéridos: <150 mg/dL';
-        info.description = 'Los triglicéridos son otras grasas en la sangre. Niveles elevados pueden aumentar el riesgo de enfermedad cardíaca.';
+      case 'HIDRATACIÓN':
+        info.normalRange = '60-100%';
+        info.description = 'El nivel de hidratación representa el equilibrio adecuado de fluidos en el cuerpo. Una buena hidratación es esencial para todas las funciones corporales.';
         info.recommendations = [
-          'Consumir menos grasas saturadas y trans',
-          'Aumentar el consumo de fibra',
-          'Hacer ejercicio regularmente',
-          'Limitar el consumo de alcohol'
+          'Beber al menos 2 litros de agua al día',
+          'Aumentar consumo de frutas y verduras con alto contenido de agua',
+          'Reducir consumo de alcohol y cafeína',
+          'Mantener ingesta constante de líquidos durante el día'
         ];
         info.riskFactors = [
-          'Obesidad',
-          'Dieta alta en grasas',
-          'Sedentarismo',
-          'Genética'
+          'Ejercicio intenso sin reposición de líquidos',
+          'Exposición a altas temperaturas',
+          'Ciertos medicamentos',
+          'Enfermedades que causan fiebre o diarrea'
         ];
         break;
       case 'ARRITMIAS':

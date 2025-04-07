@@ -104,16 +104,16 @@ export class VitalSignsProcessor {
   /**
    * Calculate lipid levels
    */
-  private calculateLipids(ppgValue: number): { totalCholesterol: number, triglycerides: number } {
+  private calculateLipids(ppgValue: number): { totalCholesterol: number, hydrationPercentage: number } {
     const baseCholesterol = 180;
-    const baseTriglycerides = 150;
+    const baseHydration = 65;
     
     const cholVariation = ppgValue * 30;
-    const trigVariation = ppgValue * 25;
+    const hydrationVariation = ppgValue * 20;
     
     return {
       totalCholesterol: Math.round(baseCholesterol + cholVariation),
-      triglycerides: Math.round(baseTriglycerides + trigVariation)
+      hydrationPercentage: Math.round(Math.min(100, Math.max(45, baseHydration + hydrationVariation)))
     };
   }
   
@@ -128,13 +128,10 @@ export class VitalSignsProcessor {
    * Process signal directly - no simulation
    * This method is added for compatibility with the new interface
    */
-  public processSignal(value: number, rrData?: { intervals: number[], lastPeakTime: number | null }): VitalSignsResult {
+  public processSignal(value: number, rrData?: RRIntervalData): VitalSignsResult {
     return this.process({
       value,
-      rrData: rrData ? { 
-        intervals: rrData.intervals,
-        lastPeakTime: rrData.lastPeakTime
-      } : undefined
+      rrData
     });
   }
 
