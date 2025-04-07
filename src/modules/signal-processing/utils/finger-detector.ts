@@ -5,6 +5,8 @@
  * Utilidades para detección de presencia de dedo
  */
 
+import { ErrorLevel } from '../types';
+
 // Almacenamiento para detección de patrones rítmicos
 let rhythmDetectionHistory: Array<{time: number, value: number}> = [];
 let confirmedFingerPresence: boolean = false;
