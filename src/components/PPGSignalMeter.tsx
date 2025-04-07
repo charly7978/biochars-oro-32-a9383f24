@@ -80,6 +80,7 @@ const PPGSignalMeter = memo(({
   const BEEP_VOLUME = 0.9;
   const MIN_BEEP_INTERVAL_MS = 350;
 
+  // Initialize audio context
   useEffect(() => {
     const initAudio = async () => {
       try {
@@ -110,6 +111,7 @@ const PPGSignalMeter = memo(({
     };
   }, []);
 
+  // Play beep sound for heartbeats
   const playBeep = useCallback(async (volume = BEEP_VOLUME) => {
     try {
       const now = Date.now();
@@ -196,6 +198,7 @@ const PPGSignalMeter = memo(({
     }
   }, []);
 
+  // Initialize data buffer
   useEffect(() => {
     if (!dataBufferRef.current) {
       dataBufferRef.current = new CircularBuffer<PPGDataPointExtended>(BUFFER_SIZE);
@@ -210,6 +213,7 @@ const PPGSignalMeter = memo(({
     }
   }, [preserveResults, isFingerDetected]);
 
+  // Update quality history
   useEffect(() => {
     qualityHistoryRef.current.push(quality);
     if (qualityHistoryRef.current.length > QUALITY_HISTORY_SIZE) {
@@ -223,6 +227,7 @@ const PPGSignalMeter = memo(({
     }
   }, [quality, isFingerDetected]);
 
+  // Initialize canvas elements
   useEffect(() => {
     const offscreen = document.createElement('canvas');
     offscreen.width = CANVAS_WIDTH;
@@ -240,6 +245,7 @@ const PPGSignalMeter = memo(({
     }
   }, []);
 
+  // Calculate average quality
   const getAverageQuality = useCallback(() => {
     if (qualityHistoryRef.current.length === 0) return 0;
     
@@ -255,6 +261,7 @@ const PPGSignalMeter = memo(({
     return weightSum > 0 ? weightedSum / weightSum : 0;
   }, []);
 
+  // Get color based on quality
   const getQualityColor = useCallback((q: number) => {
     const avgQuality = getAverageQuality();
     
@@ -264,6 +271,7 @@ const PPGSignalMeter = memo(({
     return 'from-red-500 to-rose-500';
   }, [getAverageQuality]);
 
+  // Get text description based on quality
   const getQualityText = useCallback((q: number) => {
     const avgQuality = getAverageQuality();
     
@@ -273,23 +281,25 @@ const PPGSignalMeter = memo(({
     return 'Señal débil';
   }, [getAverageQuality]);
 
+  // Smooth signal values
   const smoothValue = useCallback((currentValue: number, previousValue: number | null): number => {
     if (previousValue === null) return currentValue;
     return previousValue + SMOOTHING_FACTOR * (currentValue - previousValue);
   }, []);
 
+  // Draw grid and background
   const drawGrid = useCallback((ctx: CanvasRenderingContext2D) => {
-    // Create a more sophisticated gradient background
+    // Create a gradient background
     const gradient = ctx.createLinearGradient(0, 0, 0, CANVAS_HEIGHT);
-    gradient.addColorStop(0,'#c1ff82'); // Soft purple (top)
-    gradient.addColorStop(0.3, '#ffbddd'); // Soft peach (upper middle)
-    gradient.addColorStop(0.5, '#afd7ff'); // Soft green (lower middle)
-    gradient.addColorStop(1, '#4d4c6c'); // Soft blue (bottom)
+    gradient.addColorStop(0,'#c1ff82');
+    gradient.addColorStop(0.3, '#ffbddd');
+    gradient.addColorStop(0.5, '#afd7ff');
+    gradient.addColorStop(1, '#4d4c6c');
     
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
     
-    // Add subtle texture pattern
+    // Add texture pattern
     ctx.globalAlpha = 0.03;
     for (let i = 0; i < CANVAS_WIDTH; i += 20) {
       for (let j = 0; j < CANVAS_HEIGHT; j += 20) {
@@ -299,9 +309,9 @@ const PPGSignalMeter = memo(({
     }
     ctx.globalAlpha = 1.0;
     
-    // Draw improved grid lines
+    // Draw grid lines
     ctx.beginPath();
-    ctx.strokeStyle = 'rgba(60, 60, 60, 0.2)'; // More subtle grid lines
+    ctx.strokeStyle = 'rgba(60, 60, 60, 0.2)';
     ctx.lineWidth = 0.5;
     
     // Draw vertical grid lines
@@ -329,15 +339,15 @@ const PPGSignalMeter = memo(({
     }
     ctx.stroke();
     
-    // Draw center line (baseline) with improved style
+    // Draw center line (baseline)
     ctx.beginPath();
     ctx.strokeStyle = 'rgba(40, 40, 40, 0.4)';
     ctx.lineWidth = 1.5;
-    ctx.setLineDash([5, 3]); // Dashed line for the center
+    ctx.setLineDash([5, 3]);
     ctx.moveTo(0, CANVAS_HEIGHT / 2);
     ctx.lineTo(CANVAS_WIDTH, CANVAS_HEIGHT / 2);
     ctx.stroke();
-    ctx.setLineDash([]); // Reset to solid line
+    ctx.setLineDash([]);
     
     // Draw arrhythmia status if present
     if (arrhythmiaStatus) {
@@ -377,6 +387,7 @@ const PPGSignalMeter = memo(({
     }
   }, [arrhythmiaStatus, showArrhythmiaAlert]);
 
+  // Detect peaks in signal data
   const detectPeaks = useCallback((points: PPGDataPointExtended[], now: number) => {
     if (points.length < PEAK_DETECTION_WINDOW) return;
     
@@ -441,6 +452,7 @@ const PPGSignalMeter = memo(({
       .slice(-MAX_PEAKS_TO_DISPLAY);
   }, []);
 
+  // Render signal on canvas
   const renderSignal = useCallback(() => {
     if (!canvasRef.current || !dataBufferRef.current) {
       animationFrameRef.current = requestAnimationFrame(renderSignal);
@@ -486,18 +498,22 @@ const PPGSignalMeter = memo(({
       return;
     }
     
+    // Calculate baseline
     if (baselineRef.current === null) {
       baselineRef.current = value;
     } else {
       baselineRef.current = baselineRef.current * 0.95 + value * 0.05;
     }
     
+    // Smooth the signal value
     const smoothedValue = smoothValue(value, lastValueRef.current);
     lastValueRef.current = smoothedValue;
     
+    // Normalize and scale the value
     const normalizedValue = (baselineRef.current || 0) - smoothedValue;
     const scaledValue = normalizedValue * verticalScale;
     
+    // Check if current point is an arrhythmia
     let currentIsArrhythmia = false;
     if (rawArrhythmiaData && 
         arrhythmiaStatus?.includes("ARRIT") && 
@@ -509,19 +525,23 @@ const PPGSignalMeter = memo(({
       lastArrhythmiaTime.current = now;
     }
     
+    // Create data point
     const dataPoint: PPGDataPointExtended = {
       time: now,
       value: scaledValue,
       isArrhythmia: currentIsArrhythmia
     };
     
+    // Add to buffer
     dataBufferRef.current.push(dataPoint);
     
+    // Get all points for drawing
     const points = dataBufferRef.current.getPoints();
     detectPeaks(points, now);
     
     let shouldBeep = false;
     
+    // Draw the signal waveform
     if (points.length > 1) {
       let firstPoint = true;
       let currentPathColor = '#0EA5E9'; // Default blue color
@@ -565,7 +585,7 @@ const PPGSignalMeter = memo(({
         }
       }
       
-      // Complete the last path if needed
+      // Complete the last path
       if (!firstPoint) {
         renderCtx.stroke();
       }
@@ -588,13 +608,13 @@ const PPGSignalMeter = memo(({
             renderCtx.lineWidth = 3;
             renderCtx.stroke();
             
-            renderCtx.font = 'bold 18px Inter'; // Increased from 14px to 18px
+            renderCtx.font = 'bold 18px Inter';
             renderCtx.fillStyle = '#F97316';
             renderCtx.textAlign = 'center';
             renderCtx.fillText('ARRITMIA', x, y - 25);
           }
           
-          renderCtx.font = 'bold 16px Inter'; // Increased from 14px to 16px
+          renderCtx.font = 'bold 16px Inter';
           renderCtx.fillStyle = '#000000';
           renderCtx.textAlign = 'center';
           renderCtx.fillText(Math.abs(peak.value / verticalScale).toFixed(2), x, y - 15);
@@ -607,6 +627,7 @@ const PPGSignalMeter = memo(({
       });
     }
     
+    // Copy offscreen canvas to visible canvas
     if (USE_OFFSCREEN_CANVAS && offscreenCanvasRef.current) {
       const visibleCtx = canvas.getContext('2d', { alpha: false });
       if (visibleCtx) {
@@ -614,6 +635,7 @@ const PPGSignalMeter = memo(({
       }
     }
     
+    // Play beep for peaks
     if (shouldBeep && isFingerDetected && 
         consecutiveFingerFramesRef.current >= REQUIRED_FINGER_FRAMES) {
       console.log("PPGSignalMeter: Círculo dibujado, reproduciendo beep (un beep por latido)");
@@ -624,6 +646,7 @@ const PPGSignalMeter = memo(({
     animationFrameRef.current = requestAnimationFrame(renderSignal);
   }, [value, quality, isFingerDetected, rawArrhythmiaData, arrhythmiaStatus, drawGrid, detectPeaks, smoothValue, preserveResults, isArrhythmia, playBeep]);
 
+  // Start rendering on component mount
   useEffect(() => {
     renderSignal();
     
@@ -634,7 +657,7 @@ const PPGSignalMeter = memo(({
     };
   }, [renderSignal]);
 
-  // Reset function that also clears arrhythmia state
+  // Reset function that clears arrhythmia state
   const handleReset = useCallback(() => {
     setShowArrhythmiaAlert(false);
     peaksRef.current = [];
@@ -646,7 +669,7 @@ const PPGSignalMeter = memo(({
   const displayQuality = getAverageQuality();
   const displayFingerDetected = consecutiveFingerFramesRef.current >= REQUIRED_FINGER_FRAMES;
 
-  // Let's display an additional arrhythmia indicator if present
+  // Check for arrhythmia indicator
   const hasArrhythmia = arrhythmiaStatus && 
     (arrhythmiaStatus.includes("ARRITMIA") || 
      arrhythmiaStatus.includes("ARRHYTHMIA"));

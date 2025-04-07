@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect } from "react";
 import VitalSign from "@/components/VitalSign";
 import CameraView from "@/components/CameraView";
@@ -68,7 +69,7 @@ const Index = () => {
 
   useEffect(() => {
     if (lastValidResults && !isMonitoring) {
-      setVitalSigns(lastValidResults);
+      setVitalSigns(lastValidResults as LocalVitalSignsResult);
       setShowResults(true);
     }
   }, [lastValidResults, isMonitoring]);
@@ -95,7 +96,7 @@ const Index = () => {
           const vitals = processVitalSigns(lastSignal.filteredValue, heartBeatResult.rrData);
           if (vitals) {
             console.log("Vital signs processed:", vitals);
-            setVitalSigns(vitals);
+            setVitalSigns(vitals as LocalVitalSignsResult);
           }
         }
         
@@ -162,7 +163,7 @@ const Index = () => {
     
     const savedResults = resetVitalSigns();
     if (savedResults) {
-      setVitalSigns(savedResults);
+      setVitalSigns(savedResults as LocalVitalSignsResult);
       setShowResults(true);
     }
     
