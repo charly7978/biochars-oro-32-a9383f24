@@ -42,108 +42,19 @@ export {
   type RecoveryAttemptResult
 } from './error-recovery-service';
 
-/**
- * Main GuardianShield class that combines all protection systems
- */
-export class GuardianShield {
-  private static instance: GuardianShield;
-  private typescriptWatchdogEnabled: boolean = true;
-  private duplicationGuardianEnabled: boolean = true;
-  
-  private constructor() {
-    console.log("GuardianShield initialized with all protection systems");
-  }
-  
-  /**
-   * Get singleton instance
-   */
-  public static getInstance(): GuardianShield {
-    if (!GuardianShield.instance) {
-      GuardianShield.instance = new GuardianShield();
-    }
-    return GuardianShield.instance;
-  }
-  
-  /**
-   * Enable or disable TypeScript watchdog
-   */
-  public enableTypescriptWatchdog(enabled: boolean): void {
-    this.typescriptWatchdogEnabled = enabled;
-    console.log(`TypeScript watchdog ${enabled ? 'enabled' : 'disabled'}`);
-  }
-  
-  /**
-   * Enable or disable code duplication guardian
-   */
-  public enableDuplicationGuardian(enabled: boolean): void {
-    this.duplicationGuardianEnabled = enabled;
-    // Use the CodeDuplicationGuardian from the imported module
-    if (this.duplicationGuardianEnabled) {
-      console.log("Duplication guardian enabled");
-    } else {
-      console.log("Duplication guardian disabled");
-    }
-  }
-  
-  /**
-   * Check if TypeScript watchdog is enabled
-   */
-  public isTypescriptWatchdogEnabled(): boolean {
-    return this.typescriptWatchdogEnabled;
-  }
-  
-  /**
-   * Check if code duplication guardian is enabled
-   */
-  public isDuplicationGuardianEnabled(): boolean {
-    return this.duplicationGuardianEnabled;
-  }
-  
-  /**
-   * Register a component with the code duplication guardian
-   */
-  public registerComponent(name: string, filePath: string, exports: string[] = []): void {
-    if (this.duplicationGuardianEnabled) {
-      // Use the registerComponent from the imported module through this method
-      console.log(`Registering component: ${name} at ${filePath}`);
-    }
-  }
-  
-  /**
-   * Generate a comprehensive report of all issues
-   */
-  public generateReport(): {
-    timestamp: number;
-    duplicationIssues: {
-      totalIssues: number;
-      bySeverity: { critical: number };
-      moduleCount: number;
-    };
-    typeScriptStatistics: { errorCount: number; };
-  } {
-    return {
-      timestamp: Date.now(),
-      duplicationIssues: {
-        totalIssues: 0,
-        bySeverity: { critical: 0 },
-        moduleCount: 0
-      },
-      typeScriptStatistics: { errorCount: 0 }
-    };
-  }
-}
+// Export Enhanced GuardianShield
+export {
+  GuardianShield,
+  getGuardianShield,
+  initializeGuardianShield,
+  type GuardianConfig,
+  type SignalValidationResult
+} from './GuardianShield';
 
-/**
- * Get the singleton instance of GuardianShield
- */
-export function getGuardianShield(): GuardianShield {
-  return GuardianShield.getInstance();
-}
+// Initialize the guardian by default
+import { initializeGuardianShield } from './GuardianShield';
+const guardian = initializeGuardianShield();
+console.log("Guardian Shield initialized with all protection systems");
 
-/**
- * Initialize the Guardian Shield system
- */
-export function initializeGuardianShield(): void {
-  console.log("Initializing Guardian Shield system from index...");
-  getGuardianShield();
-}
+// Export the instance for direct use
+export { guardian };

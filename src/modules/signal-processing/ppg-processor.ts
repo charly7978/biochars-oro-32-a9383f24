@@ -11,6 +11,7 @@ export class PPGProcessor implements SignalProcessor<ProcessedPPGSignal> {
   private filterStrength: number = 0.2;
   private qualityThreshold: number = 30;
   private fingerDetectionThreshold: number = 0.1;
+  private guardianEnabled: boolean = true;
   
   /**
    * Process a signal value
@@ -35,7 +36,7 @@ export class PPGProcessor implements SignalProcessor<ProcessedPPGSignal> {
     const quality = this.calculateQuality(this.filterBuffer);
     const fingerDetected = this.detectFinger(quality, amplifiedValue);
     
-    // Return processed signal
+    // Return processed signal with all required properties
     return {
       timestamp: now,
       rawValue: value,
@@ -47,7 +48,7 @@ export class PPGProcessor implements SignalProcessor<ProcessedPPGSignal> {
       signalStrength: Math.abs(amplifiedValue),
       sourceId: 'ppg-processor',
       priority: 'MEDIUM',
-      isValid: fingerDetected && quality > 20
+      isValid: fingerDetected && quality > this.qualityThreshold * 0.66
     };
   }
   
@@ -118,6 +119,13 @@ export class PPGProcessor implements SignalProcessor<ProcessedPPGSignal> {
    */
   private detectFinger(quality: number, value: number): boolean {
     return quality > this.qualityThreshold && Math.abs(value) > this.fingerDetectionThreshold;
+  }
+  
+  /**
+   * Enable or disable the Guardian Shield
+   */
+  public setGuardianEnabled(enabled: boolean): void {
+    this.guardianEnabled = enabled;
   }
   
   /**
