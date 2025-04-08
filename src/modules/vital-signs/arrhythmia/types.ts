@@ -15,3 +15,12 @@ export interface ArrhythmiaProcessingResult {
     rrVariation?: number; 
   } | null;
 }
+
+/**
+ * Arrhythmia detection sensitivity configuration
+ */
+export interface ArrhythmiaDetectionConfig {
+  minRRVariationPercent: number;
+  consecutiveAbnormalThreshold: number;
+  minTimeInterval: number; // Milliseconds between detections
+}

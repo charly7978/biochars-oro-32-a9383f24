@@ -1,64 +1,57 @@
-
 /**
- * Pattern detector for arrhythmia detection
+ * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
+ * 
+ * Pattern-based arrhythmia detector using HRV metrics
  */
 
-const MAX_PATTERN_BUFFER = 30;
-
+/**
+ * Class to detect arrhythmia patterns in real-time
+ * No simulations or fake data is used
+ */
 export class ArrhythmiaPatternDetector {
   private patternBuffer: number[] = [];
+  private readonly MAX_PATTERN_BUFFER = 30;
+  private readonly PATTERN_DETECTION_THRESHOLD = 0.25;
   
   /**
    * Update the pattern buffer with a new variation value
+   * @param variationRatio The variation ratio from the current RR interval
    */
-  public updatePatternBuffer(variation: number): void {
-    this.patternBuffer.push(variation);
+  public updatePatternBuffer(variationRatio: number): void {
+    this.patternBuffer.push(variationRatio);
     
-    if (this.patternBuffer.length > MAX_PATTERN_BUFFER) {
+    // Keep buffer size limited
+    if (this.patternBuffer.length > this.MAX_PATTERN_BUFFER) {
       this.patternBuffer.shift();
     }
   }
   
   /**
-   * Detect arrhythmia patterns in the buffer
-   * Returns true if an arrhythmia pattern is detected
+   * Detect arrhythmia patterns from the pattern buffer
+   * @returns True if an arrhythmia pattern is detected
    */
   public detectArrhythmiaPattern(): boolean {
-    if (this.patternBuffer.length < 10) {
+    if (this.patternBuffer.length < 5) {
       return false;
     }
     
-    // Basic pattern detection: look for high variation followed by consistent pattern
-    const highVariationThreshold = 0.15;
-    const highVariationCount = this.patternBuffer.filter(v => v > highVariationThreshold).length;
+    // Higher sensitivity for better detection
+    const recentValues = this.patternBuffer.slice(-10);
     
-    // If we have at least 2 high variations in our pattern buffer
-    if (highVariationCount >= 2) {
-      // Calculate average peak spacing
-      const indices: number[] = [];
-      this.patternBuffer.forEach((variation, index) => {
-        if (variation > highVariationThreshold) {
-          indices.push(index);
-        }
-      });
-      
-      // Check if indices have consistent spacing (arrhythmia pattern)
-      if (indices.length >= 2) {
-        const diffs = [];
-        for (let i = 1; i < indices.length; i++) {
-          diffs.push(indices[i] - indices[i-1]);
-        }
-        
-        // Calculate variance of diffs
-        const mean = diffs.reduce((sum, val) => sum + val, 0) / diffs.length;
-        const variance = diffs.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / diffs.length;
-        
-        // Low variance indicates consistent pattern
-        return variance < 5;
+    // Look for sudden jumps in variation
+    for (let i = 1; i < recentValues.length; i++) {
+      if (recentValues[i] > this.PATTERN_DETECTION_THRESHOLD &&
+          recentValues[i] > recentValues[i-1] * 2) {
+        return true;
       }
     }
     
-    return false;
+    // Check for sustained high variation
+    const highVariationCount = recentValues.filter(
+      v => v > this.PATTERN_DETECTION_THRESHOLD
+    ).length;
+    
+    return highVariationCount >= 3; // If 3 or more high variation points
   }
   
   /**
