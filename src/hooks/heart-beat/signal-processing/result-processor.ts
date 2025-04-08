@@ -1,75 +1,66 @@
 
 /**
- * Process and validate heart rate measurement results
+ * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
  */
 
-// Store last valid measurements
-const lastValidBpms: number[] = [];
-const lastValidConfidences: number[] = [];
-let lastValidTime = 0;
+let lastValidBpm = 0;
+let lastConfidence = 0;
+let validBpmCount = 0;
 
 /**
- * Update last valid BPM measurements
+ * Update last valid BPM
  */
-export function updateLastValidBpm(bpm: number, confidence: number) {
-  // Only store if confidence is reasonable and BPM is physiologically plausible
-  if (confidence > 0.3 && bpm >= 40 && bpm <= 200) {
-    lastValidBpms.push(bpm);
-    lastValidConfidences.push(confidence);
-    lastValidTime = Date.now();
+export function updateLastValidBpm(bpm: number, confidence: number): void {
+  if (confidence > 0.5 && bpm >= 40 && bpm <= 200) {
+    // Use exponential smoothing to update
+    lastValidBpm = lastValidBpm > 0 
+      ? 0.8 * lastValidBpm + 0.2 * bpm
+      : bpm;
     
-    // Limit size of history
-    if (lastValidBpms.length > 10) {
-      lastValidBpms.shift();
-      lastValidConfidences.shift();
-    }
+    lastConfidence = confidence;
+    validBpmCount++;
   }
 }
 
 /**
- * Process low confidence results by filling in with past data if available
+ * Process result with low confidence
  */
-export function processLowConfidenceResult(result: any): any {
-  // Use original result if confidence is good
-  if (result.confidence > 0.3) {
-    return result;
-  }
-  
-  // If we have valid past measurements and the last one was recent
-  const timeSinceLastValid = Date.now() - lastValidTime;
-  if (lastValidBpms.length > 0 && timeSinceLastValid < 5000) {
-    // Average of recent valid BPMs
-    const averageBpm = lastValidBpms.reduce((sum, bpm) => sum + bpm, 0) / lastValidBpms.length;
-    const averageConfidence = lastValidConfidences.reduce((sum, conf) => sum + conf, 0) / lastValidConfidences.length * 0.7; // Reduce confidence for historical data
-    
+export function processLowConfidenceResult(
+  result: any, 
+  confidenceThreshold: number = 0.5
+): any {
+  if (result.confidence < confidenceThreshold && lastValidBpm > 0) {
+    // If confidence is low but we have a valid previous BPM
     return {
       ...result,
-      bpm: Math.round(averageBpm),
-      confidence: averageConfidence,
-      isHistorical: true
+      bpm: lastValidBpm,
+      confidence: Math.max(0.3, result.confidence)
     };
   }
   
-  // No recent valid data, use original low confidence result
   return result;
 }
 
 /**
- * Get last valid measurements for comparison
+ * Get last valid measurements
  */
-export function getLastValidMeasurements() {
+export function getLastValidMeasurements(): {
+  bpm: number;
+  confidence: number;
+  count: number;
+} {
   return {
-    bpms: [...lastValidBpms],
-    confidences: [...lastValidConfidences],
-    lastValidTime
+    bpm: lastValidBpm,
+    confidence: lastConfidence,
+    count: validBpmCount
   };
 }
 
 /**
- * Reset all stored valid measurements
+ * Reset valid measurements tracking
  */
-export function resetValidMeasurements() {
-  lastValidBpms.length = 0;
-  lastValidConfidences.length = 0;
-  lastValidTime = 0;
+export function resetValidMeasurements(): void {
+  lastValidBpm = 0;
+  lastConfidence = 0;
+  validBpmCount = 0;
 }

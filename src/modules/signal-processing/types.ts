@@ -1,43 +1,100 @@
 
 /**
- * Types for signal processing
+ * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
+ * 
+ * Type definitions for signal processing
  */
 
-export interface ProcessedPPGSignal {
-  timestamp: number;
-  value: number;
-  quality: number;
-  isPeak: boolean;
-  rawValue?: number;
-  filteredValue?: number;
-  normalizedValue?: number;
-  amplifiedValue?: number;
-  fingerDetected?: boolean;
-  signalStrength?: number;
-}
-
-export interface SignalProcessor {
-  processSignal: (value: number) => any;
-  reset: () => void;
-  initialize?: () => Promise<void>;
-}
-
-export interface ProcessedHeartbeatSignal {
-  timestamp: number;
-  isPeak: boolean;
-  value: number;
-  confidence: number;
-  peakConfidence?: number;
-  instantaneousBPM?: number | null;
-  rrInterval?: number | null;
-  heartRateVariability?: number | null;
-}
-
+/**
+ * Options for signal processing
+ */
 export interface SignalProcessingOptions {
-  sampleRate?: number;
+  // Signal amplification factor
+  amplificationFactor?: number;
+  
+  // Filter strength
   filterStrength?: number;
-  minPeakHeight?: number;
-  minPeakDistance?: number;
-  windowSize?: number;
-  threshold?: number;
+  
+  // Quality threshold
+  qualityThreshold?: number;
+  
+  // Finger detection sensitivity
+  fingerDetectionSensitivity?: number;
+  
+  // New parameters for adaptive control
+  useAdaptiveControl?: boolean;
+  
+  // Use prediction to improve quality
+  qualityEnhancedByPrediction?: boolean;
+  
+  // Prediction horizon
+  predictionHorizon?: number;
+  
+  // Adaptation rate
+  adaptationRate?: number;
+}
+
+/**
+ * Processed PPG signal
+ */
+export interface ProcessedPPGSignal {
+  // Signal timestamp
+  timestamp: number;
+  
+  // Raw value
+  rawValue: number;
+  
+  // Filtered value
+  filteredValue: number;
+  
+  // Normalized value
+  normalizedValue: number;
+  
+  // Amplified value
+  amplifiedValue: number;
+  
+  // Signal quality (0-100)
+  quality: number;
+  
+  // Finger detection indicator
+  fingerDetected: boolean;
+  
+  // Signal strength
+  signalStrength: number;
+}
+
+/**
+ * Processed heartbeat signal
+ */
+export interface ProcessedHeartbeatSignal {
+  // Signal timestamp
+  timestamp: number;
+  
+  // Signal value
+  value: number;
+  
+  // Peak detection
+  isPeak: boolean;
+  
+  // Peak confidence (0-1)
+  peakConfidence: number;
+  
+  // Instantaneous BPM
+  instantaneousBPM: number | null;
+  
+  // RR interval in ms
+  rrInterval: number | null;
+  
+  // Heart rate variability
+  heartRateVariability: number | null;
+}
+
+/**
+ * Interface for signal processors
+ * Added to fix missing interface error
+ */
+export interface SignalProcessor {
+  processSignal(value: number): any;
+  reset(): void;
+  configure(options: SignalProcessingOptions): void;
 }

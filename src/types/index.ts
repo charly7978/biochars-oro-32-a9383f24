@@ -15,13 +15,13 @@ export * from './signal';
 export * from './screen-orientation';
 
 // Export the ArrhythmiaProcessingResult from the arrhythmia module
-import type { ArrhythmiaProcessingResult } from '../modules/vital-signs/arrhythmia/types';
-export type { ArrhythmiaProcessingResult };
+import { ArrhythmiaProcessingResult } from '../modules/vital-signs/arrhythmia/types';
+export { ArrhythmiaProcessingResult };
 
 // Export RRIntervalData from vital-signs
-import type { RRIntervalData } from './vital-signs';
-export type { RRIntervalData };
+import { RRIntervalData } from './vital-signs';
+export { RRIntervalData };
 
-// Export SignalProcessor from signal-processing
-import type { SignalProcessor } from '../modules/signal-processing/types';
-export type { SignalProcessor };
+// Signal processor types
+import { SignalProcessor } from '../modules/signal-processing/types';
+export { SignalProcessor };
