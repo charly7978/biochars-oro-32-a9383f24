@@ -1,40 +1,43 @@
 
-// Define the missing SignalProcessor interface
-export interface SignalProcessor {
-  initialize(): Promise<void>;
-  start(): void;
-  stop(): void;
-  processSignal(value: number): any;
-}
+/**
+ * Types for signal processing
+ */
 
-// Define other types needed for the processors
 export interface ProcessedPPGSignal {
   timestamp: number;
-  rawValue: number;
-  filteredValue: number;
-  normalizedValue: number;
-  amplifiedValue: number;
+  value: number;
   quality: number;
-  fingerDetected: boolean;
-  signalStrength: number;
+  isPeak: boolean;
+  rawValue?: number;
+  filteredValue?: number;
+  normalizedValue?: number;
+  amplifiedValue?: number;
+  fingerDetected?: boolean;
+  signalStrength?: number;
+}
+
+export interface SignalProcessor {
+  processSignal: (value: number) => any;
+  reset: () => void;
+  initialize?: () => Promise<void>;
 }
 
 export interface ProcessedHeartbeatSignal {
+  timestamp: number;
   isPeak: boolean;
-  peakConfidence: number;
-  instantaneousBPM: number | null;
-  rrInterval: number | null;
-  heartRateVariability: number | null;
+  value: number;
+  confidence: number;
+  peakConfidence?: number;
+  instantaneousBPM?: number | null;
+  rrInterval?: number | null;
+  heartRateVariability?: number | null;
 }
 
 export interface SignalProcessingOptions {
-  amplificationFactor?: number;
+  sampleRate?: number;
   filterStrength?: number;
-  qualityThreshold?: number;
-  fingerDetectionSensitivity?: number;
-}
-
-// Export reset function for finger detector
-export function resetFingerDetector(): void {
-  console.log('Resetting finger detector');
+  minPeakHeight?: number;
+  minPeakDistance?: number;
+  windowSize?: number;
+  threshold?: number;
 }

@@ -1,4 +1,3 @@
-
 /**
  * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
  */
@@ -16,6 +15,7 @@ export function useArrhythmiaDetector() {
   const lastRRIntervalsRef = useRef<number[]>([]);
   const lastIsArrhythmiaRef = useRef<boolean>(false);
   const currentBeatIsArrhythmiaRef = useRef<boolean>(false);
+  const arrhythmiaWindowsRef = useRef<Array<{start: number, end: number}>>([]);
 
   /**
    * Analyze real RR intervals to detect arrhythmias 
@@ -63,12 +63,36 @@ export function useArrhythmiaDetector() {
       heartRateVariabilityRef.current.shift();
     }
     
+    // Record arrhythmia window if detected
+    if (isArrhythmia) {
+      const now = Date.now();
+      arrhythmiaWindowsRef.current.push({
+        start: now - 500,
+        end: now + 500
+      });
+      
+      // Keep only the most recent arrhythmia windows (max 5)
+      if (arrhythmiaWindowsRef.current.length > 5) {
+        arrhythmiaWindowsRef.current.shift();
+      }
+    }
+    
+    lastIsArrhythmiaRef.current = isArrhythmia;
+    currentBeatIsArrhythmiaRef.current = isArrhythmia;
+    
     return {
       rmssd,
       rrVariation: variationRatio,
       timestamp: Date.now(),
       isArrhythmia
     };
+  }, []);
+
+  /**
+   * Get current arrhythmia windows for visualization
+   */
+  const getArrhythmiaWindows = useCallback(() => {
+    return [...arrhythmiaWindowsRef.current];
   }, []);
 
   /**
@@ -80,6 +104,7 @@ export function useArrhythmiaDetector() {
     lastRRIntervalsRef.current = [];
     lastIsArrhythmiaRef.current = false;
     currentBeatIsArrhythmiaRef.current = false;
+    arrhythmiaWindowsRef.current = [];
   }, []);
 
   return {
@@ -89,6 +114,8 @@ export function useArrhythmiaDetector() {
     lastRRIntervalsRef,
     lastIsArrhythmiaRef,
     currentBeatIsArrhythmiaRef,
+    arrhythmiaWindowsRef,
+    getArrhythmiaWindows,
     reset
   };
 }

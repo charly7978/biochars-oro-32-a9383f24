@@ -20,6 +20,7 @@ export {
 
 // Export specific functions from peak-detection
 export {
+  detectPeak,
   detectPeaks,
   calculateHeartRate,
   getDiagnosticsData,

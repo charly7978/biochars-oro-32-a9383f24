@@ -1,26 +1,35 @@
 
 /**
- * Type definitions for arrhythmia detection
+ * Types for arrhythmia detection and processing
  */
-export interface RRIntervalData {
-  intervals: number[];
-  lastPeakTime: number | null;
-}
 
+/**
+ * Result of arrhythmia processing
+ */
 export interface ArrhythmiaProcessingResult {
   arrhythmiaStatus: string;
-  lastArrhythmiaData: { 
-    timestamp: number; 
-    rmssd?: number; 
-    rrVariation?: number; 
+  lastArrhythmiaData: {
+    timestamp: number;
+    rmssd: number;
+    rrVariation: number;
   } | null;
 }
 
 /**
- * Arrhythmia detection sensitivity configuration
+ * Configuration for arrhythmia detection
  */
 export interface ArrhythmiaDetectionConfig {
-  minRRVariationPercent: number;
-  consecutiveAbnormalThreshold: number;
-  minTimeInterval: number; // Milliseconds between detections
+  minRRIntervals: number;
+  thresholdFactor: number;
+  stabilityThreshold: number;
+  minTimeBetweenArrhythmias: number;
+}
+
+/**
+ * Pattern detection result
+ */
+export interface PatternDetectionResult {
+  isArrhythmia: boolean;
+  confidence: number;
+  pattern: string | null;
 }

@@ -5,62 +5,92 @@
 
 /**
  * Calculate RMSSD (Root Mean Square of Successive Differences)
- * A standard HRV metric based on RR intervals
+ * A time-domain measure of heart rate variability
  */
 export function calculateRMSSD(intervals: number[]): number {
-  if (intervals.length < 2) return 0;
-  
+  if (intervals.length < 2) {
+    return 0;
+  }
+
   let sumSquaredDiffs = 0;
+
+  // Calculate squared differences between successive intervals
   for (let i = 1; i < intervals.length; i++) {
-    const diff = intervals[i] - intervals[i-1];
+    const diff = intervals[i] - intervals[i - 1];
     sumSquaredDiffs += diff * diff;
   }
-  
-  return Math.sqrt(sumSquaredDiffs / (intervals.length - 1));
+
+  // Calculate the root mean square
+  const meanSquaredDiffs = sumSquaredDiffs / (intervals.length - 1);
+  return Math.sqrt(meanSquaredDiffs);
 }
 
 /**
- * Calculate RR variation as coefficient of variation (CV)
- * Expressed as a percentage
+ * Calculate RR Interval Variation 
+ * Measures the variation between consecutive RR intervals
  */
 export function calculateRRVariation(intervals: number[]): number {
-  if (intervals.length < 2) return 0;
+  if (intervals.length < 2) {
+    return 0;
+  }
+
+  // Calculate average interval
+  const avgInterval = intervals.reduce((sum, val) => sum + val, 0) / intervals.length;
   
-  const mean = intervals.reduce((sum, val) => sum + val, 0) / intervals.length;
-  if (mean === 0) return 0;
+  // Calculate absolute deviations from the average
+  const absoluteDeviations = intervals.map(interval => Math.abs(interval - avgInterval));
   
-  let sumSquaredDeviations = 0;
+  // Calculate average absolute deviation
+  const avgDeviation = absoluteDeviations.reduce((sum, val) => sum + val, 0) / absoluteDeviations.length;
   
-  for (let i = 0; i < intervals.length; i++) {
-    const deviation = intervals[i] - mean;
-    sumSquaredDeviations += deviation * deviation;
+  // Calculate variation as ratio of average deviation to average interval
+  return avgDeviation / avgInterval;
+}
+
+/**
+ * Calculate pNNx (percentage of successive RR intervals that differ by more than x ms)
+ * Common values for x are 50ms (pNN50) or 20ms (pNN20)
+ */
+export function calculatePNNx(intervals: number[], x: number): number {
+  if (intervals.length < 2) {
+    return 0;
+  }
+
+  let count = 0;
+  
+  // Count intervals with difference greater than x
+  for (let i = 1; i < intervals.length; i++) {
+    if (Math.abs(intervals[i] - intervals[i - 1]) > x) {
+      count++;
+    }
   }
   
-  // Calculate coefficient of variation
-  const standardDeviation = Math.sqrt(sumSquaredDeviations / intervals.length);
-  return (standardDeviation / mean) * 100;
+  // Calculate percentage
+  return (count / (intervals.length - 1)) * 100;
 }
 
 /**
- * Check if an interval represents a potential arrhythmia based on deviation
+ * Calculate spectral analysis indices (simplified)
  */
-export function isAbnormalInterval(interval: number, avgInterval: number): boolean {
-  if (avgInterval === 0) return false;
+export function calculateSpectralIndices(intervals: number[]): { 
+  lf: number; 
+  hf: number; 
+  ratio: number 
+} {
+  if (intervals.length < 10) {
+    return { lf: 0, hf: 0, ratio: 1 };
+  }
   
-  const variation = Math.abs(interval - avgInterval) / avgInterval * 100;
-  return variation > 30; // 30% deviation threshold
-}
-
-/**
- * Enforce physiological constraints on heart rate intervals
- * Filter out impossible values
- */
-export function filterPhysiologicalIntervals(intervals: number[]): number[] {
-  // Only accept intervals that correspond to heart rates between 30-200 BPM
-  const MIN_INTERVAL = 300; // 60000/200 = 300ms (200 BPM)
-  const MAX_INTERVAL = 2000; // 60000/30 = 2000ms (30 BPM)
+  // This is a simplified placeholder as proper spectral analysis
+  // requires more complex FFT calculations
   
-  return intervals.filter(interval => 
-    interval >= MIN_INTERVAL && interval <= MAX_INTERVAL
-  );
+  // For demonstration purposes only:
+  const shortTermVar = calculateRMSSD(intervals);
+  const longTermVar = calculateRRVariation(intervals);
+  
+  const lf = longTermVar * 1000;
+  const hf = shortTermVar;
+  const ratio = lf / (hf || 1);
+  
+  return { lf, hf, ratio };
 }
