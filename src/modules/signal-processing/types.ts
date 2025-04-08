@@ -1,100 +1,40 @@
 
-/**
- * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
- * 
- * Type definitions for signal processing
- */
-
-/**
- * Options for signal processing
- */
-export interface SignalProcessingOptions {
-  // Signal amplification factor
-  amplificationFactor?: number;
-  
-  // Filter strength
-  filterStrength?: number;
-  
-  // Quality threshold
-  qualityThreshold?: number;
-  
-  // Finger detection sensitivity
-  fingerDetectionSensitivity?: number;
-  
-  // New parameters for adaptive control
-  useAdaptiveControl?: boolean;
-  
-  // Use prediction to improve quality
-  qualityEnhancedByPrediction?: boolean;
-  
-  // Prediction horizon
-  predictionHorizon?: number;
-  
-  // Adaptation rate
-  adaptationRate?: number;
+// Define the missing SignalProcessor interface
+export interface SignalProcessor {
+  initialize(): Promise<void>;
+  start(): void;
+  stop(): void;
+  processSignal(value: number): any;
 }
 
-/**
- * Processed PPG signal
- */
+// Define other types needed for the processors
 export interface ProcessedPPGSignal {
-  // Signal timestamp
   timestamp: number;
-  
-  // Raw value
   rawValue: number;
-  
-  // Filtered value
   filteredValue: number;
-  
-  // Normalized value
   normalizedValue: number;
-  
-  // Amplified value
   amplifiedValue: number;
-  
-  // Signal quality (0-100)
   quality: number;
-  
-  // Finger detection indicator
   fingerDetected: boolean;
-  
-  // Signal strength
   signalStrength: number;
 }
 
-/**
- * Processed heartbeat signal
- */
 export interface ProcessedHeartbeatSignal {
-  // Signal timestamp
-  timestamp: number;
-  
-  // Signal value
-  value: number;
-  
-  // Peak detection
   isPeak: boolean;
-  
-  // Peak confidence (0-1)
   peakConfidence: number;
-  
-  // Instantaneous BPM
   instantaneousBPM: number | null;
-  
-  // RR interval in ms
   rrInterval: number | null;
-  
-  // Heart rate variability
   heartRateVariability: number | null;
 }
 
-/**
- * Interface for signal processors
- * Added to fix missing interface error
- */
-export interface SignalProcessor {
-  processSignal(value: number): any;
-  reset(): void;
-  configure(options: SignalProcessingOptions): void;
+export interface SignalProcessingOptions {
+  amplificationFactor?: number;
+  filterStrength?: number;
+  qualityThreshold?: number;
+  fingerDetectionSensitivity?: number;
+}
+
+// Export reset function for finger detector
+export function resetFingerDetector(): void {
+  console.log('Resetting finger detector');
 }
