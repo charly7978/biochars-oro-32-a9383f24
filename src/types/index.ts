@@ -1,4 +1,3 @@
-
 /**
  * Central export for all type definitions
  * Import types from here instead of individual files
@@ -15,13 +14,20 @@ export * from './signal';
 export * from './screen-orientation';
 
 // Export the ArrhythmiaProcessingResult from the arrhythmia module
-import { ArrhythmiaProcessingResult } from '../modules/vital-signs/arrhythmia/types';
-export { ArrhythmiaProcessingResult };
+import type { ArrhythmiaProcessingResult } from '../modules/vital-signs/arrhythmia/types';
+export type { ArrhythmiaProcessingResult };
 
 // Export RRIntervalData from vital-signs
-import { RRIntervalData } from './vital-signs';
-export { RRIntervalData };
+import type { RRIntervalData } from './vital-signs';
+export type { RRIntervalData };
 
-// Signal processor types
-import { SignalProcessor } from '../modules/signal-processing/types';
-export { SignalProcessor };
+// Export SignalProcessor from signal-processing
+import type { SignalProcessor } from '../modules/signal-processing/types';
+export type { SignalProcessor };
+
+// Re-export VitalSignType to ensure consistency
+import { VitalSignType } from './signal';
+export { VitalSignType };
+
+// Add this line to export the type from PrecisionVitalSignsProcessor
+export type { PrecisionVitalSignsResult } from '../modules/vital-signs/PrecisionVitalSignsProcessor';

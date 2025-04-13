@@ -12,6 +12,34 @@ export class HydrationProcessor {
   private readonly BASE_HYDRATION = 65; // Base hydration percentage
   
   /**
+   * Initialize the processor
+   */
+  public initialize(): void {
+    this.buffer = [];
+    this.confidence = 0;
+    console.log('HydrationProcessor initialized');
+  }
+  
+  /**
+   * Process a value and return hydration level
+   */
+  public processValue(value: number): number {
+    this.addToBuffer(value);
+    return this.calculateHydration(this.buffer);
+  }
+  
+  /**
+   * Add a value to the buffer
+   */
+  private addToBuffer(value: number): void {
+    this.buffer.push(value);
+    if (this.buffer.length > 30) {
+      this.buffer.shift();
+    }
+    this.updateConfidence();
+  }
+  
+  /**
    * Calculate hydration level from PPG values
    */
   public calculateHydration(ppgValues: number[]): number {
@@ -19,21 +47,18 @@ export class HydrationProcessor {
       return 0;
     }
     
-    // Store values in buffer
-    this.buffer = [...ppgValues.slice(-30)];
-    
     // Extract signal features
-    const max = Math.max(...this.buffer);
-    const min = Math.min(...this.buffer);
+    const max = Math.max(...ppgValues);
+    const min = Math.min(...ppgValues);
     const amplitude = max - min;
-    const mean = this.buffer.reduce((sum, val) => sum + val, 0) / this.buffer.length;
+    const mean = ppgValues.reduce((sum, val) => sum + val, 0) / ppgValues.length;
     
     // Calculate hydration variation based on signal features
     // Higher amplitude correlates with better hydration
     const hydrationOffset = amplitude * 15;
     
     // Calculate confidence based on signal stability
-    this.updateConfidence(amplitude, mean);
+    this.updateConfidence();
     
     // Return hydration level within physiological range (50-80%)
     return Math.max(50, Math.min(80, Math.round(this.BASE_HYDRATION + hydrationOffset)));
@@ -42,8 +67,8 @@ export class HydrationProcessor {
   /**
    * Update confidence level based on signal characteristics
    */
-  private updateConfidence(amplitude: number, mean: number): void {
-    if (amplitude < 0.01 || this.buffer.length < 10) {
+  private updateConfidence(): void {
+    if (this.buffer.length < 10) {
       this.confidence = 0;
       return;
     }
@@ -60,7 +85,9 @@ export class HydrationProcessor {
     const consistencyFactor = Math.max(0, 1 - consistency * 10);
     
     // Amplitude factor (higher amplitude means better confidence)
-    const amplitudeFactor = Math.min(1, amplitude * 5);
+    const amplitudeFactor = Math.min(1, 
+      Math.max(...this.buffer.slice(-10)) - Math.min(...this.buffer.slice(-10))
+    );
     
     // Combine factors for overall confidence
     this.confidence = Math.min(1, (consistencyFactor + amplitudeFactor) / 2);
@@ -71,6 +98,18 @@ export class HydrationProcessor {
    */
   public getConfidence(): number {
     return this.confidence;
+  }
+  
+  /**
+   * Get feedback for the channel
+   */
+  public getFeedback(): any {
+    return {
+      quality: this.confidence,
+      suggestedAdjustments: {
+        amplificationFactor: this.confidence < 0.5 ? 1.2 : 1.0
+      }
+    };
   }
   
   /**

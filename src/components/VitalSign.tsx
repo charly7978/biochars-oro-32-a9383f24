@@ -19,13 +19,6 @@ const VitalSign = ({
   highlighted = false,
   calibrationProgress 
 }: VitalSignProps) => {
-  const formatValue = (val: string | number): string => {
-    if (typeof val === 'number') {
-      return Math.round(val).toString();
-    }
-    return val;
-  };
-
   const getRiskLabel = (label: string, value: string | number) => {
     if (typeof value === 'number') {
       switch(label) {
@@ -223,7 +216,40 @@ const VitalSign = ({
   };
 
   const displayValue = (label: string, value: string | number) => {
-    return formatValue(value);
+    if (value === null || value === undefined || value === "--" || value === "--/--") {
+      return "--";
+    }
+    
+    if (typeof value === 'number') {
+      switch(label) {
+        case 'FRECUENCIA CARDÍACA':
+          return Math.round(value);
+        case 'SPO2':
+          return Math.round(value);
+        case 'GLUCOSA':
+          return Math.round(value);
+        case 'COLESTEROL':
+        case 'TRIGLICÉRIDOS':
+          return Math.round(value);
+        case 'HIDRATACIÓN':
+          return Math.round(value);
+        default:
+          return Math.round(value);
+      }
+    }
+    
+    if (label === 'PRESIÓN ARTERIAL' && typeof value === 'string') {
+      const parts = value.split('/');
+      if (parts.length === 2) {
+        const systolic = parseInt(parts[0], 10);
+        const diastolic = parseInt(parts[1], 10);
+        if (!isNaN(systolic) && !isNaN(diastolic)) {
+          return `${Math.round(systolic)}/${Math.round(diastolic)}`;
+        }
+      }
+    }
+    
+    return value;
   };
 
   const riskLabel = getRiskLabel(label, value);
