@@ -10,10 +10,10 @@ export class BloodPressureProcessor extends BaseVitalSignProcessor<{ systolic: n
   private systolic: number = 0;
   private diastolic: number = 0;
   private meanArterialPressure: number = 0;
-  protected confidence: number = 0; // Changed from private to protected to match base class
+  private confidence: number = 0;
   
   constructor() {
-    super(VitalSignType.BLOOD_PRESSURE); // Pass the VitalSignType to the base constructor
+    super();
     console.log('BloodPressureProcessor: Initialized');
   }
   
@@ -40,14 +40,6 @@ export class BloodPressureProcessor extends BaseVitalSignProcessor<{ systolic: n
    * Process a value from the dedicated blood pressure channel
    */
   public processValue(value: number): { systolic: number, diastolic: number } {
-    // Call the abstract method implementation
-    return this.processValueImpl(value);
-  }
-  
-  /**
-   * Implementation of abstract method from base class
-   */
-  protected processValueImpl(value: number): { systolic: number, diastolic: number } {
     // Implement blood pressure calculation
     // Based on signal amplitude and patterns
     this.systolic = 120 + (value * 10);
