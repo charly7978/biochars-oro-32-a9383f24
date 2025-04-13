@@ -56,7 +56,7 @@ export class TypeScriptWatchdog {
     }
     
     const corrections: TypeScriptError[] = [];
-    const correctedObj = { ...obj } as T;
+    const correctedObj = { ...obj };
     
     // Check and fix missing properties
     for (const key in expectedShape) {
@@ -82,8 +82,7 @@ export class TypeScriptWatchdog {
           defaultValue = null;
         }
         
-        // Fix TS2322 by using any as intermediate type
-        (correctedObj as any)[key] = defaultValue;
+        correctedObj[key] = defaultValue;
         corrections.push({
           type: TypeScriptErrorType.MISSING_PROPERTY,
           message: `Missing property '${key}' of type '${expectedType}'`,
@@ -99,14 +98,11 @@ export class TypeScriptWatchdog {
         const originalValue = correctedObj[key];
         
         if (typeof expectedShape[key] === 'number') {
-          // Fix TS2322 by using any as intermediate type
-          (correctedObj as any)[key] = Number(originalValue);
+          correctedObj[key] = Number(originalValue);
         } else if (typeof expectedShape[key] === 'string') {
-          // Fix TS2322 by using any as intermediate type
-          (correctedObj as any)[key] = String(originalValue);
+          correctedObj[key] = String(originalValue);
         } else if (typeof expectedShape[key] === 'boolean') {
-          // Fix TS2322 by using any as intermediate type
-          (correctedObj as any)[key] = Boolean(originalValue);
+          correctedObj[key] = Boolean(originalValue);
         }
         
         corrections.push({
@@ -141,8 +137,7 @@ export class TypeScriptWatchdog {
     }
     
     const corrections: TypeScriptError[] = [];
-    // Use as any to avoid type issues 
-    const correctedPoint = { ...point } as any;
+    const correctedPoint = { ...point };
     
     // Ensure value property is present and numeric
     if (!('value' in correctedPoint)) {
@@ -235,8 +230,7 @@ export class TypeScriptWatchdog {
     }
     
     const corrections: TypeScriptError[] = [];
-    // Use as any to avoid type indexing issues
-    const correctedResult = { ...result } as any;
+    const correctedResult = { ...result };
     
     // Check for required properties
     const requiredProperties = [

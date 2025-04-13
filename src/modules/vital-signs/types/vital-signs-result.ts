@@ -1,45 +1,24 @@
 
 /**
- * Type definitions for vital signs processing results
+ * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
  */
 
+/**
+ * Standardized result format for vital signs
+ */
 export interface VitalSignsResult {
   spo2: number;
   pressure: string;
   arrhythmiaStatus: string;
   glucose: number;
+  hydration: number;
   lipids: {
     totalCholesterol: number;
     triglycerides: number;
-  };
-  hydration: number; // Required field
-  confidence?: {
-    glucose: number;
-    lipids: number;
-    overall: number;
   };
   lastArrhythmiaData?: {
     timestamp: number;
     rmssd?: number;
     rrVariation?: number;
   } | null;
-  calibration?: {
-    progress: {
-      heartRate: number;
-      spo2: number;
-      pressure: number;
-      arrhythmia: number;
-    }
-  };
 }
-
-// Adding an interface for the processor parameters for better type safety
-export interface VitalSignsProcessorParams {
-  value: number;
-  rrData?: {
-    intervals: number[];
-    lastPeakTime: number | null;
-  };
-  isWeakSignal?: boolean;
-}
-

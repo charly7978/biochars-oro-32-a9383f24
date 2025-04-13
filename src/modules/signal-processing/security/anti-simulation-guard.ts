@@ -100,9 +100,8 @@ export class AntiSimulationGuard {
   
   /**
    * Run various simulation detection algorithms
-   * Changed from private to public to fix access error
    */
-  public detectSimulation(): boolean {
+  private detectSimulation(): boolean {
     // Check for too many identical consecutive values
     if (this.detectIdenticalValues()) {
       this.lastDetectionType = "identical_values";

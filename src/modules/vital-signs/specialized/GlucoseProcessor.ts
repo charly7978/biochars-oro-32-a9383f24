@@ -12,22 +12,6 @@ export class GlucoseProcessor {
   private readonly BASE_GLUCOSE = 85; // Base glucose level
   
   /**
-   * Initialize the processor
-   */
-  public initialize(): void {
-    this.buffer = [];
-    this.confidence = 0;
-    console.log('GlucoseProcessor initialized');
-  }
-  
-  /**
-   * Process a value and return glucose level
-   */
-  public processValue(value: number): number {
-    return this.calculateGlucose([value]);
-  }
-  
-  /**
    * Calculate glucose level from PPG values
    */
   public calculateGlucose(ppgValues: number[]): number {
@@ -86,18 +70,6 @@ export class GlucoseProcessor {
    */
   public getConfidence(): number {
     return this.confidence;
-  }
-  
-  /**
-   * Get feedback for the channel
-   */
-  public getFeedback(): any {
-    return {
-      quality: this.confidence,
-      suggestedAdjustments: {
-        amplificationFactor: this.confidence < 0.5 ? 1.2 : 1.0
-      }
-    };
   }
   
   /**

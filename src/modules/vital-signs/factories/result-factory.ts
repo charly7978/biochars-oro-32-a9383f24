@@ -1,12 +1,16 @@
 
 /**
- * Factory for creating VitalSignsResult objects
+ * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
  */
+
 import { VitalSignsResult } from '../types/vital-signs-result';
 
+/**
+ * Factory for creating consistent vital signs results
+ */
 export class ResultFactory {
   /**
-   * Create an empty results object
+   * Create empty/zero results
    */
   public static createEmptyResults(): VitalSignsResult {
     return {
@@ -24,7 +28,7 @@ export class ResultFactory {
   }
   
   /**
-   * Create a result with all provided values
+   * Create result with all vital signs
    */
   public static createResult(
     spo2: number,
@@ -32,20 +36,13 @@ export class ResultFactory {
     arrhythmiaStatus: string,
     glucose: number,
     hydration: number,
-    lipids: {
-      totalCholesterol: number;
-      triglycerides: number;
+    lipids: { totalCholesterol: number, triglycerides: number },
+    confidence?: { 
+      glucose: number,
+      lipids: number,
+      overall: number
     },
-    confidence?: {
-      glucose: number;
-      lipids: number;
-      overall: number;
-    },
-    lastArrhythmiaData?: {
-      timestamp: number;
-      rmssd?: number;
-      rrVariation?: number;
-    } | null
+    lastArrhythmiaData?: { timestamp: number, rmssd?: number, rrVariation?: number } | null
   ): VitalSignsResult {
     return {
       spo2,
@@ -54,7 +51,6 @@ export class ResultFactory {
       glucose,
       hydration,
       lipids,
-      confidence,
       lastArrhythmiaData
     };
   }

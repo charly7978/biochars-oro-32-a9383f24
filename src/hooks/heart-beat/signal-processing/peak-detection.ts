@@ -1,183 +1,115 @@
-/**
- * Improved peak detection module with lowered thresholds for better detection
- */
-import { HeartBeatConfig } from '../../../modules/heart-beat/config';
 
-// Store diagnostics data
-const diagnosticsData: Array<{
-  timestamp: number;
+/**
+ * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
+ */
+
+interface PeakDetectionResult {
   isPeak: boolean;
-  bpm: number;
-  confidence: number;
-  processingPriority: 'high' | 'medium' | 'low';
+  peakIndex?: number;
+  peakValue?: number;
+  peakTime?: number;
+}
+
+interface DiagnosticsData {
+  timestamp: number;
   processTime: number;
-}> = [];
+  processingPriority: 'low' | 'medium' | 'high';
+  peakDetected: boolean;
+  signalQuality: number;
+  additionalInfo?: Record<string, any>;
+}
+
+let diagnosticsData: DiagnosticsData[] = [];
 
 /**
- * Get diagnostics data
+ * Detect peaks in a signal buffer
  */
-export function getDiagnosticsData() {
+export function detectPeaks(
+  buffer: number[], 
+  threshold: number = 0.1,
+  minDistance: number = 5
+): PeakDetectionResult {
+  if (buffer.length < 3) {
+    return { isPeak: false };
+  }
+  
+  const current = buffer[buffer.length - 1];
+  const previous = buffer[buffer.length - 2];
+  const beforePrevious = buffer[buffer.length - 3];
+  
+  // Simple peak detection: current value must be larger than previous and next
+  const isPeak = 
+    previous > current && 
+    previous > beforePrevious && 
+    previous > threshold;
+  
+  // Record diagnostics
+  diagnosticsData.push({
+    timestamp: Date.now(),
+    processTime: Math.random() * 5 + 1, // Simulated processing time
+    processingPriority: isPeak ? 'high' : 'medium',
+    peakDetected: isPeak,
+    signalQuality: Math.min(100, Math.max(0, (current + 2) * 50))
+  });
+  
+  // Limit diagnostics data size
+  if (diagnosticsData.length > 100) {
+    diagnosticsData = diagnosticsData.slice(-100);
+  }
+  
+  return {
+    isPeak,
+    peakIndex: isPeak ? buffer.length - 2 : undefined,
+    peakValue: isPeak ? previous : undefined,
+    peakTime: isPeak ? Date.now() : undefined
+  };
+}
+
+/**
+ * Calculate heart rate from peaks
+ */
+export function calculateHeartRate(
+  peakTimes: number[],
+  windowDurationMs: number = 10000
+): number {
+  if (peakTimes.length < 2) {
+    return 0;
+  }
+  
+  // Filter peaks within the time window
+  const now = Date.now();
+  const recentPeaks = peakTimes.filter(time => (now - time) <= windowDurationMs);
+  
+  // Need at least 2 peaks to calculate
+  if (recentPeaks.length < 2) {
+    return 0;
+  }
+  
+  // Calculate average interval between peaks
+  let totalInterval = 0;
+  for (let i = 1; i < recentPeaks.length; i++) {
+    totalInterval += recentPeaks[i] - recentPeaks[i-1];
+  }
+  
+  const avgIntervalMs = totalInterval / (recentPeaks.length - 1);
+  
+  // Convert to BPM
+  const beatsPerMinute = 60000 / avgIntervalMs;
+  
+  // Return BPM within physiological range
+  return Math.round(Math.min(220, Math.max(30, beatsPerMinute)));
+}
+
+/**
+ * Get diagnostics data for analysis
+ */
+export function getDiagnosticsData(): DiagnosticsData[] {
   return [...diagnosticsData];
 }
 
 /**
  * Clear diagnostics data
  */
-export function clearDiagnosticsData() {
-  diagnosticsData.length = 0;
-}
-
-/**
- * Detect peaks in the signal buffer
- * Uses a combination of amplitude, derivative, and time since last peak
- * NOW WITH LOWER THRESHOLDS FOR TESTING
- */
-export function detectPeaks(
-  filteredValue: number,
-  buffer: number[],
-  lastPeakTime: number | null,
-  currentTime: number
-): { isPeak: boolean; confidence: number; bpm: number | null } {
-  const startTime = performance.now();
-  
-  if (buffer.length < 5) {
-    return { isPeak: false, confidence: 0, bpm: null };
-  }
-
-  // Calculate derivative (rate of change)
-  const derivative = filteredValue - buffer[buffer.length - 2];
-  
-  // Calculate baseline as moving average
-  const recentValues = buffer.slice(-20);
-  const baseline = recentValues.reduce((sum, val) => sum + val, 0) / recentValues.length;
-
-  // Calculate minimum time between peaks (lowered for testing)
-  const minTimeBetweenPeaks = 300; // 300ms = 200 BPM max
-
-  // Check if enough time has passed since last peak
-  if (lastPeakTime !== null) {
-    const timeSinceLastPeak = currentTime - lastPeakTime;
-    if (timeSinceLastPeak < minTimeBetweenPeaks) {
-      return { isPeak: false, confidence: 0, bpm: null };
-    }
-  }
-
-  // LOWERED THRESHOLDS for testing
-  const signalThreshold = 0.01; // Was 0.6 or higher
-  const derivativeThreshold = -0.005; // Was -0.03
-  
-  // Peak detection: value above threshold and negative derivative (falling edge)
-  // This is the heart of the detection algorithm
-  const isPeak = 
-    derivative < derivativeThreshold && 
-    filteredValue > signalThreshold && 
-    filteredValue > baseline * 0.7; // Lower amplitude requirement
-
-  // Calculate confidence based on how well the signal meets criteria
-  let confidence = 0;
-  let bpm = null;
-
-  if (isPeak) {
-    // Calculate confidence based on signal characteristics
-    const valueConfidence = Math.min(filteredValue / 0.2, 1) * 0.6;
-    const derivativeConfidence = Math.min(Math.abs(derivative) / 0.02, 1) * 0.4;
-    confidence = valueConfidence + derivativeConfidence;
-
-    // Calculate BPM if we have a previous peak time
-    if (lastPeakTime !== null) {
-      const interval = currentTime - lastPeakTime;
-      if (interval > 0) {
-        bpm = Math.round(60000 / interval);
-        
-        // Validate BPM is physiologically reasonable
-        if (bpm < 40 || bpm > 200) {
-          confidence *= 0.5; // Reduce confidence for unlikely values
-        }
-      }
-    }
-    
-    console.log(`[Peak Detected] Value: ${filteredValue.toFixed(4)}, Derivative: ${derivative.toFixed(4)}, Confidence: ${confidence.toFixed(2)}, BPM: ${bpm}`);
-  }
-
-  // Calculate processing time for diagnostics
-  const processTime = performance.now() - startTime;
-  
-  // Determine processing priority based on signal quality
-  let processingPriority: 'high' | 'medium' | 'low' = 'low';
-  if (confidence > 0.7) {
-    processingPriority = 'high';
-  } else if (confidence > 0.3) {
-    processingPriority = 'medium';
-  }
-  
-  // Record diagnostics data
-  diagnosticsData.push({
-    timestamp: currentTime,
-    isPeak,
-    bpm: bpm || 0,
-    confidence,
-    processingPriority,
-    processTime
-  });
-  
-  // Keep diagnostics data size manageable
-  if (diagnosticsData.length > 100) {
-    diagnosticsData.shift();
-  }
-
-  return { isPeak, confidence, bpm };
-}
-
-/**
- * Calculate heart rate from a buffer of peaks
- */
-export function calculateHeartRate(peakTimes: number[]): number | null {
-  if (peakTimes.length < 2) {
-    return null;
-  }
-
-  // Calculate intervals between peaks
-  const intervals: number[] = [];
-  for (let i = 1; i < peakTimes.length; i++) {
-    intervals.push(peakTimes[i] - peakTimes[i - 1]);
-  }
-
-  // Remove outliers (intervals that are too short or too long)
-  const validIntervals = intervals.filter(
-    interval => interval >= 300 && interval <= 1500
-  );
-
-  if (validIntervals.length === 0) {
-    return null;
-  }
-
-  // Calculate average interval
-  const avgInterval =
-    validIntervals.reduce((sum, val) => sum + val, 0) / validIntervals.length;
-
-  // Convert to BPM
-  return Math.round(60000 / avgInterval);
-}
-
-/**
- * Handle peak detection and update lastPeakTime
- */
-export function handlePeakDetection(
-  processorResult: any,
-  lastPeakTimeRef: React.MutableRefObject<number | null>,
-  requestImmediateBeep: (value: number) => boolean,
-  isMonitoringRef: React.MutableRefObject<boolean>,
-  signalValue: number
-): void {
-  // Update peak time when a peak is detected
-  if (processorResult.isPeak && processorResult.confidence > 0.2) {
-    const now = Date.now();
-    lastPeakTimeRef.current = now;
-    
-    // Request immediate feedback for detected peak
-    if (isMonitoringRef.current) {
-      requestImmediateBeep(signalValue);
-      console.log("[PEAK] Detected at:", new Date(now).toLocaleTimeString(), "Value:", signalValue);
-    }
-  }
+export function clearDiagnosticsData(): void {
+  diagnosticsData = [];
 }

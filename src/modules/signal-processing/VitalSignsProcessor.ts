@@ -4,7 +4,6 @@
  */
 
 import type { VitalSignsResult, RRIntervalData } from '../../types/vital-signs';
-import { createDiagnosticInfo, logDiagnostics } from './diagnostics';
 
 // Main vital signs processor 
 export class VitalSignsProcessor {
@@ -30,14 +29,6 @@ export class VitalSignsProcessor {
       if (Math.max(...variation) > 0.2) {
         arrhythmiaDetected = true;
         this.arrhythmiaCounter++;
-        
-        // Log arrhythmia detection
-        logDiagnostics(
-          'arrhythmia', 
-          'Arrhythmia detected', 
-          'warning', 
-          { variation: Math.max(...variation), intervals }
-        );
       }
     }
     
@@ -46,7 +37,6 @@ export class VitalSignsProcessor {
     const pressure = this.calculateBloodPressure(value, rrData);
     const glucose = this.calculateGlucose(value);
     const lipids = this.calculateLipids(value);
-    const hydration = this.calculateHydration(value);
     
     return {
       spo2,
@@ -56,7 +46,6 @@ export class VitalSignsProcessor {
         `NORMAL RHYTHM|${this.arrhythmiaCounter}`,
       glucose,
       lipids,
-      hydration,
       lastArrhythmiaData: arrhythmiaDetected ? {
         timestamp: Date.now(),
         rmssd: 0,
@@ -113,15 +102,6 @@ export class VitalSignsProcessor {
   }
   
   /**
-   * Calculate hydration level
-   */
-  private calculateHydration(ppgValue: number): number {
-    const baseHydration = 65; // Base hydration percentage
-    const variation = ppgValue * 15;
-    return Math.min(100, Math.max(40, Math.round(baseHydration + variation)));
-  }
-  
-  /**
    * Calculate lipid levels
    */
   private calculateLipids(ppgValue: number): { totalCholesterol: number, triglycerides: number } {
@@ -148,10 +128,13 @@ export class VitalSignsProcessor {
    * Process signal directly - no simulation
    * This method is added for compatibility with the new interface
    */
-  public processSignal(value: number, rrData?: RRIntervalData): VitalSignsResult {
+  public processSignal(value: number, rrData?: { intervals: number[], lastPeakTime: number | null }): VitalSignsResult {
     return this.process({
       value,
-      rrData
+      rrData: rrData ? { 
+        intervals: rrData.intervals,
+        lastPeakTime: rrData.lastPeakTime
+      } : undefined
     });
   }
 

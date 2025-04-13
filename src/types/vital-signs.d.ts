@@ -16,7 +16,6 @@ export interface VitalSignsResult {
     totalCholesterol: number;
     triglycerides: number;
   };
-  hydration: number;
   confidence?: {
     glucose: number;
     lipids: number;
@@ -24,17 +23,9 @@ export interface VitalSignsResult {
   };
   lastArrhythmiaData?: {
     timestamp: number;
-    rmssd?: number;
-    rrVariation?: number;
+    rmssd: number;
+    rrVariation: number;
   } | null;
-  calibration?: {
-    progress: {
-      heartRate: number;
-      spo2: number;
-      pressure: number;
-      arrhythmia: number;
-    }
-  };
 }
 
 /**
@@ -62,34 +53,7 @@ export interface ArrhythmiaProcessingResult {
   arrhythmiaStatus: string;
   lastArrhythmiaData: { 
     timestamp: number; 
-    rmssd?: number; 
-    rrVariation?: number; 
+    rmssd: number; 
+    rrVariation: number; 
   } | null;
-}
-
-/**
- * TimestampedPPGData interface for buffer usage
- */
-export interface TimestampedPPGData {
-  timestamp: number;
-  value: number;
-  time?: number; // For compatibility
-}
-
-/**
- * PPGDataPoint interface with required time property
- */
-export interface PPGDataPoint {
-  timestamp: number;
-  value: number;
-  time: number; // Required property
-}
-
-/**
- * SignalProcessor interface
- */
-export interface SignalProcessor {
-  processSignal(value: number): any;
-  reset(): void;
-  configure(options: SignalProcessingOptions): void;
 }
