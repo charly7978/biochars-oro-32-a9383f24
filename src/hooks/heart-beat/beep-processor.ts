@@ -1,20 +1,20 @@
 
-import { useState, useCallback, useRef } from 'react';
+import { useCallback } from 'react';
 
 export function useBeepProcessor() {
-  const pendingBeepsQueue = useRef<{time: number, value: number}[]>([]);
-  const beepProcessorTimeoutRef = useRef<number | null>(null);
-  const lastBeepTimeRef = useRef<number>(0);
+  const pendingBeepsQueue = { current: [] };
+  const beepProcessorTimeoutRef = { current: null };
+  const lastBeepTimeRef = { current: 0 };
   
   const MIN_BEEP_INTERVAL_MS = 500;
   
   const processBeepQueue = useCallback((
-    isMonitoringRef: React.MutableRefObject<boolean>,
-    lastSignalQualityRef: React.MutableRefObject<number>,
-    consecutiveWeakSignalsRef: React.MutableRefObject<number>,
-    MAX_CONSECUTIVE_WEAK_SIGNALS: number,
-    missedBeepsCounter: React.MutableRefObject<number>,
-    playBeep: (volume: number) => boolean | Promise<boolean>
+    isMonitoringRef,
+    lastSignalQualityRef,
+    consecutiveWeakSignalsRef,
+    MAX_CONSECUTIVE_WEAK_SIGNALS,
+    missedBeepsCounter,
+    playBeep
   ) => {
     // Todo el procesamiento de beeps ha sido eliminado
     // El sonido es manejado exclusivamente por PPGSignalMeter
@@ -24,14 +24,14 @@ export function useBeepProcessor() {
   }, []);
 
   const requestImmediateBeep = useCallback((
-    value: number,
-    isMonitoringRef: React.MutableRefObject<boolean>,
-    lastSignalQualityRef: React.MutableRefObject<number>,
-    consecutiveWeakSignalsRef: React.MutableRefObject<number>,
-    MAX_CONSECUTIVE_WEAK_SIGNALS: number,
-    missedBeepsCounter: React.MutableRefObject<number>,
-    playBeep: (volume: number) => boolean | Promise<boolean>
-  ): boolean => {
+    value,
+    isMonitoringRef,
+    lastSignalQualityRef,
+    consecutiveWeakSignalsRef,
+    MAX_CONSECUTIVE_WEAK_SIGNALS,
+    missedBeepsCounter,
+    playBeep
+  ) => {
     // Todo el código de beep ha sido eliminado
     // El sonido es manejado exclusivamente por PPGSignalMeter
     console.log("BeepProcessor: Beep completamente eliminado - sonido manejado exclusivamente por PPGSignalMeter");

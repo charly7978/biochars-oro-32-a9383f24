@@ -99,9 +99,9 @@ export function createWeakSignalResult(arrhythmiaCounter: number = 0): any {
  */
 export function handlePeakDetection(
   result: any, 
-  lastPeakTimeRef: React.MutableRefObject<number | null>,
+  lastPeakTimeRef: { current: number | null },
   requestBeepCallback: (value: number) => boolean,
-  isMonitoringRef: React.MutableRefObject<boolean>,
+  isMonitoringRef: { current: boolean },
   value: number
 ): void {
   const startTime = performance.now();

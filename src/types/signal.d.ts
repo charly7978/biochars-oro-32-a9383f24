@@ -6,15 +6,27 @@
 import { HeartBeatProcessor } from '../modules/HeartBeatProcessor';
 
 /**
+ * Types of vital signs that can be measured from signals
+ */
+export enum VitalSignType {
+  SPO2 = 'spo2',
+  BLOOD_PRESSURE = 'blood_pressure',
+  GLUCOSE = 'glucose',
+  HYDRATION = 'hydration',
+  CARDIAC = 'cardiac',
+  LIPIDS = 'lipids', // Kept for backward compatibility
+  HEARTBEAT = 'heartbeat'
+}
+
+/**
  * Representa una señal PPG procesada
  */
 export interface ProcessedSignal {
   timestamp: number;        // Marca de tiempo de la señal
-  rawValue: number;         // Valor crudo del sensor
   filteredValue: number;    // Valor filtrado para análisis
   quality: number;          // Calidad de la señal (0-100)
   fingerDetected: boolean;  // Si se detecta un dedo sobre el sensor
-  roi: {                    // Región de interés en la imagen
+  roi?: {                   // Región de interés en la imagen (opcional)
     x: number;
     y: number;
     width: number;
@@ -54,8 +66,8 @@ export interface ProcessingError {
  */
 export interface SignalProcessor {
   initialize: () => Promise<void>;                      // Inicialización
-  start: () => void;                                    // Iniciar procesamiento
-  stop: () => void;                                     // Detener procesamiento
+  start: () => void;                                     // Iniciar procesamiento
+  stop: () => void;                                      // Detener procesamiento
   calibrate?: () => Promise<boolean>;                   // Calibrar el procesador
   onSignalReady?: (signal: ProcessedSignal) => void;    // Callback de señal lista
   onError?: (error: ProcessingError) => void;           // Callback de error
