@@ -1,15 +1,12 @@
-
 /**
- * Base class for all specialized channels
- * Provides common functionality and structure for channel-specific optimizations
+ * Base class for all specialized signal channels
+ * Provides common functionality for signal optimization
  */
-
-import { ChannelFeedback } from '../../../types/vital-sign-types';
-import { VitalSignType } from '../../../types/vital-sign-types';
+import { VitalSignType, OptimizedSignalChannel, ChannelFeedback } from '../../../types/signal';
 import { v4 as uuidv4 } from 'uuid';
 
 /**
- * Configuration options for specialized channels
+ * Configuration for a specialized channel
  */
 export interface ChannelConfig {
   initialAmplification: number;
@@ -19,71 +16,66 @@ export interface ChannelConfig {
 }
 
 /**
- * Interface for OptimizedSignalChannel
- */
-export interface OptimizedSignalChannel {
-  id: string;                     // Unique identifier
-  type: VitalSignType;            // Type of vital sign
-  processValue: (value: number) => number;  // Process value for this specific channel
-  applyFeedback: (feedback: ChannelFeedback) => void;  // Apply feedback from algorithm
-  getQuality: () => number;       // Get channel quality (0-1)
-  reset: () => void;              // Reset channel state
-  getAmplification: () => number; // Get amplification factor
-  getFilterStrength: () => number; // Get filter strength
-}
-
-/**
- * Base class for specialized signal channels
- * Each specialized channel optimizes the signal for a specific vital sign
+ * Abstract base class for specialized signal channels
  */
 export abstract class SpecializedChannel implements OptimizedSignalChannel {
+  // Channel identification
   public readonly id: string;
-  public readonly type: VitalSignType;
-  protected amplificationFactor: number;
-  protected filterStrength: number;
-  protected frequencyBandMin: number;
-  protected frequencyBandMax: number;
-  protected quality: number = 0;
+  public readonly type: VitalSignType;  // Changed from protected to public to match interface
+  
+  // Signal processing parameters
+  private amplification: number;
+  private filterStrength: number;
+  private frequencyBandMin: number;
+  private frequencyBandMax: number;
+  
+  // Signal quality tracking
+  private quality: number = 0;
   protected recentValues: number[] = [];
-  protected readonly MAX_RECENT_VALUES = 100;
-  protected lastFeedback: ChannelFeedback | null = null;
-  protected feedbackHistory: ChannelFeedback[] = [];
-  protected readonly MAX_FEEDBACK_HISTORY = 20;
+  private readonly MAX_RECENT_VALUES = 30;
   
   /**
    * Constructor
-   * @param type Type of vital sign this channel processes
-   * @param config Configuration options
    */
   constructor(type: VitalSignType, config: ChannelConfig) {
-    this.id = `${type}-${uuidv4().substring(0, 8)}`;
+    this.id = `${type}-channel-${uuidv4().substring(0, 8)}`;
     this.type = type;
-    this.amplificationFactor = config.initialAmplification;
+    
+    // Set initial parameters
+    this.amplification = config.initialAmplification;
     this.filterStrength = config.initialFilterStrength;
     this.frequencyBandMin = config.frequencyBandMin;
     this.frequencyBandMax = config.frequencyBandMax;
     
-    console.log(`${this.typeToString()} Channel initialized with ID: ${this.id}`);
+    console.log(`${this.typeToString()} Channel: Initialized with amplification=${this.amplification}, filter=${this.filterStrength}`);
   }
   
   /**
-   * Process a value for this specific channel
-   * @param value Raw value to process
-   * @returns Processed value
+   * Process a value through the channel
    */
   public processValue(value: number): number {
-    // Apply common processing first
-    const filteredValue = this.applyFilter(value);
-    const amplifiedValue = this.applyAmplification(filteredValue);
-    const optimizedValue = this.specializedProcessing(amplifiedValue);
+    // Apply general optimizations
+    let optimizedValue = value;
     
-    // Add to recent values
+    // Apply amplification
+    optimizedValue *= this.amplification;
+    
+    // Apply channel-specific optimization
+    optimizedValue = this.applyChannelSpecificOptimization(optimizedValue);
+    
+    // Apply simple low-pass filter based on filter strength
+    if (this.recentValues.length > 0) {
+      const lastValue = this.recentValues[this.recentValues.length - 1];
+      optimizedValue = lastValue * this.filterStrength + optimizedValue * (1 - this.filterStrength);
+    }
+    
+    // Keep track of recent values
     this.recentValues.push(optimizedValue);
     if (this.recentValues.length > this.MAX_RECENT_VALUES) {
       this.recentValues.shift();
     }
     
-    // Update quality indicator
+    // Update quality estimate
     this.updateQuality();
     
     return optimizedValue;
@@ -91,92 +83,50 @@ export abstract class SpecializedChannel implements OptimizedSignalChannel {
   
   /**
    * Apply channel-specific optimization
-   * Must be implemented by each specialized channel
+   * Must be implemented by subclasses
    */
-  protected abstract specializedProcessing(value: number): number;
+  protected abstract applyChannelSpecificOptimization(value: number): number;
   
   /**
-   * Apply filtering to the value
-   * @param value Value to filter
-   * @returns Filtered value
-   */
-  protected applyFilter(value: number): number {
-    // Base implementation uses exponential moving average
-    if (this.recentValues.length === 0) {
-      return value;
-    }
-    
-    const lastValue = this.recentValues[this.recentValues.length - 1];
-    return lastValue * (1 - this.filterStrength) + value * this.filterStrength;
-  }
-  
-  /**
-   * Apply amplification to the value
-   * @param value Value to amplify
-   * @returns Amplified value
-   */
-  protected applyAmplification(value: number): number {
-    return value * this.amplificationFactor;
-  }
-  
-  /**
-   * Apply feedback from algorithm to adjust channel parameters
-   * @param feedback Feedback information
+   * Apply feedback from vital sign algorithm
    */
   public applyFeedback(feedback: ChannelFeedback): void {
-    // Store feedback
-    this.lastFeedback = feedback;
-    this.feedbackHistory.push(feedback);
-    if (this.feedbackHistory.length > this.MAX_FEEDBACK_HISTORY) {
-      this.feedbackHistory.shift();
-    }
-    
-    // Apply suggested adjustments
-    if (feedback.suggestedAdjustments) {
-      const adjustments = feedback.suggestedAdjustments;
-      
-      // Update amplification if suggested
-      if (adjustments.amplificationFactor !== undefined) {
-        // Cap adjustment to +/- 10%
-        const maxChange = 0.1;
-        const currentValue = this.amplificationFactor;
-        const targetValue = adjustments.amplificationFactor;
-        const change = Math.min(Math.abs(targetValue - currentValue), currentValue * maxChange);
-        this.amplificationFactor = currentValue + (targetValue > currentValue ? change : -change);
-      }
-      
-      // Update filter strength if suggested
-      if (adjustments.filterStrength !== undefined) {
-        // Ensure filter strength stays between 0.1 and 0.95
-        this.filterStrength = Math.max(0.1, Math.min(0.95, adjustments.filterStrength));
-      }
-    }
-  }
-  
-  /**
-   * Update quality indicator based on recent values
-   */
-  protected updateQuality(): void {
-    if (this.recentValues.length < 5) {
-      this.quality = 0.5; // Default quality
+    // Verify this feedback is for this channel
+    if (feedback.channelId !== this.id) {
+      console.warn(`${this.typeToString()} Channel: Received feedback for wrong channel (${feedback.channelId})`);
       return;
     }
     
-    // Simple quality metric based on variance
-    // Real physiological signals have controlled variance
-    const mean = this.recentValues.reduce((sum, val) => sum + val, 0) / this.recentValues.length;
-    const variance = this.recentValues.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / this.recentValues.length;
+    console.log(`${this.typeToString()} Channel: Applying feedback - quality=${feedback.signalQuality.toFixed(2)}`);
     
-    // Quality decreases if variance is too high or too low
-    const optimalVariance = 0.01;
-    const varianceScore = Math.min(1, Math.max(0, 1 - Math.abs(variance - optimalVariance) / optimalVariance));
+    // Apply suggested adjustments if provided
+    const adjustments = feedback.suggestedAdjustments;
     
-    // Update quality (with smoothing)
-    this.quality = this.quality * 0.7 + varianceScore * 0.3;
+    if (adjustments.amplificationFactor !== undefined) {
+      this.amplification *= adjustments.amplificationFactor;
+      // Ensure amplification stays in reasonable bounds
+      this.amplification = Math.max(0.5, Math.min(3.0, this.amplification));
+    }
+    
+    if (adjustments.filterStrength !== undefined) {
+      this.filterStrength = adjustments.filterStrength;
+      // Ensure filter strength stays in valid range
+      this.filterStrength = Math.max(0, Math.min(0.95, this.filterStrength));
+    }
+    
+    if (adjustments.frequencyRangeMin !== undefined) {
+      this.frequencyBandMin = adjustments.frequencyRangeMin;
+    }
+    
+    if (adjustments.frequencyRangeMax !== undefined) {
+      this.frequencyBandMax = adjustments.frequencyRangeMax;
+    }
+    
+    console.log(`${this.typeToString()} Channel: New parameters - amplification=${this.amplification.toFixed(2)}, filter=${this.filterStrength.toFixed(2)}`);
   }
   
   /**
-   * Get the current quality indicator
+   * Get the channel's quality estimate
    */
   public getQuality(): number {
     return this.quality;
@@ -187,29 +137,41 @@ export abstract class SpecializedChannel implements OptimizedSignalChannel {
    */
   public reset(): void {
     this.recentValues = [];
-    this.quality = 0.5;
-    this.lastFeedback = null;
-    this.feedbackHistory = [];
+    this.quality = 0;
+    console.log(`${this.typeToString()} Channel: Reset`);
   }
   
   /**
-   * Get the current amplification factor
+   * Update quality estimate based on recent values
    */
-  public getAmplification(): number {
-    return this.amplificationFactor;
+  private updateQuality(): void {
+    if (this.recentValues.length < 5) {
+      this.quality = 0;
+      return;
+    }
+    
+    // Calculate signal quality based on stability and amplitude
+    const recent = this.recentValues.slice(-10);
+    const min = Math.min(...recent);
+    const max = Math.max(...recent);
+    const range = max - min;
+    
+    // Signal should have some amplitude
+    const amplitudeFactor = Math.min(1, range * 5);
+    
+    // Calculate stability based on variance
+    const mean = recent.reduce((sum, val) => sum + val, 0) / recent.length;
+    const variance = recent.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / recent.length;
+    const stabilityFactor = Math.max(0, 1 - Math.min(1, variance * 10));
+    
+    // Combine factors for overall quality
+    this.quality = (amplitudeFactor * 0.7 + stabilityFactor * 0.3);
   }
   
   /**
-   * Get the current filter strength
-   */
-  public getFilterStrength(): number {
-    return this.filterStrength;
-  }
-  
-  /**
-   * Convert channel type to string for logging
+   * Convert channel type to readable string
    */
   protected typeToString(): string {
-    return this.type.toString();
+    return this.type.charAt(0).toUpperCase() + this.type.slice(1);
   }
 }

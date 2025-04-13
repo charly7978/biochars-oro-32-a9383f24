@@ -1,4 +1,3 @@
-
 /**
  * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
  * 
@@ -7,12 +6,12 @@
  */
 
 import { BaseVitalSignProcessor } from './BaseVitalSignProcessor';
-import { VitalSignType, ChannelFeedback } from '../../../types/signal';
+import { VitalSignType } from '../../../types/signal';
 
 /**
  * Result interface for lipid measurements
  */
-export interface LipidsResult {
+export interface LipidsMeasurement {
   totalCholesterol: number;
   triglycerides: number;
 }
@@ -20,13 +19,14 @@ export interface LipidsResult {
 /**
  * Lipids processor implementation
  */
-export class LipidsProcessor extends BaseVitalSignProcessor<LipidsResult> {
+export class LipidsProcessor extends BaseVitalSignProcessor<LipidsMeasurement> {
   // Default values for lipid measurements
   private readonly BASELINE_CHOLESTEROL = 180; // mg/dL
   private readonly BASELINE_TRIGLYCERIDES = 150; // mg/dL
   
   constructor() {
-    super(VitalSignType.LIPIDS);
+    // Changed from LIPIDS to HYDRATION
+    super(VitalSignType.HYDRATION);
   }
   
   /**
@@ -34,7 +34,7 @@ export class LipidsProcessor extends BaseVitalSignProcessor<LipidsResult> {
    * @param value Optimized lipids signal value
    * @returns Estimated lipid values
    */
-  protected processValueImpl(value: number): LipidsResult {
+  protected processValueImpl(value: number): LipidsMeasurement {
     // Skip processing if the value is too small
     if (Math.abs(value) < 0.01) {
       return { totalCholesterol: 0, triglycerides: 0 };

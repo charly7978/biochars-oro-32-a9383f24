@@ -1,90 +1,131 @@
-
 /**
  * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
  * 
- * Type definitions for signal processing
+ * Definiciones de tipos para procesamiento de señal
  */
 
+import { VitalSignType } from '../../types/signal';
+
 /**
- * Options for signal processing
+ * Opciones de configuración para procesadores de señal
  */
 export interface SignalProcessingOptions {
-  // Signal amplification factor
+  // Factor de amplificación de señal
   amplificationFactor?: number;
   
-  // Filter strength
+  // Fuerza de filtrado
   filterStrength?: number;
   
-  // Quality threshold
+  // Umbral de calidad de señal
   qualityThreshold?: number;
   
-  // Finger detection sensitivity
+  // Sensibilidad de detección de dedo
   fingerDetectionSensitivity?: number;
   
-  // New parameters for adaptive control
+  // Nuevos parámetros para control adaptativo
   useAdaptiveControl?: boolean;
   
-  // Use prediction to improve quality
+  // Usar predicción para mejorar calidad
   qualityEnhancedByPrediction?: boolean;
   
-  // Prediction horizon
+  // Horizonte de predicción
   predictionHorizon?: number;
   
-  // Adaptation rate
+  // Tasa de adaptación
   adaptationRate?: number;
 }
 
+// Export the enhanced VitalSignType for use in other modules
+export { VitalSignType };
+
 /**
- * Processed PPG signal
+ * Interfaz común para todos los procesadores de señal
+ */
+export interface SignalProcessor<T> {
+  // Procesa un valor de señal y devuelve un resultado
+  processSignal(value: number): T;
+  
+  // Configuración del procesador
+  configure(options: SignalProcessingOptions): void;
+  
+  // Reinicia el procesador
+  reset(): void;
+}
+
+/**
+ * Resultado del procesamiento de señal PPG
  */
 export interface ProcessedPPGSignal {
-  // Signal timestamp
+  // Marca de tiempo de la señal
   timestamp: number;
   
-  // Raw value
+  // Valor sin procesar
   rawValue: number;
   
-  // Filtered value
+  // Valor filtrado
   filteredValue: number;
   
-  // Normalized value
+  // Valor normalizado
   normalizedValue: number;
   
-  // Amplified value
+  // Valor amplificado
   amplifiedValue: number;
   
-  // Signal quality (0-100)
+  // Calidad de la señal (0-100)
   quality: number;
   
-  // Finger detection indicator
+  // Indicador de detección de dedo
   fingerDetected: boolean;
   
-  // Signal strength
+  // Fuerza de la señal
   signalStrength: number;
 }
 
 /**
- * Processed heartbeat signal
+ * Resultado del procesamiento de señal cardíaca
  */
 export interface ProcessedHeartbeatSignal {
-  // Signal timestamp
+  // Marca de tiempo de la señal
   timestamp: number;
   
-  // Signal value
+  // Valor de la señal
   value: number;
   
-  // Peak detection
+  // Indicador de detección de pico
   isPeak: boolean;
   
-  // Peak confidence (0-1)
+  // Confianza en la detección del pico (0-1)
   peakConfidence: number;
   
-  // Instantaneous BPM
+  // BPM instantáneo (basado en intervalo RR)
   instantaneousBPM: number | null;
   
-  // RR interval in ms
+  // Intervalo RR en ms
   rrInterval: number | null;
   
-  // Heart rate variability
+  // Variabilidad del ritmo cardíaco
   heartRateVariability: number | null;
+}
+
+/**
+ * Tipos de procesadores disponibles
+ */
+export enum ProcessorType {
+  PPG = 'ppg',
+  HEARTBEAT = 'heartbeat'
+}
+
+/**
+ * Opciones para el sistema de procesamiento completo
+ */
+export interface ProcessingSystemOptions extends SignalProcessingOptions {
+  // Tipo de procesador a utilizar
+  processorType?: ProcessorType;
+  
+  // Frecuencia de muestreo objetivo
+  targetSampleRate?: number;
+  
+  // Funciones de callback
+  onResultsReady?: (result: ProcessedPPGSignal | ProcessedHeartbeatSignal) => void;
+  onError?: (error: Error) => void;
 }

@@ -4,21 +4,26 @@
  */
 
 /**
- * Standardized result format for vital signs
+ * Interface for vital signs measurement results
+ * Direct measurement only, no simulation
  */
 export interface VitalSignsResult {
   spo2: number;
   pressure: string;
   arrhythmiaStatus: string;
   glucose: number;
-  hydration: number;
   lipids: {
     totalCholesterol: number;
-    triglycerides: number;
+    hydrationPercentage: number;  // Changed from triglycerides to hydrationPercentage
+  };
+  confidence?: {
+    glucose: number;
+    lipids: number;  // Kept as 'lipids' for backward compatibility
+    overall: number;
   };
   lastArrhythmiaData?: {
     timestamp: number;
-    rmssd?: number;
-    rrVariation?: number;
+    rmssd: number;
+    rrVariation: number;
   } | null;
 }

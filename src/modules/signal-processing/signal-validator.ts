@@ -1,193 +1,222 @@
 
 /**
- * Signal validation utilities
+ * Signal validation module
+ * Provides consistent validation of signals across all processors
  */
-import { SignalValidationResult, SignalValidationConfig } from '../../types/signal';
+import { 
+  SignalValidationResult, 
+  SignalValidationConfig,
+  PPGDataPoint,
+  TimestampedPPGData
+} from '../../types/signal';
 
-/**
- * Default validation configuration
- */
-const DEFAULT_VALIDATION_CONFIG: SignalValidationConfig = {
+// Default validation configuration
+const DEFAULT_CONFIG: SignalValidationConfig = {
   minAmplitude: 0.01,
   maxAmplitude: 5.0,
   minVariance: 0.00001,
   maxVariance: 1.0,
-  requiredSampleSize: 5,
-  maxTimeGap: 5000 // ms
+  requiredSampleSize: 3
 };
 
 /**
- * Validate signal data for quality and integrity
+ * Provides signal validation functionality
  */
-export function validateSignalData(
-  values: number[], 
-  config?: Partial<SignalValidationConfig>
-): SignalValidationResult {
-  // Merge with default config
-  const validationConfig = { ...DEFAULT_VALIDATION_CONFIG, ...config };
-  
-  // Check if enough samples
-  if (values.length < validationConfig.requiredSampleSize) {
-    return {
-      isValid: false,
-      reason: `Insufficient samples: ${values.length} < ${validationConfig.requiredSampleSize}`,
-      validationId: 'INSUFFICIENT_SAMPLES'
-    };
-  }
-  
-  // Calculate basic statistics
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-  const amplitude = max - min;
-  
-  // Check amplitude
-  if (amplitude < validationConfig.minAmplitude) {
-    return {
-      isValid: false,
-      reason: `Amplitude too low: ${amplitude} < ${validationConfig.minAmplitude}`,
-      validationId: 'LOW_AMPLITUDE'
-    };
-  }
-  
-  if (validationConfig.maxAmplitude && amplitude > validationConfig.maxAmplitude) {
-    return {
-      isValid: false,
-      reason: `Amplitude too high: ${amplitude} > ${validationConfig.maxAmplitude}`,
-      validationId: 'HIGH_AMPLITUDE'
-    };
-  }
-  
-  // Calculate variance
-  const mean = values.reduce((sum, val) => sum + val, 0) / values.length;
-  const variance = values.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / values.length;
-  
-  // Check variance
-  if (variance < validationConfig.minVariance) {
-    return {
-      isValid: false,
-      reason: `Variance too low: ${variance} < ${validationConfig.minVariance}`,
-      validationId: 'LOW_VARIANCE'
-    };
-  }
-  
-  if (validationConfig.maxVariance && variance > validationConfig.maxVariance) {
-    return {
-      isValid: false,
-      reason: `Variance too high: ${variance} > ${validationConfig.maxVariance}`,
-      validationId: 'HIGH_VARIANCE'
-    };
-  }
-  
-  // All checks passed
-  return {
-    isValid: true,
-    validationId: 'SIGNAL_VALID',
-    timestamp: Date.now()
-  };
-}
+export class SignalValidator {
+  private config: SignalValidationConfig;
 
-/**
- * Validate time gaps between samples
- */
-export function validateSampleTiming(
-  timestamps: number[],
-  maxGap: number = DEFAULT_VALIDATION_CONFIG.maxTimeGap
-): SignalValidationResult {
-  if (timestamps.length < 2) {
-    return { 
+  constructor(config?: Partial<SignalValidationConfig>) {
+    this.config = {
+      ...DEFAULT_CONFIG,
+      ...config
+    };
+  }
+
+  /**
+   * Validate a single PPG value
+   */
+  public validatePPGValue(value: number): SignalValidationResult {
+    // Check if value is a valid number
+    if (typeof value !== 'number' || isNaN(value)) {
+      return {
+        isValid: false,
+        errorCode: 'INVALID_VALUE_TYPE',
+        errorMessage: 'PPG value must be a valid number'
+      };
+    }
+
+    // Check if value is within amplitude range
+    if (value < this.config.minAmplitude || value > this.config.maxAmplitude) {
+      return {
+        isValid: false,
+        errorCode: 'AMPLITUDE_OUT_OF_RANGE',
+        errorMessage: `PPG value ${value} is outside allowed range [${this.config.minAmplitude}, ${this.config.maxAmplitude}]`,
+        diagnosticInfo: {
+          receivedValue: value,
+          allowedRange: [this.config.minAmplitude, this.config.maxAmplitude]
+        }
+      };
+    }
+
+    return { isValid: true };
+  }
+
+  /**
+   * Validate a PPG data point
+   */
+  public validatePPGDataPoint(dataPoint: PPGDataPoint): SignalValidationResult {
+    // Ensure required properties exist
+    if (dataPoint.timestamp === undefined || dataPoint.value === undefined || dataPoint.time === undefined) {
+      return {
+        isValid: false,
+        errorCode: 'MISSING_REQUIRED_PROPERTIES',
+        errorMessage: 'PPG data point missing required properties',
+        diagnosticInfo: {
+          receivedProperties: Object.keys(dataPoint),
+          requiredProperties: ['timestamp', 'value', 'time']
+        }
+      };
+    }
+
+    // Validate the value
+    const valueValidation = this.validatePPGValue(dataPoint.value);
+    if (!valueValidation.isValid) {
+      return valueValidation;
+    }
+
+    // Validate timestamp is reasonable (not in the future, not too old)
+    const now = Date.now();
+    if (dataPoint.timestamp > now + 1000) { // Allow 1 second of clock skew
+      return {
+        isValid: false,
+        errorCode: 'TIMESTAMP_IN_FUTURE',
+        errorMessage: 'PPG data point timestamp is in the future',
+        diagnosticInfo: {
+          timestamp: dataPoint.timestamp,
+          currentTime: now,
+          difference: dataPoint.timestamp - now
+        }
+      };
+    }
+
+    // Check if timestamp is too old (more than 1 minute)
+    if (now - dataPoint.timestamp > 60000) {
+      return {
+        isValid: false,
+        errorCode: 'TIMESTAMP_TOO_OLD',
+        errorMessage: 'PPG data point timestamp is too old',
+        diagnosticInfo: {
+          timestamp: dataPoint.timestamp,
+          currentTime: now,
+          ageInSeconds: (now - dataPoint.timestamp) / 1000
+        }
+      };
+    }
+
+    return { isValid: true };
+  }
+
+  /**
+   * Validate a batch of PPG data
+   */
+  public validatePPGDataBatch(dataPoints: PPGDataPoint[]): SignalValidationResult {
+    // Check if we have enough data points
+    if (dataPoints.length < this.config.requiredSampleSize) {
+      return {
+        isValid: false,
+        errorCode: 'INSUFFICIENT_DATA_POINTS',
+        errorMessage: `Not enough data points (${dataPoints.length}/${this.config.requiredSampleSize})`,
+        diagnosticInfo: {
+          receivedCount: dataPoints.length,
+          requiredCount: this.config.requiredSampleSize
+        }
+      };
+    }
+
+    // Validate each data point
+    for (let i = 0; i < dataPoints.length; i++) {
+      const result = this.validatePPGDataPoint(dataPoints[i]);
+      if (!result.isValid) {
+        return {
+          ...result,
+          errorMessage: `Data point at index ${i}: ${result.errorMessage}`
+        };
+      }
+    }
+
+    // Check variance of values (to detect constant signals)
+    const values = dataPoints.map(p => p.value);
+    const variance = this.calculateVariance(values);
+    
+    if (variance < this.config.minVariance) {
+      return {
+        isValid: false,
+        errorCode: 'VARIANCE_TOO_LOW',
+        errorMessage: 'Signal variance is too low, possibly a constant signal',
+        diagnosticInfo: {
+          variance,
+          minAllowedVariance: this.config.minVariance,
+          values
+        }
+      };
+    }
+
+    if (variance > this.config.maxVariance) {
+      return {
+        isValid: false,
+        errorCode: 'VARIANCE_TOO_HIGH',
+        errorMessage: 'Signal variance is too high, possibly noise',
+        diagnosticInfo: {
+          variance,
+          maxAllowedVariance: this.config.maxVariance,
+          values
+        }
+      };
+    }
+
+    // All validations passed
+    return {
       isValid: true,
-      validationId: 'INSUFFICIENT_TIMESTAMPS'
+      diagnosticInfo: {
+        sampleSize: dataPoints.length,
+        variance,
+        range: [Math.min(...values), Math.max(...values)]
+      }
     };
   }
-  
-  // Check for too large gaps
-  for (let i = 1; i < timestamps.length; i++) {
-    const gap = timestamps[i] - timestamps[i - 1];
+
+  /**
+   * Calculate variance of an array of numbers
+   */
+  private calculateVariance(values: number[]): number {
+    if (values.length === 0) return 0;
     
-    if (gap > maxGap) {
-      return {
-        isValid: false,
-        reason: `Time gap too large: ${gap}ms > ${maxGap}ms`,
-        validationId: 'LARGE_TIME_GAP',
-        timestamp: timestamps[i]
-      };
-    }
+    const mean = values.reduce((sum, val) => sum + val, 0) / values.length;
+    const squaredDiffs = values.map(val => Math.pow(val - mean, 2));
+    const variance = squaredDiffs.reduce((sum, val) => sum + val, 0) / values.length;
     
-    if (gap < 0) {
-      return {
-        isValid: false,
-        reason: `Negative time gap: ${gap}ms`,
-        validationId: 'NEGATIVE_TIME_GAP',
-        timestamp: timestamps[i]
-      };
-    }
+    return variance;
   }
-  
-  return {
-    isValid: true,
-    validationId: 'TIMING_VALID',
-    timestamp: Date.now()
-  };
+
+  /**
+   * Update validation configuration
+   */
+  public updateConfig(config: Partial<SignalValidationConfig>): void {
+    this.config = {
+      ...this.config,
+      ...config
+    };
+  }
+
+  /**
+   * Get current configuration
+   */
+  public getConfig(): SignalValidationConfig {
+    return { ...this.config };
+  }
 }
 
-/**
- * Signal validator interface
- */
-export interface SignalValidator {
-  validateSignalData(values: number[]): SignalValidationResult;
-  validateSampleTiming(timestamps: number[]): SignalValidationResult;
-  validatePPGDataPoint(point: any): SignalValidationResult;
-  setConfig(config: Partial<SignalValidationConfig>): void;
-}
+// Export factory function for easy access
+export const createSignalValidator = (config?: Partial<SignalValidationConfig>) => 
+  new SignalValidator(config);
 
-/**
- * Create a signal validator instance
- */
-export function createSignalValidator(
-  config?: Partial<SignalValidationConfig>
-): SignalValidator {
-  let validationConfig = { ...DEFAULT_VALIDATION_CONFIG, ...config };
-  
-  return {
-    validateSignalData: (values: number[]) => 
-      validateSignalData(values, validationConfig),
-    
-    validateSampleTiming: (timestamps: number[]) => 
-      validateSampleTiming(timestamps, validationConfig.maxTimeGap),
-    
-    validatePPGDataPoint: (point: any): SignalValidationResult => {
-      // Check if point has required properties
-      if (!point || typeof point !== 'object') {
-        return {
-          isValid: false,
-          reason: 'Invalid point object',
-          validationId: 'INVALID_POINT'
-        };
-      }
-      
-      // Check required fields
-      if (typeof point.value !== 'number') {
-        return {
-          isValid: false,
-          reason: 'Missing or invalid value field',
-          validationId: 'MISSING_VALUE'
-        };
-      }
-      
-      // Check for timestamp or time
-      if (typeof point.timestamp !== 'number' && typeof point.time !== 'number') {
-        return {
-          isValid: false,
-          reason: 'Missing timestamp or time field',
-          validationId: 'MISSING_TIMESTAMP'
-        };
-      }
-      
-      return { isValid: true, validationId: 'POINT_VALID' };
-    },
-    
-    setConfig: (config: Partial<SignalValidationConfig>) => {
-      validationConfig = { ...validationConfig, ...config };
-    }
-  };
-}

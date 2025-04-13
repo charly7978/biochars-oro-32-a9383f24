@@ -4,7 +4,34 @@
  */
 
 /**
- * RR interval data for cardiac measurements
+ * Interface for R-R interval analysis results.
+ * Contains data about heart rate variability metrics and potential arrhythmia detection
+ * based on DIRECT measurements only.
+ */
+export interface RRAnalysisResult {
+  /**
+   * Root Mean Square of Successive Differences - a measure of heart rate variability
+   */
+  rmssd: number;
+  
+  /**
+   * Relative variation in RR intervals
+   */
+  rrVariation: number;
+  
+  /**
+   * Timestamp when the analysis was performed
+   */
+  timestamp: number;
+  
+  /**
+   * Boolean flag indicating whether an arrhythmia was detected
+   */
+  isArrhythmia: boolean;
+}
+
+/**
+ * Interface for RR interval data
  */
 export interface RRIntervalData {
   intervals: number[];
@@ -12,47 +39,13 @@ export interface RRIntervalData {
 }
 
 /**
- * Arrhythmia processing result
+ * Interface for arrhythmia processing result
  */
 export interface ArrhythmiaProcessingResult {
   arrhythmiaStatus: string;
-  lastArrhythmiaData: {
-    timestamp: number;
-    rmssd?: number;
-    rrVariation?: number;
+  lastArrhythmiaData: { 
+    timestamp: number; 
+    rmssd: number; 
+    rrVariation: number; 
   } | null;
-}
-
-/**
- * Arrhythmia pattern type
- */
-export enum ArrhythmiaPatternType {
-  NORMAL = 'normal',
-  PREMATURE_BEAT = 'premature_beat',
-  MISSED_BEAT = 'missed_beat',
-  IRREGULAR_RHYTHM = 'irregular_rhythm',
-  TACHYCARDIA = 'tachycardia',
-  BRADYCARDIA = 'bradycardia'
-}
-
-/**
- * Arrhythmia detection result
- */
-export interface ArrhythmiaDetectionResult {
-  isArrhythmia: boolean;
-  patternType: ArrhythmiaPatternType;
-  confidence: number;
-  rmssd?: number;
-  rrVariation?: number;
-  timestamp: number;
-}
-
-/**
- * Arrhythmia detection window
- */
-export interface ArrhythmiaWindow {
-  start: number;
-  end: number;
-  type?: ArrhythmiaPatternType;
-  strength?: number;
 }
