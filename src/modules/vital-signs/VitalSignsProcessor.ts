@@ -169,7 +169,6 @@ export class VitalSignsProcessor {
 
   /**
    * Reset the processor to ensure a clean state
-   * No reference values or simulations
    */
   public reset(): VitalSignsResult | null {
     this.spo2Processor.reset();
