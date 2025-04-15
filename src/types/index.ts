@@ -1,16 +1,19 @@
 
 /**
- * Central export for all type definitions
- * Import types from here instead of individual files
+ * Re-export all types from their respective modules
  */
 
-// Export all vital sign types
-export * from './vital-signs';
-
-// Export signal types
+// Re-export signal types
 export * from './signal';
 
-// Export screen orientation types
-export * from './screen-orientation';
+// Re-export vital signs types
+export * from './vital-signs';
 
-// Note: media-stream.d.ts defines global interfaces and doesn't export anything
+// Re-export signal processing types
+export * from './signal-processing';
+
+// Re-export using 'export type'
+export type { SignalProcessingOptions } from './signal-processing';
+export type { VitalSignsResult } from './vital-signs';
+export type { RRIntervalData } from './vital-signs';
+

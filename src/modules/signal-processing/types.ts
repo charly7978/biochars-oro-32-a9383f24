@@ -37,7 +37,7 @@ export interface SignalProcessingOptions {
 /**
  * Interfaz común para todos los procesadores de señal
  */
-export interface SignalProcessor<T> {
+export interface ISignalProcessor<T> {
   // Procesa un valor de señal y devuelve un resultado
   processSignal(value: number): T;
   
@@ -47,6 +47,9 @@ export interface SignalProcessor<T> {
   // Reinicia el procesador
   reset(): void;
 }
+
+// For backward compatibility
+export type SignalProcessor<T> = ISignalProcessor<T>;
 
 /**
  * Resultado del procesamiento de señal PPG
@@ -77,9 +80,39 @@ export interface ProcessedPPGSignal {
   signalStrength: number;
 }
 
-/**
- * Resultado del procesamiento de señal cardíaca
- */
+// Add missing types
+export interface OptimizedSignalDistributor {
+  start(): void;
+  stop(): void;
+  processSignal(value: number): Record<string, number>;
+  addChannel(type: string): void;
+  applyFeedback(channelType: string, feedback: any): void;
+  getDiagnostics(): Record<string, any>;
+}
+
+export interface PPGSignalProcessor extends ISignalProcessor<any> {}
+export interface HeartbeatProcessor extends ISignalProcessor<any> {}
+
+// Tipos de procesadores disponibles
+export enum ProcessorType {
+  PPG = 'ppg',
+  HEARTBEAT = 'heartbeat'
+}
+
+// Opciones para el sistema de procesamiento completo
+export interface ProcessingSystemOptions extends SignalProcessingOptions {
+  // Tipo de procesador a utilizar
+  processorType?: ProcessorType;
+  
+  // Frecuencia de muestreo objetivo
+  targetSampleRate?: number;
+  
+  // Funciones de callback
+  onResultsReady?: (result: ProcessedPPGSignal | ProcessedHeartbeatSignal) => void;
+  onError?: (error: Error) => void;
+}
+
+// Resultado del procesamiento de señal cardíaca
 export interface ProcessedHeartbeatSignal {
   // Marca de tiempo de la señal
   timestamp: number;
@@ -103,25 +136,3 @@ export interface ProcessedHeartbeatSignal {
   heartRateVariability: number | null;
 }
 
-/**
- * Tipos de procesadores disponibles
- */
-export enum ProcessorType {
-  PPG = 'ppg',
-  HEARTBEAT = 'heartbeat'
-}
-
-/**
- * Opciones para el sistema de procesamiento completo
- */
-export interface ProcessingSystemOptions extends SignalProcessingOptions {
-  // Tipo de procesador a utilizar
-  processorType?: ProcessorType;
-  
-  // Frecuencia de muestreo objetivo
-  targetSampleRate?: number;
-  
-  // Funciones de callback
-  onResultsReady?: (result: ProcessedPPGSignal | ProcessedHeartbeatSignal) => void;
-  onError?: (error: Error) => void;
-}

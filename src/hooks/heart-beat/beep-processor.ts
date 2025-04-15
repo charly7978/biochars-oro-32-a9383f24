@@ -1,79 +1,66 @@
+/**
+ * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
+ */
 
-import { useState, useCallback, useRef } from 'react';
-import { playBeep, setAudioEnabled, isAudioEnabled } from '../../services/AudioManager';
+import { useRef } from 'react';
 
 export function useBeepProcessor() {
-  const pendingBeepsQueue = useRef<{time: number, value: number}[]>([]);
-  const beepProcessorTimeoutRef = useRef<number | null>(null);
-  const lastBeepTimeRef = useRef<number>(0);
-  const audioEnabledRef = useRef<boolean>(true);
+  // Make sure React is imported correctly for useRef to work
+  const lastBeepTime = useRef<number>(0);
+  const audioContext = useRef<AudioContext | null>(null);
+  const oscillator = useRef<OscillatorNode | null>(null);
+  const gain = useRef<GainNode | null>(null);
   
-  const MIN_BEEP_INTERVAL_MS = 500;
-  
-  // This function is now simplified as AudioManager handles most of the logic
-  const processBeepQueue = useCallback((
-    isMonitoringRef: React.MutableRefObject<boolean>,
-    lastSignalQualityRef: React.MutableRefObject<number>,
-    consecutiveWeakSignalsRef: React.MutableRefObject<number>,
-    MAX_CONSECUTIVE_WEAK_SIGNALS: number,
-    missedBeepsCounter: React.MutableRefObject<number>,
-    playBeepCallback: (volume: number) => boolean | Promise<boolean>
-  ) => {
-    console.log("BeepProcessor: Using AudioManager for centralized audio handling");
-    
-    // AudioManager now handles the beep timing and generation
-    // Just ensure the audio state is synced
-    setAudioEnabled(isMonitoringRef.current && audioEnabledRef.current);
-    
-    // Clear the local queue as it's now managed by AudioManager
-    pendingBeepsQueue.current = []; 
-  }, []);
-
-  // Simplified to delegate to AudioManager
-  const requestImmediateBeep = useCallback((
-    value: number,
-    isMonitoringRef: React.MutableRefObject<boolean>,
-    lastSignalQualityRef: React.MutableRefObject<number>,
-    consecutiveWeakSignalsRef: React.MutableRefObject<number>,
-    MAX_CONSECUTIVE_WEAK_SIGNALS: number,
-    missedBeepsCounter: React.MutableRefObject<number>,
-    playBeepCallback: (volume: number) => boolean | Promise<boolean>
-  ): boolean => {
-    // This function now only forwards the request to AudioManager
-    // when not already handled by the OptimizedSignalDistributor
-    console.log("BeepProcessor: Beep request delegated to AudioManager");
-    
-    // Only play if specifically requested and not handled by CardiacChannel
+  const playBeep = (frequency: number, duration: number, volume: number) => {
     const now = Date.now();
-    if (now - lastBeepTimeRef.current > MIN_BEEP_INTERVAL_MS) {
-      lastBeepTimeRef.current = now;
-      return playBeep('normal');
+    if (now - lastBeepTime.current < 250) {
+      return;
     }
     
-    return false;
-  }, []);
-
-  const setIsAudioEnabled = useCallback((enabled: boolean) => {
-    audioEnabledRef.current = enabled;
-    setAudioEnabled(enabled);
-  }, []);
-
-  const cleanup = useCallback(() => {
-    pendingBeepsQueue.current = [];
+    lastBeepTime.current = now;
     
-    if (beepProcessorTimeoutRef.current) {
-      clearTimeout(beepProcessorTimeoutRef.current);
-      beepProcessorTimeoutRef.current = null;
+    if (!audioContext.current) {
+      audioContext.current = new AudioContext();
     }
-  }, []);
-
+    
+    if (audioContext.current.state === 'suspended') {
+      audioContext.current.resume();
+    }
+    
+    oscillator.current = audioContext.current.createOscillator();
+    gain.current = audioContext.current.createGain();
+    
+    oscillator.current.type = 'sine';
+    oscillator.current.frequency.setValueAtTime(frequency, audioContext.current.currentTime);
+    
+    gain.current.gain.setValueAtTime(volume, audioContext.current.currentTime);
+    gain.current.gain.exponentialRampToValueAtTime(0.001, audioContext.current.currentTime + duration / 1000);
+    
+    oscillator.current.connect(gain.current);
+    gain.current.connect(audioContext.current.destination);
+    
+    oscillator.current.start(0);
+    oscillator.current.stop(audioContext.current.currentTime + duration / 1000);
+  };
+  
+  const reset = () => {
+    if (oscillator.current) {
+      oscillator.current.stop();
+      oscillator.current.disconnect();
+      oscillator.current = null;
+    }
+    if (gain.current) {
+      gain.current.disconnect();
+      gain.current = null;
+    }
+    if (audioContext.current && audioContext.current.state === 'running') {
+      audioContext.current.close();
+      audioContext.current = null;
+    }
+  };
+  
   return {
-    requestImmediateBeep,
-    processBeepQueue,
-    pendingBeepsQueue,
-    lastBeepTimeRef,
-    beepProcessorTimeoutRef,
-    setIsAudioEnabled,
-    cleanup
+    playBeep,
+    reset
   };
 }

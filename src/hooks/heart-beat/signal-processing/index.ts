@@ -19,7 +19,8 @@ export {
 } from './signal-quality';
 
 export { 
-  handlePeakDetection 
+  handlePeakDetection,
+  findPeaks
 } from './peak-detection';
 
 export { 
@@ -38,3 +39,4 @@ export {
   applyGaussianProcessModeling,
   applyMixedModelPrediction
 } from './adaptive-control';
+

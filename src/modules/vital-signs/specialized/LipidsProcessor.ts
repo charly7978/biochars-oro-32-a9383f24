@@ -31,6 +31,24 @@ export class LipidsProcessor extends BaseVitalSignProcessor<LipidsResult> {
   
   /**
    * Process a value from the lipids-optimized channel
+   * Implementation of the abstract method from BaseVitalSignProcessor
+   * @param value Optimized lipids signal value
+   * @returns Estimated lipid values
+   */
+  public processValue(value: number): LipidsResult {
+    return this.processValueImpl(value);
+  }
+
+  /**
+   * Reset the processor
+   * Implementation of the abstract method from BaseVitalSignProcessor
+   */
+  public reset(): void {
+    super.reset();
+  }
+  
+  /**
+   * Process a value from the lipids-optimized channel
    * @param value Optimized lipids signal value
    * @returns Estimated lipid values
    */
@@ -75,4 +93,30 @@ export class LipidsProcessor extends BaseVitalSignProcessor<LipidsResult> {
     // Ensure result is within physiological range
     return Math.min(300, Math.max(50, triglycerides));
   }
+
+  /**
+   * Get feedback for signal optimization
+   */
+  public getFeedback(): ChannelFeedback {
+    return {
+      signalQuality: this.quality,
+      suggestedAdjustments: {
+        amplificationFactor: this.confidence > 0.7 ? 1.0 : 1.2,
+        filterStrength: this.confidence > 0.7 ? 0.5 : 0.7
+      }
+    };
+  }
+
+  /**
+   * Get diagnostics data
+   */
+  public getDiagnostics(): Record<string, any> {
+    return {
+      type: 'lipids',
+      confidence: this.confidence,
+      quality: this.quality,
+      processedValues: this.processedValues
+    };
+  }
 }
+

@@ -1,19 +1,14 @@
-
 /**
  * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
- * 
- * Procesador avanzado de señal PPG
- * Se encarga del procesamiento especializado de señales PPG
  */
-import { ProcessedPPGSignal, SignalProcessor, SignalProcessingOptions } from './types';
-import { detectFingerPresence } from './utils/finger-detector';
-import { evaluateSignalQuality } from './utils/quality-detector';
-import { normalizeSignal, amplifySignal } from './utils/signal-normalizer';
+
+// Update import to use ISignalProcessor instead of SignalProcessor
+import { ISignalProcessor, SignalProcessingOptions } from './types';
 
 /**
  * Clase para el procesamiento avanzado de señales PPG
  */
-export class PPGSignalProcessor implements SignalProcessor<ProcessedPPGSignal> {
+export class PPGProcessor implements ISignalProcessor<any> {
   // Buffer de valores para análisis
   private readonly VALUES_BUFFER_SIZE = 30;
   private valuesBuffer: number[] = [];
@@ -30,7 +25,7 @@ export class PPGSignalProcessor implements SignalProcessor<ProcessedPPGSignal> {
   /**
    * Procesa una señal PPG y aplica algoritmos avanzados
    */
-  public processSignal(value: number): ProcessedPPGSignal {
+  public processSignal(value: number): any {
     const timestamp = Date.now();
     
     // Almacenar valor bruto en buffer
@@ -177,6 +172,6 @@ export class PPGSignalProcessor implements SignalProcessor<ProcessedPPGSignal> {
 /**
  * Crea una nueva instancia del procesador de señal PPG
  */
-export function createPPGSignalProcessor(): PPGSignalProcessor {
-  return new PPGSignalProcessor();
+export function createPPGSignalProcessor(): PPGProcessor {
+  return new PPGProcessor();
 }

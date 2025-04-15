@@ -10,6 +10,10 @@
 // Export signal distributor
 export { OptimizedSignalDistributor } from './OptimizedSignalDistributor';
 
+// Export processors
+export { PPGProcessor as PPGSignalProcessor } from './ppg-processor';
+export { HeartbeatProcessor } from './heartbeat-processor';
+
 // Export channel types
 export { VitalSignType, type ChannelFeedback } from '../../types/signal';
 
@@ -32,7 +36,14 @@ export { VitalSignsProcessorAdapter, createCompatibleVitalSignsProcessor } from 
 
 // Re-export types
 export type { SignalDistributorConfig } from '../../types/signal';
-export type { SignalProcessor, ProcessedSignal } from '../../types/signal';
+export type { 
+  ISignalProcessor, 
+  SignalProcessor,
+  ProcessedSignal,
+  ProcessedPPGSignal,
+  ProcessedHeartbeatSignal 
+} from './types';
 
 // Export from unified types
 export * from '../../types/signal-processing';
+

@@ -129,7 +129,13 @@ export function useVitalSignsWithProcessing() {
     // Iniciar todos los subsistemas
     extraction.startProcessing();
     processing.startProcessing();
-    vitalSigns.initializeProcessor();
+    
+    // This line was using initializeProcessor, which doesn't exist
+    // Instead, we'll just ensure the processor is initialized
+    if (vitalSigns && vitalSigns.processor) {
+      // Reset the processor before starting
+      vitalSigns.reset();
+    }
     
     processedFramesRef.current = 0;
     lastProcessTimeRef.current = Date.now();

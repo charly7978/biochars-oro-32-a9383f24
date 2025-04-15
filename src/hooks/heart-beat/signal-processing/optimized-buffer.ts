@@ -1,228 +1,210 @@
+import { useRef } from 'react';
 
 /**
- * Buffer circular optimizado para procesamiento de señales PPG
- * Mejora el rendimiento y reduce la presión sobre el recolector de basura
+ * Circular buffer for storing and processing signal data
  */
+export class CircularDataBuffer<T> {
+  private buffer: T[];
+  private capacity: number;
+  private start: number;
+  private end: number;
+  private size: number;
 
-import { CircularBuffer } from '../../../utils/CircularBuffer';
-import { PPGDataPoint, TimestampedPPGData } from '../../../types/signal';
-
-/**
- * Buffer circular optimizado para datos PPG
- * Implementa un buffer de tamaño fijo preasignado en memoria
- */
-export class OptimizedPPGBuffer<T extends TimestampedPPGData = TimestampedPPGData> {
-  private buffer: Array<T | null>;
-  private head: number = 0;
-  private tail: number = 0;
-  private _size: number = 0;
-  private readonly capacity: number;
-  
-  /**
-   * Constructor del buffer optimizado
-   * @param capacity Capacidad máxima del buffer
-   */
   constructor(capacity: number) {
-    if (capacity <= 0) {
-      throw new Error('La capacidad del buffer debe ser mayor que cero');
-    }
-    
-    // Preasignar el array completo
-    this.buffer = new Array<T | null>(capacity).fill(null);
+    this.buffer = new Array<T>(capacity);
     this.capacity = capacity;
+    this.start = 0;
+    this.end = 0;
+    this.size = 0;
   }
-  
+
   /**
-   * Añade un dato al buffer
-   * Si el buffer está lleno, sobrescribe el dato más antiguo
+   * Adds a new value to the buffer
    */
-  public push(item: T): void {
-    this.buffer[this.head] = item;
-    this.head = (this.head + 1) % this.capacity;
-    
-    if (this._size === this.capacity) {
-      this.tail = (this.tail + 1) % this.capacity;
+  public push(value: T): void {
+    this.buffer[this.end] = value;
+    this.end = (this.end + 1) % this.capacity;
+
+    if (this.size === this.capacity) {
+      this.start = (this.start + 1) % this.capacity;
     } else {
-      this._size++;
+      this.size++;
     }
   }
-  
+
   /**
-   * Obtiene un elemento en una posición específica
-   * @param index Índice relativo al elemento más antiguo (0 es el más antiguo)
+   * Gets the value at a specific index
    */
-  public get(index: number): T | null {
-    if (index < 0 || index >= this._size) {
-      return null;
+  public get(index: number): T | undefined {
+    if (index < 0 || index >= this.size) {
+      return undefined;
     }
-    
-    const actualIndex = (this.tail + index) % this.capacity;
-    return this.buffer[actualIndex];
+
+    return this.buffer[(this.start + index) % this.capacity];
   }
-  
+
   /**
-   * Obtiene todos los elementos válidos del buffer como un array
+   * Gets the current size of the buffer
    */
-  public getPoints(): T[] {
-    const result: T[] = [];
-    let current = this.tail;
-    
-    for (let i = 0; i < this._size; i++) {
-      const item = this.buffer[current];
-      if (item !== null) {
-        result.push(item);
-      }
-      current = (current + 1) % this.capacity;
-    }
-    
-    return result;
+  public getSize(): number {
+    return this.size;
   }
-  
+
   /**
-   * Limpia el buffer
-   */
-  public clear(): void {
-    this.buffer.fill(null);
-    this.head = 0;
-    this.tail = 0;
-    this._size = 0;
-  }
-  
-  /**
-   * Retorna el número de elementos en el buffer
-   */
-  public size(): number {
-    return this._size;
-  }
-  
-  /**
-   * Comprueba si el buffer está vacío
+   * Checks if the buffer is empty
    */
   public isEmpty(): boolean {
-    return this._size === 0;
+    return this.size === 0;
   }
-  
+
   /**
-   * Comprueba si el buffer está lleno
+   * Checks if the buffer is full
    */
   public isFull(): boolean {
-    return this._size === this.capacity;
+    return this.size === this.capacity;
   }
-  
+
   /**
-   * Obtiene la capacidad del buffer
+   * Clears the buffer
    */
-  public getCapacity(): number {
-    return this.capacity;
+  public clear(): void {
+    this.start = 0;
+    this.end = 0;
+    this.size = 0;
+    this.buffer = new Array<T>(this.capacity);
   }
-  
+
   /**
-   * Obtiene los valores de los datos en el buffer como un array
+   * Returns a copy of the buffer as an array
    */
-  public getValues(): number[] {
-    return this.getPoints().map(point => point.value);
-  }
-  
-  /**
-   * Obtiene los últimos N elementos del buffer
-   */
-  public getLastN(n: number): T[] {
-    const count = Math.min(n, this._size);
+  public toArray(): T[] {
     const result: T[] = [];
-    
-    for (let i = 0; i < count; i++) {
-      const index = (this.head - 1 - i + this.capacity) % this.capacity;
-      const item = this.buffer[index];
-      if (item !== null) {
-        result.unshift(item); // Añadir al principio para mantener el orden
-      }
+    if (this.isEmpty()) {
+      return result;
     }
+    
+    let i = this.start;
+    do {
+      result.push(this.buffer[i]);
+      i = (i + 1) % this.capacity;
+    } while (i !== this.end);
     
     return result;
   }
-  
+
   /**
-   * Crea un buffer optimizado a partir de un buffer circular estándar
-   * @param circularBuffer Buffer circular estándar
+   * Returns the most recent value in the buffer
    */
-  public static fromCircularBuffer<U extends TimestampedPPGData>(circularBuffer: CircularBuffer<U>): OptimizedPPGBuffer<U> {
-    const points = circularBuffer.getPoints();
-    const optimizedBuffer = new OptimizedPPGBuffer<U>(Math.max(points.length, 10));
+  public getMostRecentValue(): T | undefined {
+    if (this.isEmpty()) {
+      return undefined;
+    }
     
-    // Transferir los datos al nuevo buffer
-    points.forEach(point => {
-      // Type safety check to ensure point has the right properties
-      if (!point) return;
-      
-      // Ensure point has all required properties
-      const enhancedPoint = { ...point } as U;
-      
-      // Garantizar que tanto time como timestamp existan
-      if (enhancedPoint.timestamp && !enhancedPoint.time) {
-        (enhancedPoint as any).time = enhancedPoint.timestamp;
-      } else if (enhancedPoint.time && !enhancedPoint.timestamp) {
-        (enhancedPoint as any).timestamp = enhancedPoint.time;
-      }
-      
-      optimizedBuffer.push(enhancedPoint);
-    });
-    
-    return optimizedBuffer;
+    const index = (this.end - 1 + this.capacity) % this.capacity;
+    return this.buffer[index];
   }
 }
 
 /**
- * Adaptador para compatibilidad con CircularBuffer existente
- * Permite una transición gradual al nuevo buffer optimizado
+ * Optimized buffer for storing and processing signal data with adaptive thresholding
  */
-export class CircularBufferAdapter<T extends TimestampedPPGData = TimestampedPPGData> extends CircularBuffer<T> {
-  private optimizedBuffer: OptimizedPPGBuffer<T>;
-  
-  constructor(capacity: number) {
-    super(capacity);
-    this.optimizedBuffer = new OptimizedPPGBuffer<T>(capacity);
-  }
-  
-  public override push(item: T): void {
-    // Ensure item has all required properties
-    const enhancedItem = { ...item } as T;
-    
-    // Garantizar que tanto time como timestamp existan
-    if (enhancedItem.timestamp && !enhancedItem.time) {
-      (enhancedItem as any).time = enhancedItem.timestamp;
-    } else if (enhancedItem.time && !enhancedItem.timestamp) {
-      (enhancedItem as any).timestamp = enhancedItem.time;
-    }
-    
-    super.push(enhancedItem);
-    this.optimizedBuffer.push(enhancedItem);
-  }
-  
-  public override get(index: number): T | undefined {
-    return this.optimizedBuffer.get(index) || undefined;
-  }
-  
-  public override getPoints(): T[] {
-    return this.optimizedBuffer.getPoints();
-  }
-  
-  public override clear(): void {
-    super.clear();
-    this.optimizedBuffer.clear();
-  }
-  
-  public override size(): number {
-    return this.optimizedBuffer.size();
-  }
-  
-  public override isEmpty(): boolean {
-    return this.optimizedBuffer.isEmpty();
-  }
+export function useOptimizedBuffer(capacity: number, initialThreshold: number = 0.1) {
+  const bufferRef = useRef<CircularDataBuffer<number>>(new CircularDataBuffer<number>(capacity));
+  const thresholdRef = useRef<number>(initialThreshold);
+  const lastPeakTimeRef = useRef<number | null>(null);
+  const adaptiveFactorRef = useRef<number>(0.05);
+  const minPeakIntervalRef = useRef<number>(250);
+  const maxThresholdRef = useRef<number>(0.3);
+  const minThresholdRef = useRef<number>(0.02);
   
   /**
-   * Obtiene el buffer optimizado interno
+   * Adds a new value to the buffer and adjusts the threshold
    */
-  public getOptimizedBuffer(): OptimizedPPGBuffer<T> {
-    return this.optimizedBuffer;
-  }
+  const push = (value: number) => {
+    bufferRef.current.push(value);
+    adjustThreshold(value);
+  };
+  
+  /**
+   * Adjusts the threshold based on signal characteristics
+   */
+  const adjustThreshold = (value: number) => {
+    const recentValues = bufferRef.current.toArray();
+    if (recentValues.length < 5) return;
+    
+    const maxValue = Math.max(...recentValues);
+    const minValue = Math.min(...recentValues);
+    const signalRange = maxValue - minValue;
+    
+    const adaptiveAdjustment = adaptiveFactorRef.current * signalRange;
+    let newThreshold = thresholdRef.current + adaptiveAdjustment;
+    
+    newThreshold = Math.max(minThresholdRef.current, Math.min(maxThresholdRef.current, newThreshold));
+    thresholdRef.current = newThreshold;
+  };
+  
+  /**
+   * Detects a peak in the buffer
+   */
+  const detectPeak = (currentTime: number): boolean => {
+    const recentValues = bufferRef.current.toArray();
+    if (recentValues.length < 3) return false;
+    
+    const lastIndex = recentValues.length - 1;
+    const currentValue = recentValues[lastIndex];
+    const previousValue = recentValues[lastIndex - 1];
+    const prePreviousValue = recentValues[lastIndex - 2];
+    
+    const isLocalMaximum = currentValue > previousValue && currentValue > prePreviousValue;
+    if (!isLocalMaximum) return false;
+    
+    if (currentValue < thresholdRef.current) return false;
+    
+    if (lastPeakTimeRef.current !== null && (currentTime - lastPeakTimeRef.current) < minPeakIntervalRef.current) {
+      return false;
+    }
+    
+    lastPeakTimeRef.current = currentTime;
+    return true;
+  };
+  
+  /**
+   * Gets the current threshold
+   */
+  const getThreshold = (): number => {
+    return thresholdRef.current;
+  };
+  
+  /**
+   * Gets the most recent value in the buffer
+   */
+  const getMostRecentValue = (): number | undefined => {
+    return bufferRef.current.getMostRecentValue();
+  };
+  
+  /**
+   * Gets the buffer as an array
+   */
+  const toArray = (): number[] => {
+    return bufferRef.current.toArray();
+  };
+  
+  /**
+   * Clears the buffer
+   */
+  const clear = () => {
+    bufferRef.current.clear();
+    thresholdRef.current = initialThreshold;
+    lastPeakTimeRef.current = null;
+  };
+  
+  return {
+    push,
+    detectPeak,
+    getThreshold,
+    getMostRecentValue,
+    toArray,
+    clear,
+    lastPeakTimeRef
+  };
 }

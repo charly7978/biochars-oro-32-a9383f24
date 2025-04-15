@@ -1,4 +1,3 @@
-
 /**
  * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
  * 
@@ -7,7 +6,8 @@
  */
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { SignalProcessingOptions, ProcessedSignalResult } from '../types/signal-processing';
-import { SpO2Processor } from '../modules/vital-signs/spo2-processor';
+import { PPGSignalProcessor, HeartbeatProcessor } from '../modules/signal-processing';
+import { SpO2Processor } from '../modules/vital-signs/specialized/SpO2Processor';
 
 /**
  * Hook para el procesamiento central de señales

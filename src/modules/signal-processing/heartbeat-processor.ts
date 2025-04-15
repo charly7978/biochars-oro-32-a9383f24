@@ -1,16 +1,14 @@
 /**
  * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
- * 
- * Procesador avanzado de señal cardíaca
- * Se encarga del procesamiento especializado de picos/latidos
  */
-import { ProcessedHeartbeatSignal, SignalProcessor, SignalProcessingOptions } from './types';
-import { AdaptivePredictor, getAdaptivePredictor } from './utils/adaptive-predictor';
+
+// Update import to use ISignalProcessor instead of SignalProcessor
+import { ISignalProcessor, SignalProcessingOptions } from './types';
 
 /**
  * Clase para el procesamiento avanzado de señales cardíacas
  */
-export class HeartbeatProcessor implements SignalProcessor<ProcessedHeartbeatSignal> {
+export class HeartbeatProcessor implements ISignalProcessor<any> {
   // Almacenamiento de valores y picos
   private values: number[] = [];
   private peakTimes: number[] = [];
@@ -38,7 +36,7 @@ export class HeartbeatProcessor implements SignalProcessor<ProcessedHeartbeatSig
   /**
    * Procesa un valor y detecta picos cardíacos con algoritmos avanzados
    */
-  public processSignal(value: number): ProcessedHeartbeatSignal {
+  public processSignal(value: number): any {
     const timestamp = Date.now();
     
     // Apply adaptive prediction and control if enabled

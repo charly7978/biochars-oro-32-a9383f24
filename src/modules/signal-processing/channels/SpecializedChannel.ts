@@ -54,6 +54,14 @@ export abstract class SpecializedChannel {
   }
 
   /**
+   * Updates the quality value
+   * Made protected to allow subclasses to access it
+   */
+  protected updateQuality(value: number): void {
+    this.quality = Math.max(0, Math.min(1, value));
+  }
+
+  /**
    * Process a value through this channel
    */
   public processValue(value: number): number {
@@ -80,7 +88,7 @@ export abstract class SpecializedChannel {
   public applyFeedback(feedback: ChannelFeedback): void {
     // Base implementation - update quality if provided
     if (feedback.signalQuality !== undefined) {
-      this.quality = feedback.signalQuality;
+      this.updateQuality(feedback.signalQuality);
     }
   }
   
@@ -91,4 +99,17 @@ export abstract class SpecializedChannel {
     this.quality = 0;
     this.recentValues = [];
   }
+
+  /**
+   * Get diagnostics data
+   */
+  public getDiagnostics(): Record<string, any> {
+    return {
+      id: this.id,
+      type: this.type,
+      quality: this.quality,
+      valuesCount: this.recentValues.length
+    };
+  }
 }
+

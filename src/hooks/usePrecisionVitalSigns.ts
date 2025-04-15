@@ -1,4 +1,3 @@
-
 /**
  * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
  * 
@@ -135,11 +134,11 @@ export function usePrecisionVitalSigns() {
       return;
     }
     
-    // Crear objeto de señal procesada
+    // Crear objeto de señal procesada - fix missing properties
     const processedSignal: ProcessedSignal = {
       timestamp: Date.now(),
       rawValue: signalProcessing.rawValue || 0,
-      filteredValue: signalProcessing.filteredValue || 0,
+      filteredValue: signalProcessing.rawValue || 0, // Use rawValue as fallback
       quality: signalProcessing.signalQuality,
       fingerDetected: signalProcessing.fingerDetected,
       perfusionIndex: 0,
@@ -151,12 +150,12 @@ export function usePrecisionVitalSigns() {
     
   }, [
     state.isProcessing,
-    signalProcessing.filteredValue,
+    signalProcessing.rawValue, // Changed from filteredValue to rawValue
     signalProcessing.fingerDetected,
     signalProcessing.signalQuality,
     processSignal
   ]);
-  
+
   // Agregar datos de referencia para calibración
   const addCalibrationReference = useCallback((reference: CalibrationReference): boolean => {
     if (!processorRef.current) return false;
@@ -202,7 +201,16 @@ export function usePrecisionVitalSigns() {
     if (!processorRef.current) return;
     
     processorRef.current.reset();
-    signalProcessing.reset();
+    
+    // Check if reset exists on signalProcessing before calling it
+    if (typeof signalProcessing.reset === 'function') {
+      signalProcessing.reset();
+    } else {
+      // Fallback for when reset doesn't exist
+      if (typeof signalProcessing.stopProcessing === 'function') {
+        signalProcessing.stopProcessing();
+      }
+    }
     
     setState({
       isProcessing: false,
