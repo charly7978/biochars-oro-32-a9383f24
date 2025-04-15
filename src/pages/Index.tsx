@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect } from "react";
 import VitalSign from "@/components/VitalSign";
 import CameraView from "@/components/CameraView";
@@ -7,20 +8,20 @@ import { useVitalSignsProcessor } from "@/hooks/useVitalSignsProcessor";
 import PPGSignalMeter from "@/components/PPGSignalMeter";
 import MonitorButton from "@/components/MonitorButton";
 import AppTitle from "@/components/AppTitle";
-import { VitalSignsResult } from "@/modules/vital-signs";
+import { UnifiedVitalSignsResult } from "@/types/signal-processing";
 
 const Index = () => {
   const [isMonitoring, setIsMonitoring] = useState(false);
   const [isCameraOn, setIsCameraOn] = useState(false);
   const [signalQuality, setSignalQuality] = useState(0);
-  const [vitalSigns, setVitalSigns] = useState<VitalSignsResult>({
+  const [vitalSigns, setVitalSigns] = useState<UnifiedVitalSignsResult>({
     spo2: 0,
     pressure: "--/--",
     arrhythmiaStatus: "--",
     glucose: 0,
     lipids: {
       totalCholesterol: 0,
-      hydrationPercentage: 0
+      triglycerides: 0
     }
   });
   const [heartRate, setHeartRate] = useState(0);
@@ -181,7 +182,7 @@ const Index = () => {
       glucose: 0,
       lipids: {
         totalCholesterol: 0,
-        hydrationPercentage: 0
+        triglycerides: 0
       }
     });
     setSignalQuality(0);
@@ -353,9 +354,9 @@ const Index = () => {
                 highlighted={showResults}
               />
               <VitalSign 
-                label="HIDRATACIÓN"
-                value={vitalSigns.lipids?.hydrationPercentage || "--"}
-                unit="%"
+                label="TRIGLICÉRIDOS"
+                value={vitalSigns.lipids?.triglycerides || "--"}
+                unit="mg/dL"
                 highlighted={showResults}
               />
             </div>
