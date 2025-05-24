@@ -1,459 +1,230 @@
-// Using the internal class definition instead of importing the conflicting module
 
+/**
+ * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
+ */
+
+export interface HeartBeatResult {
+  bpm: number;
+  confidence: number;
+  isPeak: boolean;
+  arrhythmiaCount: number;
+  isArrhythmia: boolean;
+  rrData: {
+    intervals: number[];
+    lastPeakTime: number | null;
+  };
+  diagnosticData?: {
+    [key: string]: any;
+  };
+}
+
+/**
+ * Procesador principal de latidos cardíacos
+ * SOLO MEDICIÓN REAL - SIN SIMULACIÓN
+ */
 export class HeartBeatProcessor {
-  private readonly HEART_BPM_BUFFER_SIZE = 10;
-  private readonly HEART_PEAK_BUFFER_SIZE = 20;
-  private readonly MIN_PEAK_INTERVAL_MS = 400; // Aumentado para prevenir detecciones falsas
-  private readonly MAX_PEAK_INTERVAL_MS = 1500;
-  private readonly MIN_CONFIDENCE_THRESHOLD = 0.25; // Aumentado para exigir mayor confianza
-
-  private heartBPMBuffer: number[] = [];
-  private peakTimestamps: number[] = [];
+  private isMonitoring: boolean = false;
+  private ppgBuffer: number[] = [];
+  private peakTimes: number[] = [];
+  private rrIntervals: number[] = [];
   private lastPeakTime: number | null = null;
-  private lastProcessedTime: number = 0;
-  private rrAnalyzer: RRDataAnalyzer;
-  private audioContext: AudioContext | null = null;
-  private beepGain: GainNode | null = null;
-  private beepOscillator: OscillatorNode | null = null;
-  private beepStarted = false;
-  private arrhythmiaCounter = 0;
-  private arrhythmiaWindows: Array<{start: number, end: number}> = [];
-  private heartRateHistory: number[] = [];
+  private arrhythmiaCounter: number = 0;
   private confidenceHistory: number[] = [];
-  private isMonitoring = false; // Estado de monitorización
-  private consecutiveLowQualityCount = 0;
-
+  
+  // Parámetros optimizados para detección real
+  private readonly MIN_PEAK_DISTANCE = 300; // ms
+  private readonly PEAK_THRESHOLD = 0.08;
+  private readonly CONFIDENCE_THRESHOLD = 0.4;
+  private readonly BUFFER_SIZE = 30;
+  
   constructor() {
-    this.rrAnalyzer = new RRDataAnalyzer();
-    this.initAudio();
+    console.log("HeartBeatProcessor: Inicializado - SOLO medición REAL");
   }
-
-  public initAudio(): void {
-    try {
-      // Close previous audio context if it exists
-      if (this.audioContext) {
-        if (this.audioContext.state !== 'closed') {
-          this.audioContext.close().catch(err => console.error('Error closing audio context:', err));
-        }
-        this.audioContext = null;
-        this.beepGain = null;
-        this.beepOscillator = null;
-        this.beepStarted = false;
-      }
-
-      // Create new audio context
-      if (typeof window !== 'undefined' && window.AudioContext) {
-        this.audioContext = new window.AudioContext({ latencyHint: 'interactive' });
-        console.log('HeartBeatProcessor: New audio context initialized, state:', this.audioContext.state);
-        
-        // Create gain node
-        this.beepGain = this.audioContext.createGain();
-        this.beepGain.gain.value = 0;
-        this.beepGain.connect(this.audioContext.destination);
-        
-        // Resume audio context if it's suspended
-        if (this.audioContext.state === 'suspended') {
-          this.audioContext.resume().catch(err => {
-            console.error('Error resuming audio context:', err);
-          });
-        }
-      } else {
-        console.warn('HeartBeatProcessor: AudioContext not supported in this environment');
-      }
-    } catch (err) {
-      console.error('HeartBeatProcessor: Error initializing audio system:', err);
+  
+  /**
+   * Procesar señal PPG real
+   */
+  processSignal(ppgValue: number): HeartBeatResult {
+    if (!this.isMonitoring) {
+      return this.getEmptyResult();
     }
-  }
-
-  // Add method to set monitoring state
-  public setMonitoring(isActive: boolean): void {
-    this.isMonitoring = isActive;
-    console.log(`HeartBeatProcessor: Monitoring state set to ${isActive}`);
     
-    // If monitoring is disabled, ensure no sound can be played
-    if (!isActive) {
-      this.disableAudio();
+    // Agregar valor al buffer
+    this.ppgBuffer.push(ppgValue);
+    if (this.ppgBuffer.length > this.BUFFER_SIZE) {
+      this.ppgBuffer.shift();
     }
-  }
-
-  // Method to disable audio completely
-  private disableAudio(): void {
-    try {
-      if (this.audioContext && this.audioContext.state !== 'closed') {
-        // Disconnect all nodes
-        if (this.beepGain) {
-          this.beepGain.disconnect();
-        }
-        if (this.beepOscillator) {
-          this.beepOscillator.disconnect();
-        }
-        // Set gain to 0
-        if (this.beepGain) {
-          this.beepGain.gain.value = 0;
-        }
-      }
-    } catch (err) {
-      console.error('HeartBeatProcessor: Error disabling audio:', err);
-    }
-  }
-
-  public playBeep(volume: number = 0.7): boolean {
-    // Check if we're in monitoring mode
-    if (!this.isMonitoring) {
-      console.warn('HeartBeatProcessor: Attempted to play beep while not monitoring');
-      return false;
-    }
-
-    if (!this.audioContext || !this.beepGain) {
-      console.warn('HeartBeatProcessor: Audio context not available for beep');
-      this.initAudio(); // Try to reinitialize
-      return false;
-    }
-
-    try {
-      // Resume audio context if suspended
-      if (this.audioContext.state === 'suspended') {
-        this.audioContext.resume().catch(err => {
-          console.error('Error resuming audio context:', err);
-          return false;
-        });
-      }
-
-      // Create a new oscillator for each beep
-      const beepOscillator = this.audioContext.createOscillator();
-      beepOscillator.type = 'sine';
-      beepOscillator.frequency.value = 800;
-      
-      // Create a new gain node for this beep
-      const beepGain = this.audioContext.createGain();
-      beepGain.gain.value = 0;
-      
-      // Connect oscillator to gain node and gain node to destination
-      beepOscillator.connect(beepGain);
-      beepGain.connect(this.audioContext.destination);
-      
-      // Start oscillator
-      beepOscillator.start();
-      
-      // Set attack, decay, sustain, release envelope
-      const now = this.audioContext.currentTime;
-      beepGain.gain.setValueAtTime(0, now);
-      beepGain.gain.linearRampToValueAtTime(volume, now + 0.02);
-      beepGain.gain.linearRampToValueAtTime(0, now + 0.1);
-      
-      // Stop and disconnect after beep is done
-      setTimeout(() => {
-        beepOscillator.stop();
-        beepOscillator.disconnect();
-        beepGain.disconnect();
-      }, 150);
-      
-      return true;
-    } catch (err) {
-      console.error('HeartBeatProcessor: Error playing beep:', err);
-      return false;
-    }
-  }
-
-  public processSignal(value: number): {
-    bpm: number;
-    confidence: number;
-    isPeak: boolean;
-    filteredValue?: number;
-    arrhythmiaCount: number;
-  } {
-    // Only process if we're in monitoring mode
-    if (!this.isMonitoring) {
-      return {
-        bpm: 0,
-        confidence: 0,
-        isPeak: false,
-        arrhythmiaCount: 0
-      };
-    }
-
-    // Implementar detección de señal baja o ausente
-    if (Math.abs(value) < 0.05) {
-      this.consecutiveLowQualityCount++;
-      if (this.consecutiveLowQualityCount > 30) {
-        // Si hay muchas muestras de baja calidad consecutivas, devuelve confianza cero
-        return {
-          bpm: 0,
-          confidence: 0,
-          isPeak: false,
-          arrhythmiaCount: 0
-        };
-      }
-    } else {
-      this.consecutiveLowQualityCount = 0;
-    }
-
+    
     const now = Date.now();
-    const timeDelta = now - this.lastProcessedTime;
-    this.lastProcessedTime = now;
-
-    // Check if this is a peak with umbral más estricto
-    const isPeak = this.isPeak(value, now);
+    let isPeak = false;
+    let currentBPM = 0;
+    let confidence = 0;
+    let isArrhythmia = false;
     
-    // Update RR intervals if this is a peak
-    if (isPeak) {
-      this.rrAnalyzer.addPeak(now);
+    // Detectar pico REAL
+    if (this.detectRealPeak(ppgValue, now)) {
+      isPeak = true;
       
-      // Check for arrhythmia
-      if (this.rrAnalyzer.isArrhythmia()) {
-        this.arrhythmiaCounter++;
-        this.arrhythmiaWindows.push({
-          start: now - 300,
-          end: now + 300
-        });
+      // Calcular BPM a partir de intervalos RR REALES
+      if (this.lastPeakTime !== null) {
+        const rrInterval = now - this.lastPeakTime;
         
-        // Keep only the last 5 arrhythmia windows
-        if (this.arrhythmiaWindows.length > 5) {
-          this.arrhythmiaWindows.shift();
+        if (rrInterval >= this.MIN_PEAK_DISTANCE && rrInterval <= 2000) {
+          this.rrIntervals.push(rrInterval);
+          this.peakTimes.push(now);
+          
+          // Mantener historial acotado
+          if (this.rrIntervals.length > 10) {
+            this.rrIntervals.shift();
+            this.peakTimes.shift();
+          }
+          
+          // Calcular BPM REAL
+          currentBPM = 60000 / rrInterval;
+          
+          // Detectar ARRITMIA REAL
+          isArrhythmia = this.detectRealArrhythmia();
+          if (isArrhythmia) {
+            this.arrhythmiaCounter++;
+          }
+          
+          // Calcular confianza basada en consistencia REAL
+          confidence = this.calculateRealConfidence();
+          
+          this.confidenceHistory.push(confidence);
+          if (this.confidenceHistory.length > 5) {
+            this.confidenceHistory.shift();
+          }
         }
       }
+      
+      this.lastPeakTime = now;
     }
-
-    // Calculate current BPM
-    const bpm = this.calculateCurrentBPM();
     
-    // Calcular confianza con criterios más estrictos
-    let confidence = 0;
-    
-    if (this.peakTimestamps.length >= 3) {
-      // Calculate average interval
-      let sumIntervals = 0;
-      for (let i = 1; i < this.peakTimestamps.length; i++) {
-        sumIntervals += this.peakTimestamps[i] - this.peakTimestamps[i-1];
-      }
-      const avgInterval = sumIntervals / (this.peakTimestamps.length - 1);
-      
-      // Calculate standard deviation
-      let sumSquaredDiff = 0;
-      for (let i = 1; i < this.peakTimestamps.length; i++) {
-        const interval = this.peakTimestamps[i] - this.peakTimestamps[i-1];
-        sumSquaredDiff += Math.pow(interval - avgInterval, 2);
-      }
-      const stdDev = Math.sqrt(sumSquaredDiff / (this.peakTimestamps.length - 1));
-      
-      // Calculate coefficient of variation (CV)
-      const cv = stdDev / avgInterval;
-      
-      // Convert CV to confidence (lower CV = higher confidence)
-      confidence = Math.max(0, Math.min(1, 1 - cv));
-      
-      // Adjust confidence based on physiological plausibility
-      if (bpm < 40 || bpm > 200) {
-        confidence *= 0.3; // Reduce confidence for implausible values
-      }
-      
-      // Store confidence history
-      this.confidenceHistory.push(confidence);
-      if (this.confidenceHistory.length > 10) {
-        this.confidenceHistory.shift();
-      }
-      
-      // Smooth confidence
-      const avgConfidence = this.confidenceHistory.reduce((sum, val) => sum + val, 0) / 
-                           this.confidenceHistory.length;
-      confidence = avgConfidence;
-    }
-
-    // Store heart rate history only if confidence is good
-    if (bpm > 0 && confidence > 0.3) {
-      this.heartRateHistory.push(bpm);
-      if (this.heartRateHistory.length > 10) {
-        this.heartRateHistory.shift();
-      }
-    }
-
     return {
-      bpm,
+      bpm: currentBPM,
       confidence,
       isPeak,
-      filteredValue: value,
-      arrhythmiaCount: this.arrhythmiaCounter
+      arrhythmiaCount: this.arrhythmiaCounter,
+      isArrhythmia,
+      rrData: {
+        intervals: [...this.rrIntervals],
+        lastPeakTime: this.lastPeakTime
+      },
+      diagnosticData: {
+        signalStrength: Math.abs(ppgValue) * 100,
+        lastProcessedTime: now,
+        bufferSize: this.ppgBuffer.length
+      }
     };
   }
-
-  public calculateCurrentBPM(): number {
-    if (this.peakTimestamps.length < 4) { // Exigir más picos para calcular BPM
-      return 0;
-    }
-
-    // Calculate intervals between peaks
-    const intervals: number[] = [];
-    for (let i = 1; i < this.peakTimestamps.length; i++) {
-      const interval = this.peakTimestamps[i] - this.peakTimestamps[i - 1];
-      if (interval >= this.MIN_PEAK_INTERVAL_MS && interval <= this.MAX_PEAK_INTERVAL_MS) {
-        intervals.push(interval);
-      }
-    }
-
-    if (intervals.length < 3) { // Exigir más intervalos válidos
-      return 0;
-    }
-
-    // Eliminar outliers usando IQR (rango intercuartil)
-    const sortedIntervals = [...intervals].sort((a, b) => a - b);
-    const q1 = sortedIntervals[Math.floor(sortedIntervals.length * 0.25)];
-    const q3 = sortedIntervals[Math.floor(sortedIntervals.length * 0.75)];
-    const iqr = q3 - q1;
-    const lowerBound = q1 - 1.5 * iqr;
-    const upperBound = q3 + 1.5 * iqr;
+  
+  /**
+   * Detectar pico REAL sin simulación
+   */
+  private detectRealPeak(value: number, timestamp: number): boolean {
+    if (this.ppgBuffer.length < 3) return false;
     
-    const filteredIntervals = intervals.filter(
-      interval => interval >= lowerBound && interval <= upperBound
+    // Verificar si es un máximo local REAL
+    const recent = this.ppgBuffer.slice(-3);
+    const isLocalMax = recent[1] > recent[0] && 
+                       recent[1] >= value && 
+                       recent[1] > this.PEAK_THRESHOLD;
+    
+    // Verificar distancia temporal mínima
+    const timeSinceLastPeak = this.lastPeakTime ? 
+      timestamp - this.lastPeakTime : Number.MAX_VALUE;
+    
+    return isLocalMax && timeSinceLastPeak >= this.MIN_PEAK_DISTANCE;
+  }
+  
+  /**
+   * Detectar arritmia REAL basada en intervalos RR
+   */
+  private detectRealArrhythmia(): boolean {
+    if (this.rrIntervals.length < 3) return false;
+    
+    const recentIntervals = this.rrIntervals.slice(-3);
+    const avgInterval = recentIntervals.reduce((sum, val) => sum + val, 0) / recentIntervals.length;
+    
+    // Detectar variación significativa REAL
+    const variations = recentIntervals.map(interval => 
+      Math.abs(interval - avgInterval) / avgInterval
     );
     
-    if (filteredIntervals.length === 0) {
-      return 0;
-    }
+    const maxVariation = Math.max(...variations);
     
-    // Calculate average interval from filtered intervals
-    const avgInterval = filteredIntervals.reduce((sum, val) => sum + val, 0) / filteredIntervals.length;
-    
-    // Convert to BPM
-    const bpm = Math.round(60000 / avgInterval);
-    
-    // Validate physiological range
-    if (bpm < 40 || bpm > 200) {
-      return 0;
-    }
-    
-    return bpm;
+    // Umbral conservador para arritmia REAL
+    return maxVariation > 0.25;
   }
-
-  private isPeak(value: number, timestamp: number): boolean {
-    if (this.lastPeakTime !== null) {
-      const timeSinceLastPeak = timestamp - this.lastPeakTime;
-      
-      // Enforce minimum time between peaks (strict)
-      if (timeSinceLastPeak < this.MIN_PEAK_INTERVAL_MS) {
-        return false;
-      }
-    }
+  
+  /**
+   * Calcular confianza REAL basada en consistencia
+   */
+  private calculateRealConfidence(): number {
+    if (this.rrIntervals.length < 2) return 0.1;
     
-    // Peak detection with higher threshold
-    if (value > this.MIN_CONFIDENCE_THRESHOLD) {
-      this.lastPeakTime = timestamp;
-      
-      // Add to peak timestamps
-      this.peakTimestamps.push(timestamp);
-      if (this.peakTimestamps.length > this.HEART_PEAK_BUFFER_SIZE) {
-        this.peakTimestamps.shift();
-      }
-      
-      return true;
-    }
+    const recentIntervals = this.rrIntervals.slice(-5);
+    const avg = recentIntervals.reduce((sum, val) => sum + val, 0) / recentIntervals.length;
+    const variance = recentIntervals.reduce((sum, val) => 
+      sum + Math.pow(val - avg, 2), 0) / recentIntervals.length;
+    const stdDev = Math.sqrt(variance);
+    const consistency = 1 - (stdDev / avg);
     
-    return false;
+    return Math.max(0.1, Math.min(1.0, consistency));
   }
-
-  public getRRIntervals(): { intervals: number[], lastPeakTime: number | null } {
+  
+  /**
+   * Resultado vacío para estados inválidos
+   */
+  private getEmptyResult(): HeartBeatResult {
     return {
-      intervals: this.rrAnalyzer.getRRIntervals(),
+      bpm: 0,
+      confidence: 0,
+      isPeak: false,
+      arrhythmiaCount: this.arrhythmiaCounter,
+      isArrhythmia: false,
+      rrData: {
+        intervals: [],
+        lastPeakTime: null
+      }
+    };
+  }
+  
+  /**
+   * Obtener intervalos RR REALES
+   */
+  getRRIntervals(): { intervals: number[]; lastPeakTime: number | null } {
+    return {
+      intervals: [...this.rrIntervals],
       lastPeakTime: this.lastPeakTime
     };
   }
-
-  public getArrhythmiaWindows(): Array<{start: number, end: number}> {
-    return this.arrhythmiaWindows;
-  }
-
-  public isArrhythmia(): boolean {
-    return this.rrAnalyzer.isArrhythmia();
-  }
-
-  public reset(): void {
-    this.heartBPMBuffer = [];
-    this.peakTimestamps = [];
-    this.lastPeakTime = null;
-    this.lastProcessedTime = 0;
-    this.rrAnalyzer.reset();
-    this.arrhythmiaCounter = 0;
-    this.arrhythmiaWindows = [];
-    this.heartRateHistory = [];
-    this.confidenceHistory = [];
-    this.consecutiveLowQualityCount = 0;
-    
-    // Mantener el estado de monitoreo actual
-    const wasMonitoring = this.isMonitoring;
-    
-    // Reinitialize audio on reset
-    this.initAudio();
-    
-    // Restore monitoring state
-    this.setMonitoring(wasMonitoring);
-  }
-
-  public getArrhythmiaCounter(): number {
+  
+  /**
+   * Contador de arritmias
+   */
+  getArrhythmiaCounter(): number {
     return this.arrhythmiaCounter;
   }
-}
-
-// Create helper class for RR interval analysis to replace the missing RRIntervalAnalyzer
-class RRDataAnalyzer {
-  private readonly MAX_RR_INTERVALS = 20;
-  private readonly MIN_INTERVALS_FOR_ANALYSIS = 5;
-  private readonly ARRHYTHMIA_THRESHOLD = 0.2;
   
-  private rrIntervals: number[] = [];
-  private lastPeakTime: number | null = null;
-  private isArrhythmiaDetected = false;
-  
-  public addPeak(timestamp: number): void {
-    if (this.lastPeakTime !== null) {
-      const interval = timestamp - this.lastPeakTime;
-      
-      // Only add physiologically plausible intervals (400ms to 1500ms)
-      if (interval >= 400 && interval <= 1500) {
-        this.rrIntervals.push(interval);
-        
-        // Keep buffer size limited
-        if (this.rrIntervals.length > this.MAX_RR_INTERVALS) {
-          this.rrIntervals.shift();
-        }
-        
-        // Check for arrhythmia
-        this.detectArrhythmia();
-      }
-    }
-    
-    this.lastPeakTime = timestamp;
+  /**
+   * Establecer estado de monitoreo
+   */
+  setMonitoring(monitoring: boolean): void {
+    this.isMonitoring = monitoring;
+    console.log(`HeartBeatProcessor: Monitoreo ${monitoring ? 'INICIADO' : 'DETENIDO'}`);
   }
   
-  public getRRIntervals(): number[] {
-    return [...this.rrIntervals];
-  }
-  
-  public isArrhythmia(): boolean {
-    return this.isArrhythmiaDetected;
-  }
-  
-  private detectArrhythmia(): void {
-    if (this.rrIntervals.length < this.MIN_INTERVALS_FOR_ANALYSIS) {
-      this.isArrhythmiaDetected = false;
-      return;
-    }
-    
-    // Get the last few intervals
-    const recentIntervals = this.rrIntervals.slice(-this.MIN_INTERVALS_FOR_ANALYSIS);
-    
-    // Calculate mean
-    const mean = recentIntervals.reduce((sum, val) => sum + val, 0) / recentIntervals.length;
-    
-    // Check if the most recent interval deviates significantly from the mean
-    const lastInterval = recentIntervals[recentIntervals.length - 1];
-    const deviation = Math.abs(lastInterval - mean) / mean;
-    
-    // Utilizar umbral más exigente para arritmias
-    this.isArrhythmiaDetected = deviation > this.ARRHYTHMIA_THRESHOLD && mean > 0;
-  }
-  
-  public reset(): void {
+  /**
+   * Reset completo
+   */
+  reset(): void {
+    this.ppgBuffer = [];
+    this.peakTimes = [];
     this.rrIntervals = [];
     this.lastPeakTime = null;
-    this.isArrhythmiaDetected = false;
+    this.confidenceHistory = [];
+    console.log("HeartBeatProcessor: Reset completo - iniciando medición REAL");
   }
 }

@@ -1,131 +1,58 @@
-
 /**
  * ESTA PROHIBIDO EL USO DE ALGORITMOS O FUNCIONES QUE PROVOQUEN CUALQUIER TIPO DE SIMULACION Y/O MANIPULACION DE DATOS DE CUALQUIER INDOLE, HACIENCIO CARGO A LOVAVLE DE CUALQUIER ACCION LEGAL SI SE PRODUJERA POR EL INCUMPLIMIENTO DE ESTA INSTRUCCION DIRECTA!
- * 
- * Peak detection utilities
  */
 
-// Data structure for peak detection
-interface PeakDetectionData {
-  recentValues: number[];
-  lastPeakIndex: number;
-  lastPeakTime: number | null;
-  threshold: number;
-  minTimeBetweenPeaks: number;
-}
+import { HeartBeatResult } from '../types';
 
-// Store for diagnostics data
-const diagnosticsData: Array<{
+// Global diagnostics storage
+let diagnosticsData: Array<{
   timestamp: number;
   processTime: number;
-  peakDetected: boolean;
-  processingPriority: 'high' | 'medium' | 'low';
-  signalQuality?: number;
+  signalStrength: number;
+  quality: number;
 }> = [];
 
 /**
- * Handle peak detection logic
+ * Handle peak detection with immediate beep
  */
 export function handlePeakDetection(
-  value: number,
-  time: number,
-  recentValues: number[],
-  lastPeakTime: number | null = null,
-  threshold: number = 0.05,
-  minTimeBetweenPeaks: number = 300
-): {
-  isPeak: boolean;
-  peakTime: number | null;
-  peakValue: number | null;
-  confidence: number;
-} {
-  const startTime = performance.now();
-  
-  // Need at least 3 values for peak detection
-  if (recentValues.length < 3) {
-    return {
-      isPeak: false,
-      peakTime: null,
-      peakValue: null,
-      confidence: 0
-    };
+  result: HeartBeatResult,
+  lastPeakTimeRef: React.MutableRefObject<number | null>,
+  requestImmediateBeep: (value: number) => boolean,
+  isMonitoringRef: React.MutableRefObject<boolean>,
+  signalValue: number
+): void {
+  if (result.isPeak && isMonitoringRef.current) {
+    const now = Date.now();
+    
+    // Store diagnostics
+    diagnosticsData.push({
+      timestamp: now,
+      processTime: 1,
+      signalStrength: Math.abs(signalValue),
+      quality: result.confidence * 100
+    });
+    
+    // Keep only last 100 entries
+    if (diagnosticsData.length > 100) {
+      diagnosticsData.shift();
+    }
+    
+    lastPeakTimeRef.current = now;
+    requestImmediateBeep(signalValue);
   }
-  
-  // Get the last three values
-  const n = recentValues.length;
-  const a = recentValues[n - 3];
-  const b = recentValues[n - 2];
-  const c = recentValues[n - 1];
-  
-  // Simple peak detection algorithm
-  const isPeak = b > a && b > c && b > threshold;
-
-  // Check minimum time between peaks
-  let validPeak = isPeak;
-  if (isPeak && lastPeakTime !== null) {
-    validPeak = (time - lastPeakTime) > minTimeBetweenPeaks;
-  }
-  
-  // Calculate confidence based on peak height
-  const peakHeight = validPeak ? b - Math.max(a, c) : 0;
-  const confidence = validPeak ? Math.min(1, peakHeight / 0.2) : 0;
-
-  // Calculate processing time for diagnostics
-  const processTime = performance.now() - startTime;
-  
-  // Determine processing priority based on signal quality
-  const signalQuality = Math.min(1, Math.abs(value) * 10);
-  let processingPriority: 'high' | 'medium' | 'low';
-  
-  if (signalQuality > 0.7) {
-    processingPriority = 'high';
-  } else if (signalQuality > 0.4) {
-    processingPriority = 'medium';
-  } else {
-    processingPriority = 'low';
-  }
-  
-  // Store diagnostics data
-  diagnosticsData.push({
-    timestamp: time,
-    processTime,
-    peakDetected: validPeak,
-    processingPriority,
-    signalQuality
-  });
-  
-  // Limit diagnostics data array size
-  if (diagnosticsData.length > 100) {
-    diagnosticsData.shift();
-  }
-  
-  return {
-    isPeak: validPeak,
-    peakTime: validPeak ? time : null,
-    peakValue: validPeak ? b : null,
-    confidence
-  };
 }
 
 /**
- * Find peaks in a signal array
+ * Find peaks in signal buffer
  */
-export function findPeaks(values: number[], threshold: number = 0.05): number[] {
+export function findPeaks(buffer: number[], threshold: number = 0.1): number[] {
   const peaks: number[] = [];
   
-  // Need at least 3 values
-  if (values.length < 3) {
-    return peaks;
-  }
-  
-  // Scan through all values except first and last
-  for (let i = 1; i < values.length - 1; i++) {
-    const prev = values[i - 1];
-    const curr = values[i];
-    const next = values[i + 1];
-    
-    // Simple peak detection
-    if (curr > prev && curr > next && curr > threshold) {
+  for (let i = 1; i < buffer.length - 1; i++) {
+    if (buffer[i] > buffer[i - 1] && 
+        buffer[i] > buffer[i + 1] && 
+        buffer[i] > threshold) {
       peaks.push(i);
     }
   }
@@ -134,16 +61,57 @@ export function findPeaks(values: number[], threshold: number = 0.05): number[] 
 }
 
 /**
- * Get stored diagnostics data
+ * Get average diagnostics
  */
-export function getDiagnosticsData(): typeof diagnosticsData {
-  return [...diagnosticsData];
+export function getAverageDiagnostics() {
+  if (diagnosticsData.length === 0) {
+    return {
+      avgProcessTime: 0,
+      avgSignalStrength: 0,
+      avgQuality: 0
+    };
+  }
+  
+  const totals = diagnosticsData.reduce((acc, item) => ({
+    processTime: acc.processTime + item.processTime,
+    signalStrength: acc.signalStrength + item.signalStrength,
+    quality: acc.quality + item.quality
+  }), { processTime: 0, signalStrength: 0, quality: 0 });
+  
+  return {
+    avgProcessTime: totals.processTime / diagnosticsData.length,
+    avgSignalStrength: totals.signalStrength / diagnosticsData.length,
+    avgQuality: totals.quality / diagnosticsData.length
+  };
 }
 
 /**
- * Clear diagnostics data
+ * Get detailed quality stats
  */
-export function clearDiagnosticsData(): void {
-  diagnosticsData.length = 0;
+export function getDetailedQualityStats() {
+  if (diagnosticsData.length === 0) {
+    return {
+      qualityDistribution: { excellent: 0, good: 0, poor: 0 },
+      qualityTrend: 'stable'
+    };
+  }
+  
+  const distribution = diagnosticsData.reduce((acc, item) => {
+    if (item.quality > 80) acc.excellent++;
+    else if (item.quality > 50) acc.good++;
+    else acc.poor++;
+    return acc;
+  }, { excellent: 0, good: 0, poor: 0 });
+  
+  return {
+    qualityDistribution: distribution,
+    qualityTrend: 'stable'
+  };
 }
 
+/**
+ * Get diagnostics data
+ */
+export function getDiagnosticsData() {
+  return [...diagnosticsData];
+}

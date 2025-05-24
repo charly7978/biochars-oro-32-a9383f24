@@ -8,7 +8,8 @@ export enum VitalSignType {
   HEARTBEAT = 'heartbeat',
   GLUCOSE = 'glucose',
   LIPIDS = 'lipids',
-  HYDRATION = 'hydration'
+  HYDRATION = 'hydration',
+  CARDIAC = 'cardiac'
 }
 
 /**
@@ -22,6 +23,10 @@ export interface ChannelFeedback {
     [key: string]: any;
   };
   success?: boolean;
+  mlFeedback?: {
+    isArrhythmia?: boolean;
+    confidence?: number;
+  };
   [key: string]: any;
 }
 
@@ -44,5 +49,73 @@ export interface ProcessedSignal {
 export interface SignalDistributorConfig {
   enableAdaptiveFiltering?: boolean;
   channels?: VitalSignType[];
+  enableFeedback?: boolean;
+  adaptChannels?: boolean;
+  optimizationInterval?: number;
 }
 
+/**
+ * PPG Data Point
+ */
+export interface PPGDataPoint {
+  value: number;
+  timestamp: number;
+  quality: number;
+}
+
+/**
+ * Timestamped PPG Data
+ */
+export interface TimestampedPPGData {
+  timestamp: number;
+  value: number;
+  filtered: number;
+  quality: number;
+}
+
+/**
+ * Signal Validation Result
+ */
+export interface SignalValidationResult {
+  isValid: boolean;
+  quality: number;
+  reason?: string;
+}
+
+/**
+ * Signal Diagnostic Info
+ */
+export interface SignalDiagnosticInfo {
+  processingTime: number;
+  signalStrength: number;
+  quality: number;
+  timestamp: number;
+}
+
+/**
+ * Processing Error
+ */
+export interface ProcessingError {
+  message: string;
+  code: string;
+  timestamp: number;
+}
+
+/**
+ * Optimized Signal Channel
+ */
+export interface OptimizedSignalChannel {
+  id: string;
+  type: VitalSignType;
+  quality: number;
+  isActive: boolean;
+}
+
+/**
+ * Signal Processor Interface
+ */
+export interface SignalProcessor {
+  processSignal(value: number): ProcessedSignal;
+  reset(): void;
+  getState(): any;
+}
